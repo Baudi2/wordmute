@@ -1,11 +1,12 @@
-"""Settings dialog: models, device, padding, language, VAD, output,
-downloads folder."""
+"""Settings tab. Unlike the old modal dialog, changes apply and persist
+immediately; a `changed` signal lets the main window refresh advice
+(GPU warnings etc.). Settings never affect a run already in progress —
+options are captured at Start."""
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..core import config
@@ -24,10 +26,14 @@ WHISPER_MODELS = ["large-v3", "medium", "small", "base"]
 GIGAAM_MODELS = ["v3_e2e_rnnt", "v3_e2e_ctc", "v3_rnnt", "v3_ctc"]
 
 
-class SettingsDialog(QDialog):
+class SettingsTab(QWidget):
+    changed = Signal()
+
     def __init__(self, settings: dict, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(tr("Settings"))
+        self._settings = settings
+        self._loading = True
+
         layout = QVBoxLayout(self)
         form = QFormLayout()
 
@@ -81,18 +87,6 @@ class SettingsDialog(QDialog):
         beep_row.addStretch()
         form.addRow("", beep_row)
 
-        ui_lang_row = QHBoxLayout()
-        self.ui_language_combo = QComboBox()
-        self.ui_language_combo.addItem("English", "en")
-        self.ui_language_combo.addItem("Русский", "ru")
-        idx = self.ui_language_combo.findData(
-            settings.get("ui_language", "en"))
-        self.ui_language_combo.setCurrentIndex(max(idx, 0))
-        ui_lang_row.addWidget(self.ui_language_combo)
-        ui_lang_row.addWidget(QLabel(tr("(takes effect after restart)")))
-        ui_lang_row.addStretch()
-        form.addRow(tr("Interface language:"), ui_lang_row)
-
         self.vad_check = QCheckBox("Voice activity detection (whisper only)")
         self.vad_check.setChecked(settings["vad"])
         self.vad_check.setToolTip("Disable if words at clip edges are missed.")
@@ -121,37 +115,57 @@ class SettingsDialog(QDialog):
         cookies_row.addWidget(self.cookies_edit, stretch=1)
         cookies_row.addWidget(cookies_browse)
         form.addRow(tr("Cookies file:"), cookies_row)
+
+        ui_lang_row = QHBoxLayout()
+        self.ui_language_combo = QComboBox()
+        self.ui_language_combo.addItem("English", "en")
+        self.ui_language_combo.addItem("Русский", "ru")
+        idx = self.ui_language_combo.findData(
+            settings.get("ui_language", "en"))
+        self.ui_language_combo.setCurrentIndex(max(idx, 0))
+        ui_lang_row.addWidget(self.ui_language_combo)
+        ui_lang_row.addWidget(QLabel(tr("(takes effect after restart)")))
+        ui_lang_row.addStretch()
+        form.addRow(tr("Interface language:"), ui_lang_row)
         layout.addLayout(form)
 
-        layout.addWidget(QLabel("Output location:"))
+        layout.addWidget(QLabel(tr("Output location:")))
         self.beside_radio = QRadioButton(
-            "Next to each input (<name>.clean.<ext>)")
-        self.folder_radio = QRadioButton("Into folder:")
+            tr("Next to each input (<name>.clean.<ext>)"))
+        self.folder_radio = QRadioButton(tr("Into folder:"))
         folder_row = QHBoxLayout()
         self.output_dir_edit = QLineEdit(settings["output_dir"])
-        browse = QPushButton("Browse…")
-        browse.clicked.connect(self._browse_output_dir)
+        output_browse = QPushButton("Browse…")
+        output_browse.clicked.connect(self._browse_output_dir)
         folder_row.addWidget(self.folder_radio)
         folder_row.addWidget(self.output_dir_edit, stretch=1)
-        folder_row.addWidget(browse)
+        folder_row.addWidget(output_browse)
         layout.addWidget(self.beside_radio)
         layout.addLayout(folder_row)
         (self.folder_radio if settings["output_mode"] == "folder"
          else self.beside_radio).setChecked(True)
+        layout.addStretch()
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        self._loading = False
+        for signal in (
+            self.model_combo.currentTextChanged,
+            self.gigaam_combo.currentTextChanged,
+            self.device_combo.currentTextChanged,
+            self.pad_spin.valueChanged,
+            self.language_edit.textChanged,
+            self.beep_check.toggled,
+            self.beep_spin.valueChanged,
+            self.vad_check.toggled,
+            self.download_dir_edit.textChanged,
+            self.cookies_edit.textChanged,
+            self.ui_language_combo.currentIndexChanged,
+            self.beside_radio.toggled,
+            self.folder_radio.toggled,
+            self.output_dir_edit.textChanged,
+        ):
+            signal.connect(self._apply)
 
-    def _browse_output_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Output folder",
-                                             self.output_dir_edit.text())
-        if d:
-            self.output_dir_edit.setText(d)
-            self.folder_radio.setChecked(True)
-
+    # ---------------------------------------------------------- browsing
     def _browse_download_dir(self):
         d = QFileDialog.getExistingDirectory(self, "Downloads folder",
                                              self.download_dir_edit.text())
@@ -165,8 +179,18 @@ class SettingsDialog(QDialog):
         if path:
             self.cookies_edit.setText(path)
 
-    def values(self) -> dict:
-        return {
+    def _browse_output_dir(self):
+        d = QFileDialog.getExistingDirectory(self, "Output folder",
+                                             self.output_dir_edit.text())
+        if d:
+            self.output_dir_edit.setText(d)
+            self.folder_radio.setChecked(True)
+
+    # ---------------------------------------------------------- persist
+    def _apply(self, *_):
+        if self._loading:
+            return
+        self._settings.update({
             "model": self.model_combo.currentText(),
             "gigaam_model": self.gigaam_combo.currentText(),
             "device": self.device_combo.currentText(),
@@ -182,4 +206,6 @@ class SettingsDialog(QDialog):
                         if self.beep_check.isChecked() else 0),
             "ui_language": self.ui_language_combo.currentData(),
             "cookies_file": self.cookies_edit.text().strip(),
-        }
+        })
+        config.save_settings(self._settings)
+        self.changed.emit()

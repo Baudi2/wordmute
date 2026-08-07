@@ -38,7 +38,7 @@ from .i18n import tr
 from .models_tab import ModelsTab
 from .plan_widget import PassPlanWidget
 from .review_dialog import ReviewDialog
-from .settings_dialog import SettingsDialog
+from .settings_tab import SettingsTab
 from .transcript_tab import TranscriptTab
 from .url_dialog import AddUrlDialog
 from .wordlists_tab import WordListsTab
@@ -122,8 +122,6 @@ class MainWindow(QMainWindow):
             "Open a review file (saved next to each processed output) to "
             "listen to muted moments and un-mute false positives.")
         self.review_button.clicked.connect(self._pick_review)
-        self.settings_button = QPushButton(tr("Settings…"))
-        self.settings_button.clicked.connect(self._open_settings)
         file_buttons.addWidget(self.add_button)
         file_buttons.addWidget(self.add_folder_button)
         file_buttons.addWidget(self.add_url_button)
@@ -136,7 +134,6 @@ class MainWindow(QMainWindow):
         file_buttons.addStretch()
         file_buttons.addWidget(self.review_button)
         file_buttons.addWidget(self.gigaam_setup_button)
-        file_buttons.addWidget(self.settings_button)
         root.addLayout(file_buttons)
 
         self.table = QTableWidget(0, 3)
@@ -223,6 +220,9 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.models_tab, tr("Models"))
         self.history_tab = HistoryTab()
         self.tabs.addTab(self.history_tab, tr("History"))
+        self.settings_tab = SettingsTab(self._settings)
+        self.settings_tab.changed.connect(self._refresh_warnings)
+        self.tabs.addTab(self.settings_tab, tr("Settings"))
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
     # ---------------------------------------------------------- menu / tabs
@@ -421,13 +421,6 @@ class MainWindow(QMainWindow):
                                     f"Could not open review file: {exc}")
 
     # ---------------------------------------------------------- settings
-    def _open_settings(self):
-        dialog = SettingsDialog(self._settings, self)
-        if dialog.exec():
-            self._settings.update(dialog.values())
-            config.save_settings(self._settings)
-            self._refresh_warnings()
-
     def _open_gigaam_setup(self):
         GigaamWizard(self).exec()
         self._refresh_warnings()
@@ -567,7 +560,8 @@ class MainWindow(QMainWindow):
         self.add_folder_button.setEnabled(not running)
         self.add_url_button.setEnabled(not running)
         self.remove_button.setEnabled(not running)
-        self.settings_button.setEnabled(not running)
+        # settings tab stays enabled: options are captured at Start, so
+        # edits only affect the next run
         for w in (self.russian_check, self.english_check, self.plan,
                   self.force_passes_check, self.retranscribe_check):
             w.setEnabled(not running)

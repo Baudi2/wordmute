@@ -130,34 +130,43 @@ def test_add_url_button_click_opens_dialog_with_empty_url(qapp, tmp_path,
     assert p.list.item(0).text() == "1. GigaAM"
 
 
-def test_settings_dialog_values(qapp):
-    from wordmute_app.core.config import DEFAULT_SETTINGS
-    from wordmute_app.ui.settings_dialog import SettingsDialog
+def test_settings_tab_applies_immediately(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import config
+    from wordmute_app.ui.settings_tab import SettingsTab
 
-    d = SettingsDialog(dict(DEFAULT_SETTINGS))
-    d.model_combo.setCurrentText("medium")
-    d.gigaam_combo.setCurrentText("v3_e2e_ctc")
-    d.device_combo.setCurrentText("cpu")
-    d.pad_spin.setValue(250)
-    d.language_edit.setText("en")
-    d.vad_check.setChecked(False)
-    v = d.values()
-    assert v["model"] == "medium"
-    assert v["gigaam_model"] == "v3_e2e_ctc"
-    assert v["device"] == "cpu"
-    assert v["pad_ms"] == 250
-    assert v["language"] == "en"
-    assert v["vad"] is False
-    assert v["output_mode"] == "beside"
+    settings = config.load_settings()
+    tab = SettingsTab(settings)
+    tab.model_combo.setCurrentText("medium")
+    tab.gigaam_combo.setCurrentText("v3_e2e_ctc")
+    tab.device_combo.setCurrentText("cpu")
+    tab.pad_spin.setValue(250)
+    tab.language_edit.setText("en")
+    tab.vad_check.setChecked(False)
+    tab.cookies_edit.setText(r"C:\cookies\c.txt")
+
+    # every change lands in the dict AND on disk without any OK button
+    assert settings["model"] == "medium"
+    assert settings["gigaam_model"] == "v3_e2e_ctc"
+    assert settings["device"] == "cpu"
+    assert settings["pad_ms"] == 250
+    assert settings["language"] == "en"
+    assert settings["vad"] is False
+    assert settings["cookies_file"] == r"C:\cookies\c.txt"
+    stored = config.load_settings()
+    assert stored["model"] == "medium"
+    assert stored["cookies_file"] == r"C:\cookies\c.txt"
 
 
-def test_settings_dialog_folder_mode_requires_dir(qapp, tmp_path):
-    from wordmute_app.core.config import DEFAULT_SETTINGS
-    from wordmute_app.ui.settings_dialog import SettingsDialog
+def test_settings_tab_folder_mode_requires_dir(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import config
+    from wordmute_app.ui.settings_tab import SettingsTab
 
-    d = SettingsDialog(dict(DEFAULT_SETTINGS))
-    d.folder_radio.setChecked(True)
-    assert d.values()["output_mode"] == "beside"  # no dir given
-    d.output_dir_edit.setText(str(tmp_path))
-    assert d.values()["output_mode"] == "folder"
-    assert d.values()["output_dir"] == str(tmp_path)
+    settings = config.load_settings()
+    tab = SettingsTab(settings)
+    tab.folder_radio.setChecked(True)
+    assert settings["output_mode"] == "beside"  # no dir given
+    tab.output_dir_edit.setText(str(tmp_path))
+    assert settings["output_mode"] == "folder"
+    assert settings["output_dir"] == str(tmp_path)

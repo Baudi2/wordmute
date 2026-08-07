@@ -64,7 +64,7 @@ videos through it, often unattended/overnight.
 ## 4. Current screens (screenshots in docs/design/)
 
 The main window is a QTabWidget: Queue / Word Lists / Transcript /
-Models / History. Flow steps (Settings, Add URL, per-file Review,
+Models / History / Settings. Flow steps (Add URL, per-file Review,
 GigaAM setup) remain modal dialogs.
 
 | # | File | Screen | Purpose |
@@ -74,7 +74,7 @@ GigaAM setup) remain modal dialogs.
 | 3 | 03_transcript_tab.png | Transcript tab | Open a processed file → searchable transcript blocks from cache + SRT export; empty state when nothing opened. |
 | 4 | 04_models_tab.png | Models tab | Whisper models: downloaded/size/download/delete; GigaAM cache size; GPU indicator. |
 | 5 | 05_history_tab.png | History tab | Log of processed items (time, file, status, muted count, plan, output) + clear. |
-| 6 | 06_settings.png | Settings dialog | Models (whisper + GigaAM), device, mute padding, whisper language, beep-instead-of-silence, VAD, downloads folder, cookies file (Netscape format, for logged-in sites like boosty.to), output location, interface language. |
+| 6 | 06_settings_tab.png | Settings tab | Applies immediately, no OK/Cancel. Models (whisper + GigaAM), device, mute padding, whisper language, beep-instead-of-silence, VAD, downloads folder, cookies file (Netscape format, for logged-in sites like boosty.to), output location, interface language. |
 | 7 | 07_add_url.png | Add URL dialog | Paste link → fetch format table (quality/ext/fps/type/size) or one-click "best quality". Uses the configured cookies file for gated sites. |
 | 8 | 08_review.png | Review dialog | THE trust feature. Table of muted intervals (checkbox, times, pass, engine, words); clicking a row plays the original audio around it; uncheck false positives; "Re-render output" rebuilds in seconds. |
 | 9 | 09_gigaam_wizard.png | GigaAM setup dialog | One-time onboarding for the optional, more-accurate Russian engine: 3 linked steps on Hugging Face, token paste + online validation, ffmpeg-shared check. |

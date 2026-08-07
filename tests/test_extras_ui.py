@@ -142,5 +142,5 @@ def test_main_window_has_tabs(qapp, tmp_path, monkeypatch):
     w = MainWindow()
     titles = [w.tabs.tabText(i) for i in range(w.tabs.count())]
     assert titles == ["Queue", "Word Lists", "Transcript", "Models",
-                      "History"]
+                      "History", "Settings"]
     assert w.tabs.currentIndex() == 0
