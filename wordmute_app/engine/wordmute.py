@@ -72,8 +72,11 @@ def _default_reporter(event: str, d: dict) -> None:
             print(f"        {fmt_ts(s)} - {fmt_ts(e)}   {t}")
     elif event == "mute_start":
         print("[ffmpeg] muting", d["count"], "segment(s) ...")
+    elif event == "mute_progress":
+        print(f"\r[ffmpeg] {fmt_ts(d['seconds'])} rendered",
+              end="", flush=True)
     elif event == "mute_done":
-        print(f"[done]  -> {d['out']}")
+        print(f"\n[done]  -> {d['out']}")
     elif event == "list_info":
         print(f"[list]  {d['exact']} exact, {d['stems']} stems, "
               f"{d['subs']} substrings, {d['phrases']} phrases loaded")
@@ -340,6 +343,44 @@ def find_hits(words, exact, stems, phrases, subs, pad_ms):
 
 
 # ---------------------------------------------------------------- ffmpeg
+def _creationflags() -> int:
+    """Suppress child console windows when we have no console ourselves
+    (GUI app); keeps normal behavior when run from a terminal."""
+    if os.name != "nt":
+        return 0
+    try:
+        import ctypes
+        if ctypes.windll.kernel32.GetConsoleWindow() == 0:
+            return subprocess.CREATE_NO_WINDOW
+    except Exception:
+        pass
+    return 0
+
+
+def _run_ffmpeg_with_progress(cmd) -> None:
+    """Run ffmpeg reading its -progress output, emitting mute_progress
+    events; raises RuntimeError with the stderr tail on failure."""
+    with tempfile.TemporaryFile() as errf:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=errf,
+                                text=True, encoding="utf-8",
+                                errors="replace",
+                                creationflags=_creationflags())
+        for line in proc.stdout:
+            if line.startswith("out_time="):
+                try:
+                    h, m, s = line.strip().split("=", 1)[1].split(":")
+                    _emit("mute_progress",
+                          seconds=int(h) * 3600 + int(m) * 60 + float(s))
+                except ValueError:
+                    continue  # "out_time=N/A" etc.
+        proc.wait()
+        if proc.returncode:
+            errf.seek(0)
+            tail = errf.read()[-2000:].decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"ffmpeg failed (code {proc.returncode}): {tail.strip()}")
+
+
 def _silence_filters(intervals) -> str:
     return ",".join(
         f"volume=enable='between(t,{s:.3f},{e:.3f})':volume=0"
@@ -384,7 +425,8 @@ def mute(media: Path, intervals, out: Path, beep_hz=None):
             "-filter_script:a", script,
         ]
     cmd = [
-        "ffmpeg", "-y",
+        "ffmpeg", "-y", "-hide_banner", "-nostats",
+        "-progress", "pipe:1",
         "-err_detect", "ignore_err",
         "-fflags", "+genpts+igndts+discardcorrupt",
         "-i", str(media),
@@ -393,7 +435,7 @@ def mute(media: Path, intervals, out: Path, beep_hz=None):
     ]
     _emit("mute_start", count=len(intervals))
     try:
-        subprocess.run(cmd, check=True)
+        _run_ffmpeg_with_progress(cmd)
     finally:
         os.unlink(script)
     _emit("mute_done", out=str(out))

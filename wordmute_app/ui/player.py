@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from ..core.proc import creationflags
+
 CONTEXT_SEC = 0.7
 
 
@@ -30,7 +32,8 @@ class SnippetPlayer:
             "-t", f"{duration:.3f}", "-vn", "-ac", "2", "-ar", "44100",
             str(wav),
         ]
-        r = subprocess.run(cmd, capture_output=True)
+        r = subprocess.run(cmd, capture_output=True,
+                           creationflags=creationflags())
         if r.returncode != 0 or not wav.exists():
             detail = r.stderr.decode(errors="replace").strip()[:200]
             raise RuntimeError(detail or "ffmpeg could not extract snippet")

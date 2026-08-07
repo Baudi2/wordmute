@@ -6,6 +6,8 @@ harmless (progress just shows raw minutes instead)."""
 import subprocess
 from pathlib import Path
 
+from .proc import creationflags
+
 
 def media_duration(path) -> float | None:
     try:
@@ -13,6 +15,7 @@ def media_duration(path) -> float | None:
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
              "-of", "csv=p=0", str(Path(path))],
             capture_output=True, text=True, timeout=15,
+            creationflags=creationflags(),
         )
         value = r.stdout.strip()
         if r.returncode == 0 and value:

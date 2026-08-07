@@ -22,21 +22,29 @@ def test_beep_filtergraph_structure():
     assert g.endswith("[aout]")
 
 
-def run_mute_capture(tmp_path, monkeypatch, beep_hz):
-    captured = {}
+class FakePopen:
+    captured = None
 
-    def fake_run(cmd, check=False, **kwargs):
-        captured["cmd"] = cmd
+    def __init__(self, cmd, **kwargs):
+        FakePopen.captured["cmd"] = cmd
         script_arg = [a for a in cmd
                       if a.endswith(".txt") and Path(a).exists()]
-        captured["script"] = Path(script_arg[0]).read_text(encoding="utf-8") \
-            if script_arg else ""
-        return subprocess.CompletedProcess(cmd, 0)
+        FakePopen.captured["script"] = (
+            Path(script_arg[0]).read_text(encoding="utf-8")
+            if script_arg else "")
+        self.stdout = iter(["progress=end\n"])
+        self.returncode = 0
 
-    monkeypatch.setattr(wm.subprocess, "run", fake_run)
+    def wait(self):
+        return self.returncode
+
+
+def run_mute_capture(tmp_path, monkeypatch, beep_hz):
+    FakePopen.captured = {}
+    monkeypatch.setattr(wm.subprocess, "Popen", FakePopen)
     wm.mute(tmp_path / "v.mp4", INTERVALS, tmp_path / "out.mp4",
             beep_hz=beep_hz)
-    return captured
+    return FakePopen.captured
 
 
 def test_mute_silence_command(tmp_path, monkeypatch):
@@ -54,6 +62,46 @@ def test_mute_beep_command(tmp_path, monkeypatch):
     assert "-filter_script:a" not in cmd
     assert "[aout]" in cmd  # mapped
     assert "sine=frequency=800" in captured["script"]
+
+
+def test_ffmpeg_progress_events_emitted(monkeypatch):
+    events = []
+
+    class ProgressPopen:
+        def __init__(self, cmd, **kwargs):
+            self.stdout = iter(["out_time=00:01:29.500000\n",
+                                "out_time=N/A\n",
+                                "out_time=01:00:00.000000\n",
+                                "progress=end\n"])
+            self.returncode = 0
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(wm.subprocess, "Popen", ProgressPopen)
+    wm.set_reporter(lambda e, d: events.append((e, d)))
+    try:
+        wm._run_ffmpeg_with_progress(["ffmpeg"])
+    finally:
+        wm.set_reporter(None)
+    seconds = [d["seconds"] for e, d in events if e == "mute_progress"]
+    assert seconds == [89.5, 3600.0]  # N/A line skipped
+
+
+def test_ffmpeg_failure_raises_with_code(monkeypatch):
+    import pytest
+
+    class FailPopen:
+        def __init__(self, cmd, **kwargs):
+            self.stdout = iter([])
+            self.returncode = 1
+
+        def wait(self):
+            return 1
+
+    monkeypatch.setattr(wm.subprocess, "Popen", FailPopen)
+    with pytest.raises(RuntimeError, match="code 1"):
+        wm._run_ffmpeg_with_progress(["ffmpeg"])
 
 
 def test_process_file_passes_beep_option(tmp_path, monkeypatch):

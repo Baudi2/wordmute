@@ -7,6 +7,8 @@ VRAM figures are conservative estimates including runtime overhead."""
 import subprocess
 from dataclasses import dataclass
 
+from .proc import creationflags
+
 WHISPER_VRAM_MB = {"large-v3": 4700, "medium": 2600, "small": 1600,
                    "base": 1100}
 WHISPER_FALLBACK_ORDER = ["medium", "small", "base"]
@@ -28,6 +30,7 @@ def detect_gpus() -> list:
             ["nvidia-smi", "--query-gpu=name,memory.total",
              "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=10,
+            creationflags=creationflags(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return []

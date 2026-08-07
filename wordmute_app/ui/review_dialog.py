@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import review
+from ..core.probe import media_duration
+from ..engine import wordmute as engine
 from ..engine.wordmute import fmt_ts
 from .i18n import tr
 from .player import SnippetPlayer
@@ -30,18 +32,31 @@ COL_MUTE, COL_START, COL_END, COL_PASS, COL_ENGINE, COL_TEXT = range(6)
 class ReRenderWorker(QThread):
     succeeded = Signal()
     failed = Signal(str)
+    progressed = Signal(float)  # seconds rendered
 
     def __init__(self, data: dict, parent=None):
         super().__init__(parent)
         self._data = data
 
     def run(self):
+        # forward render progress to the dialog while passing every
+        # other event through to whatever reporter was active
+        prev = engine._reporter
+
+        def reporter(event, data):
+            if event == "mute_progress":
+                self.progressed.emit(data["seconds"])
+            prev(event, data)
+
+        engine.set_reporter(reporter)
         try:
             review.apply_review(self._data)
         except Exception as exc:
             self.failed.emit(str(exc))
         else:
             self.succeeded.emit()
+        finally:
+            engine.set_reporter(prev)
 
 
 class ReviewDialog(QDialog):
@@ -174,10 +189,17 @@ class ReviewDialog(QDialog):
         self._player.stop()
         self.rerender_button.setEnabled(False)
         self.status_label.setText("Re-rendering…")
+        self._duration = media_duration(self._data["source"])
         self._worker = ReRenderWorker(self._data)
         self._worker.succeeded.connect(self._on_rerender_ok)
         self._worker.failed.connect(self._on_rerender_failed)
+        self._worker.progressed.connect(self._on_rerender_progress)
         self._worker.start()
+
+    def _on_rerender_progress(self, seconds: float):
+        if self._duration:
+            pct = min(seconds / self._duration, 1.0)
+            self.status_label.setText(f"Re-rendering… {pct:.0%}")
 
     def _on_rerender_ok(self):
         self._worker = None

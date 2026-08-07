@@ -58,10 +58,20 @@ def fmt_duration(sec) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+def fmt_hms(sec: float) -> str:
+    """Humanized duration: '45 s', '1 min 29 s', '1 h 5 min'."""
+    sec = max(0, int(sec))
+    h, rem = divmod(sec, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h} h {m} min" if m else f"{h} h"
+    if m:
+        return f"{m} min {s} s" if s else f"{m} min"
+    return f"{s} s"
+
+
 def fmt_eta(sec: float) -> str:
-    if sec >= 90:
-        return f"~{round(sec / 60)} min left"
-    return f"~{max(1, int(sec))} s left"
+    return f"~{fmt_hms(max(sec, 1))} left"
 
 
 def fmt_speed(bps) -> str:
@@ -619,7 +629,10 @@ class MainWindow(QMainWindow):
             self._set_row_status(f"{self._pass_prefix()}matching…")
             self._update_overall_progress()
         elif event == "mute_start":
-            self._set_row_status(f"{self._pass_prefix()}muting…")
+            self._set_row_status(f"{self._pass_prefix()}{tr('muting…')}")
+        elif event == "mute_progress":
+            self._on_mute_progress(data["seconds"])
+            return
 
         line = format_event(event, data)
         if line:
@@ -655,6 +668,16 @@ class MainWindow(QMainWindow):
         dur_item.setText(fmt_duration(duration))
         dur_item.setData(Qt.UserRole, duration)
 
+    def _on_mute_progress(self, seconds: float):
+        duration = (self._row_duration(self._current_row)
+                    if self._current_row is not None else None)
+        if duration:
+            pct = min(seconds / duration, 1.0)
+            text = f"{self._pass_prefix()}{tr('muting…')} {pct:.0%}"
+        else:
+            text = f"{self._pass_prefix()}{tr('muting…')} {fmt_hms(seconds)}"
+        self._set_row_status(text)
+
     def _on_asr_progress(self, minutes: float):
         processed = minutes * 60
         duration = (self._row_duration(self._current_row)
@@ -669,10 +692,11 @@ class MainWindow(QMainWindow):
                 if speed > 0:
                     text += f" · {fmt_eta((duration - processed) / speed)}"
         else:
-            text = f"{self._pass_prefix()}transcribing {minutes:.1f} min"
+            text = (f"{self._pass_prefix()}transcribing "
+                    f"{fmt_hms(processed)}")
         self._set_row_status(text)
         self.status_label.setText(
-            f"Transcribing… {minutes:.1f} min of audio processed")
+            f"Transcribing… {fmt_hms(processed)} of audio processed")
         self._update_overall_progress()
 
     def _on_file_started(self, row: int, name: str):

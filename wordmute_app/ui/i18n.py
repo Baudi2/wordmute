@@ -56,6 +56,7 @@ RU = {
     "double-click to review": "двойной клик для проверки",
     "Open output": "Открыть результат",
     "Show output in folder": "Показать результат в папке",
+    "muting…": "заглушение…",
     "cancelled": "отменено",
     "Cancelling…": "Отмена…",
     "Tools": "Инструменты",
