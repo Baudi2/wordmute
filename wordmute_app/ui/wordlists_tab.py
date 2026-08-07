@@ -65,7 +65,7 @@ class WordListsTab(QWidget):
         top.addWidget(self.save_button)
         layout.addLayout(top)
 
-        hint = QLabel(FORMAT_HINT)
+        hint = QLabel(tr(FORMAT_HINT))
         hint.setObjectName("syntax_hint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -163,7 +163,7 @@ class WordListsTab(QWidget):
         lines = self.editor.toPlainText().splitlines()
         n = sum(1 for line in lines
                 if line.strip() and not line.strip().startswith("#"))
-        self.count_label.setText(f"{n} entries")
+        self.count_label.setText(tr("{} entries").format(n))
 
     def _on_text_changed(self):
         if self._loading:
@@ -198,8 +198,9 @@ class WordListsTab(QWidget):
         removed = before - len(result)
         self._load()
         self.status_label.setText(
-            f"Saved: {len(result)} entries"
-            + (f" ({removed} duplicate(s) merged)" if removed > 0 else ""))
+            tr("Saved: {} entries").format(len(result))
+            + (tr(" ({} duplicate(s) merged)").format(removed)
+               if removed > 0 else ""))
         self._run_tester(self.tester_input.text())
 
     def maybe_save(self) -> bool:

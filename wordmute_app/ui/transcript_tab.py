@@ -53,7 +53,7 @@ class TranscriptTab(QWidget):
         layout.addLayout(search_row)
 
         self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["Time", "Text"])
+        self.table.setHorizontalHeaderLabels([tr("Time"), tr("Text")])
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -94,7 +94,7 @@ class TranscriptTab(QWidget):
         self._media = Path(path)
         self._blocks = transcript.group_words(self._words)
         self.file_label.setText(f"{self._media.name} — {engine_name}")
-        self.count_label.setText(f"{len(self._words)} words")
+        self.count_label.setText(tr("{} words").format(len(self._words)))
         self.status_label.setText("")
         self.export_button.setEnabled(True)
         self.search.clear()
@@ -128,9 +128,10 @@ class TranscriptTab(QWidget):
             self.table.setRowHidden(row, hide)
         if needle:
             self.count_label.setText(
-                f"{visible} of {len(self._blocks)} blocks")
+                tr("{} of {} blocks").format(visible, len(self._blocks)))
         elif self._words:
-            self.count_label.setText(f"{len(self._words)} words")
+            self.count_label.setText(
+                tr("{} words").format(len(self._words)))
 
     def _export_srt(self):
         if not self._media:

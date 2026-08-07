@@ -70,20 +70,20 @@ class ReviewDialog(QDialog):
         self._source_ok = Path(self._data["source"]).exists()
 
         output_name = Path(self._data["output"]).name
-        self.setWindowTitle(f"Review — {output_name}")
+        self.setWindowTitle(f"{tr('Review')} — {output_name}")
         self.resize(860, 560)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(12)
 
         header = QLabel(f"<b>{output_name}</b><br>"
-                        f"Source: {self._data['source']}")
+                        f"{tr('Source')}: {self._data['source']}")
         header.setObjectName("review_summary")
         header.setWordWrap(True)
         layout.addWidget(header)
         if not self._source_ok:
-            warn = QLabel("⚠ The original file was moved or deleted — "
-                          "playback and re-rendering are unavailable.")
+            warn = QLabel(tr("⚠ The original file was moved or deleted — "
+                             "playback and re-rendering are unavailable."))
             warn.setWordWrap(True)
             layout.addWidget(warn)
 
@@ -107,8 +107,8 @@ class ReviewDialog(QDialog):
         self.counts_label = QLabel()
         layout.addWidget(self.counts_label)
         self.status_label = QLabel(
-            "Click a row to hear the original audio around it. Uncheck "
-            "intervals that should not be muted, then Re-render.")
+            tr("Click a row to hear the original audio around it. Uncheck "
+               "intervals that should not be muted, then Re-render."))
         self.status_label.setWordWrap(True)
         self.status_label.setProperty("muted", True)
         layout.addWidget(self.status_label)
@@ -175,9 +175,9 @@ class ReviewDialog(QDialog):
         total = len(self._data["intervals"])
         unmuted = sum(1 for iv in self._data["intervals"]
                       if not iv.get("muted", True))
-        text = f"{total} interval(s)"
+        text = tr("{} interval(s)").format(total)
         if unmuted:
-            text += f" — {unmuted} will be un-muted on re-render"
+            text += tr(" — {} will be un-muted on re-render").format(unmuted)
         self.counts_label.setText(text)
 
     # ---------------------------------------------------------- playback
@@ -191,13 +191,14 @@ class ReviewDialog(QDialog):
         try:
             self._player.play(self._data["source"], iv["s"], iv["e"])
         except Exception as exc:
-            self.status_label.setText(f"Playback failed: {exc}")
+            self.status_label.setText(
+                tr("Playback failed: {}").format(exc))
 
     # ---------------------------------------------------------- re-render
     def _rerender(self):
         self._player.stop()
         self.rerender_button.setEnabled(False)
-        self.status_label.setText("Re-rendering…")
+        self.status_label.setText(tr("Re-rendering…"))
         self._duration = media_duration(self._data["source"])
         self._worker = ReRenderWorker(self._data)
         self._worker.succeeded.connect(self._on_rerender_ok)
@@ -208,7 +209,7 @@ class ReviewDialog(QDialog):
     def _on_rerender_progress(self, seconds: float):
         if self._duration:
             pct = min(seconds / self._duration, 1.0)
-            self.status_label.setText(f"Re-rendering… {pct:.0%}")
+            self.status_label.setText(f"{tr('Re-rendering…')} {pct:.0%}")
 
     def _on_rerender_ok(self):
         self._worker = None
@@ -217,12 +218,13 @@ class ReviewDialog(QDialog):
         muted = sum(1 for iv in self._data["intervals"]
                     if iv.get("muted", True))
         self.status_label.setText(
-            f"Output updated: {muted} interval(s) muted.")
+            tr("Output updated: {} interval(s) muted.").format(muted))
 
     def _on_rerender_failed(self, message: str):
         self._worker = None
         self.rerender_button.setEnabled(True)
-        self.status_label.setText(f"Re-render failed: {message}")
+        self.status_label.setText(
+            tr("Re-render failed: {}").format(message))
 
     # ---------------------------------------------------------- lifecycle
     def closeEvent(self, event):
@@ -231,8 +233,9 @@ class ReviewDialog(QDialog):
         if self._dirty:
             if QMessageBox.question(
                     self, "WordMute",
-                    "You changed the mute selection but didn't re-render, "
-                    "so the output file is unchanged. Close anyway?") \
+                    tr("You changed the mute selection but didn't "
+                       "re-render, so the output file is unchanged. "
+                       "Close anyway?")) \
                     != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return

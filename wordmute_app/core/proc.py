@@ -19,3 +19,28 @@ def creationflags() -> int:
     except Exception:
         pass
     return 0
+
+
+_installed = False
+
+
+def install_global_no_window() -> None:
+    """Our own subprocess calls pass creationflags explicitly, but
+    libraries (GigaAM/pyannote/torchcodec, yt-dlp merges) spawn ffmpeg
+    and friends themselves and flash console windows under pythonw.
+    Patch Popen so every child of this process is windowless too.
+    No-op when a console exists (CLI runs keep normal behavior)."""
+    global _installed
+    if _installed:
+        return
+    flag = creationflags()
+    if not flag:
+        return
+    original_init = subprocess.Popen.__init__
+
+    def patched_init(self, *args, **kwargs):
+        kwargs["creationflags"] = kwargs.get("creationflags", 0) | flag
+        original_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = patched_init
+    _installed = True

@@ -64,6 +64,7 @@ RU = {
     "Stop Watching": "Перестать следить",
     # tabs
     "Queue": "Очередь",
+    "Word Lists": "Списки слов",
     "Transcript": "Транскрипт",
     "Models": "Модели",
     "History": "История",
@@ -137,6 +138,188 @@ RU = {
     "Token:": "Токен:",
     "Stored only on this computer.":
         "Хранится только на этом компьютере.",
+    "Paste a token first.": "Сначала вставьте токен.",
+    "GigaAM is faster and noticeably more accurate for pure Russian "
+    "speech, but its long-audio pipeline uses a <i>gated</i> model on "
+    "Hugging Face — each user must accept its terms with their own free "
+    "account. Three steps, needed once:":
+        "GigaAM быстрее и заметно точнее для чисто русской речи, но его "
+        "конвейер использует <i>закрытую</i> модель на Hugging Face — "
+        "каждый пользователь принимает ее условия со своим бесплатным "
+        "аккаунтом. Три шага, нужны один раз:",
+    "Create a free Hugging Face account":
+        "Создайте бесплатный аккаунт Hugging Face",
+    " (skip if you have one)": " (пропустите, если уже есть)",
+    "Open the pyannote/segmentation-3.0 page":
+        "Откройте страницу pyannote/segmentation-3.0",
+    " and fill in the short access form":
+        " и заполните короткую форму доступа",
+    "Create an access token": "Создайте токен доступа",
+    " (type: <b>read</b>) and paste it below":
+        " (тип: <b>read</b>) и вставьте его ниже",
+    "GigaAM also needs FFmpeg's <i>shared</i> build (separate "
+    "from the normal ffmpeg). Install it with "
+    "<code>winget install Gyan.FFmpeg.Shared</code>, "
+    "then click Re-check.":
+        "GigaAM также нужна <i>shared</i>-сборка FFmpeg (отдельно от "
+        "обычного ffmpeg). Установите ее командой "
+        "<code>winget install Gyan.FFmpeg.Shared</code> и нажмите "
+        "«Перепроверить».",
+    "Checking token and model access…":
+        "Проверка токена и доступа к модели…",
+    "✓ Signed in as {}; pyannote access confirmed. Token "
+    "saved — GigaAM passes are ready to use.":
+        "✓ Вход выполнен как {}; доступ к pyannote подтвержден. Токен "
+        "сохранен — проходы GigaAM готовы к работе.",
+    # time units / progress
+    "h": "ч",
+    "min": "мин",
+    "s": "с",
+    "~{} left": "~осталось {}",
+    "transcribing": "транскрибация",
+    "downloading": "загрузка",
+    "downloading…": "загрузка…",
+    "Transcribing… {} of audio processed":
+        "Транскрибация… обработано {} аудио",
+    "Downloading {}…": "Загрузка {}…",
+    "Processing {}…": "Обработка {}…",
+    "Finished: {}/{} file(s) ok.": "Готово: {}/{} файл(ов) успешно.",
+    "Watching {} — new media files are queued and processed "
+    "automatically.":
+        "Слежение за {} — новые файлы добавляются и обрабатываются "
+        "автоматически.",
+    # message boxes
+    "Add some files first.": "Сначала добавьте файлы.",
+    "Select at least one word list.":
+        "Выберите хотя бы один список слов.",
+    "Add at least one pass to the plan.":
+        "Добавьте хотя бы один проход в план.",
+    "The plan includes GigaAM passes, but the one-time "
+    "Hugging Face setup hasn't been completed — they will "
+    "likely fail.\n\nOpen the setup wizard now? (Choose No "
+    "to try running anyway, e.g. if the models are already "
+    "cached.)":
+        "В плане есть проходы GigaAM, но разовая настройка Hugging Face "
+        "не завершена — они, скорее всего, не сработают.\n\nОткрыть "
+        "мастер настройки? (Нажмите «Нет», чтобы все равно попробовать, "
+        "например если модели уже скачаны.)",
+    "Processing is still running. Cancel and quit?":
+        "Обработка еще идет. Отменить и выйти?",
+    "No review data for this row yet — it appears after "
+    "the file has been processed and something was muted.":
+        "Для этой строки пока нет данных проверки — они появляются "
+        "после обработки файла, если что-то было заглушено.",
+    # url dialog
+    "Add URL": "Добавить ссылку",
+    "Fetch formats": "Получить форматы",
+    "Add (best quality)": "Добавить (лучшее качество)",
+    "Add selected": "Добавить выбранное",
+    "Best video+audio (recommended)":
+        "Лучшее видео+аудио (рекомендуется)",
+    "Paste a video URL, then either fetch the format list or add "
+    "it at best quality.":
+        "Вставьте ссылку на видео, затем получите список форматов или "
+        "добавьте в лучшем качестве.",
+    "Fetching format list…": "Получение списка форматов…",
+    "Could not fetch formats: {}": "Не удалось получить форматы: {}",
+    "Quality": "Качество",
+    "Ext": "Формат",
+    "Type": "Тип",
+    "Note": "Примечание",
+    # review dialog
+    "Review": "Проверка",
+    "Source": "Источник",
+    "⚠ The original file was moved or deleted — playback and "
+    "re-rendering are unavailable.":
+        "⚠ Исходный файл перемещен или удален — прослушивание и "
+        "пересборка недоступны.",
+    "Click a row to hear the original audio around it. Uncheck "
+    "intervals that should not be muted, then Re-render.":
+        "Кликните строку, чтобы услышать оригинал вокруг нее. Снимите "
+        "галочки с лишних интервалов и нажмите «Пересобрать».",
+    "{} interval(s)": "Интервалов: {}",
+    " — {} will be un-muted on re-render":
+        " — {} будет раззаглушено при пересборке",
+    "Re-rendering…": "Пересборка…",
+    "Output updated: {} interval(s) muted.":
+        "Результат обновлен: заглушено интервалов: {}.",
+    "Re-render failed: {}": "Пересборка не удалась: {}",
+    "Playback failed: {}": "Не удалось воспроизвести: {}",
+    "You changed the mute selection but didn't re-render, so the "
+    "output file is unchanged. Close anyway?":
+        "Вы изменили выбор, но не пересобрали результат — файл не "
+        "изменился. Все равно закрыть?",
+    # models tab
+    "Model": "Модель",
+    "Size": "Размер",
+    "downloaded ✓": "скачана ✓",
+    "not downloaded": "не скачана",
+    "Delete GigaAM caches": "Удалить кэши GigaAM",
+    "No NVIDIA GPU detected — use CPU mode in Settings (roughly "
+    "2-4x slower).":
+        "GPU NVIDIA не найден — используйте режим CPU в настройках "
+        "(примерно в 2-4 раза медленнее).",
+    "{} cached (models download automatically on first use).":
+        "в кэше {} (модели скачиваются автоматически при первом "
+        "использовании).",
+    "nothing cached yet — models download automatically on first "
+    "use.":
+        "кэш пуст — модели скачиваются автоматически при первом "
+        "использовании.",
+    "Downloading {}… (this can take a while; the app stays usable)":
+        "Скачивание {}… (может занять время; приложение остается "
+        "рабочим)",
+    "Delete the downloaded '{}' model? It will be re-downloaded "
+    "automatically the next time it's used.":
+        "Удалить скачанную модель «{}»? Она будет скачана заново при "
+        "следующем использовании.",
+    "Delete all GigaAM model caches? They will be re-downloaded "
+    "on the next GigaAM pass.":
+        "Удалить все кэши моделей GigaAM? Они будут скачаны заново при "
+        "следующем проходе GigaAM.",
+    # history tab
+    "Time": "Время",
+    "Muted": "Заглушено",
+    "Plan": "План",
+    "Output": "Результат",
+    "{} record(s)": "Записей: {}",
+    "Clear the whole processing history?":
+        "Очистить всю историю обработки?",
+    # transcript tab
+    "Text": "Текст",
+    "{} words": "Слов: {}",
+    "{} of {} blocks": "{} из {} блоков",
+    # word lists tab
+    "{} entries": "Записей: {}",
+    "Saved: {} entries": "Сохранено: {} записей",
+    " ({} duplicate(s) merged)": " (объединено дубликатов: {})",
+    "слово = exact ·  корень* = word starts with ·  "
+    "*корень* = anywhere in word ·  слово слово = phrase ·  "
+    "# comment":
+        "слово = точное совпадение ·  корень* = слово начинается с ·  "
+        "*корень* = в любом месте слова ·  слово слово = фраза ·  "
+        "# комментарий",
+    # plan widget tips
+    "Whisper: handles English and mixed-language speech well; "
+    "slower; works out of the box, no extra setup.":
+        "Whisper: хорошо работает с английской и смешанной речью; "
+        "медленнее; работает сразу, без настройки.",
+    "GigaAM: faster and noticeably more accurate for pure Russian "
+    "speech; weaker on mixed Russian/English (may mangle English "
+    "words); requires a one-time Hugging Face setup.":
+        "GigaAM: быстрее и заметно точнее для чисто русской речи; "
+        "слабее на смеси русского и английского; требует разовой "
+        "настройки Hugging Face.",
+    "GigaAM: faster, best for pure Russian.\n"
+    "Whisper: slower, handles English/mixed speech.":
+        "GigaAM: быстрее, лучше для чисто русской речи.\n"
+        "Whisper: медленнее, понимает английскую и смешанную речь.",
+    "Passes run top to bottom; each pass re-checks the previous "
+    "pass's output and stops early once nothing new is found. "
+    "Different engines catch words the other missed.":
+        "Проходы идут сверху вниз; каждый перепроверяет результат "
+        "предыдущего и останавливается, когда нового ничего не "
+        "найдено. Разные движки ловят то, что пропустил другой.",
     # dialogs (shared)
     "Close": "Закрыть",
     "Browse…": "Обзор…",

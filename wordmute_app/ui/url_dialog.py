@@ -49,7 +49,7 @@ class AddUrlDialog(QDialog):
 
     def __init__(self, parent=None, url: str = "", cookies=None):
         super().__init__(parent)
-        self.setWindowTitle("Add URL")
+        self.setWindowTitle(tr("Add URL"))
         self.resize(640, 480)
         self._info = None
         self._use_best = False
@@ -59,14 +59,14 @@ class AddUrlDialog(QDialog):
         url_row = QHBoxLayout()
         self.url_edit = QLineEdit(url)
         self.url_edit.setPlaceholderText("https://…")
-        self.fetch_button = QPushButton("Fetch formats")
+        self.fetch_button = QPushButton(tr("Fetch formats"))
         self.fetch_button.clicked.connect(self._fetch)
         url_row.addWidget(self.url_edit, stretch=1)
         url_row.addWidget(self.fetch_button)
         layout.addLayout(url_row)
 
-        self.status = QLabel("Paste a video URL, then either fetch the "
-                             "format list or add it at best quality.")
+        self.status = QLabel(tr("Paste a video URL, then either fetch the "
+                                "format list or add it at best quality."))
         self.status.setWordWrap(True)
         self.status.setProperty("muted", True)
         layout.addWidget(self.status)
@@ -86,7 +86,8 @@ class AddUrlDialog(QDialog):
             layout.addLayout(cookies_row)
 
         self.table = QTableWidget(0, len(self.COLUMNS))
-        self.table.setHorizontalHeaderLabels(self.COLUMNS)
+        self.table.setHorizontalHeaderLabels(
+            [tr(c) for c in self.COLUMNS])
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -98,7 +99,7 @@ class AddUrlDialog(QDialog):
         layout.addWidget(self.table, stretch=1)
 
         buttons_row = QHBoxLayout()
-        self.best_button = QPushButton("Add (best quality)")
+        self.best_button = QPushButton(tr("Add (best quality)"))
         self.best_button.setProperty("primary", True)
         self.best_button.setToolTip(
             "Skip the format list and download best video+audio.")
@@ -107,7 +108,7 @@ class AddUrlDialog(QDialog):
         buttons_row.addStretch()
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Ok).setText("Add selected")
+        self.buttons.button(QDialogButtonBox.Ok).setText(tr("Add selected"))
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         buttons_row.addWidget(self.buttons)
@@ -130,7 +131,7 @@ class AddUrlDialog(QDialog):
         if not url:
             return
         self.fetch_button.setEnabled(False)
-        self.status.setText("Fetching format list…")
+        self.status.setText(tr("Fetching format list…"))
         worker = FormatListWorker(url, cookies=self._cookies)
         worker.ready.connect(self._on_formats_ready)
         worker.error.connect(self._on_fetch_error)
@@ -143,8 +144,8 @@ class AddUrlDialog(QDialog):
         extra = f" · {int(duration // 60)} min" if duration else ""
         self.status.setText(f"{info['title']}{extra}")
         self.table.setRowCount(0)
-        self._add_row(["Best video+audio (recommended)", "", "", "", "", ""],
-                      None)
+        self._add_row([tr("Best video+audio (recommended)"),
+                       "", "", "", "", ""], None)
         for f in info["formats"]:
             d = downloader.describe_format(f)
             self._add_row(
@@ -166,7 +167,8 @@ class AddUrlDialog(QDialog):
 
     def _on_fetch_error(self, message: str):
         self.fetch_button.setEnabled(True)
-        self.status.setText(f"Could not fetch formats: {message}")
+        self.status.setText(
+            tr("Could not fetch formats: {}").format(message))
 
     def _update_ok(self):
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(

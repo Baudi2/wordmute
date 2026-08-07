@@ -7,7 +7,9 @@ reach. Safe to call again at runtime to switch themes live."""
 
 import re
 
-from PySide6.QtGui import QColor, QIcon, QPalette
+from PySide6.QtCore import Qt
+from PySide6.QtGui import (QColor, QFontDatabase, QIcon, QImage, QPainter,
+                           QPalette, QPixmap)
 
 from ..core.config import resources_dir
 
@@ -34,8 +36,25 @@ def load_stylesheet(name: str) -> str:
     return re.sub(r"url\((icons/[^)]+)\)", rf"url({base}/\1)", qss)
 
 
+_fonts_loaded = False
+
+
+def _register_fonts() -> None:
+    """Bundle Inter (full Cyrillic coverage) so RU and EN text share the
+    design's typeface; falls back to Segoe UI when absent."""
+    global _fonts_loaded
+    if _fonts_loaded:
+        return
+    fonts = theme_dir() / "fonts"
+    if fonts.is_dir():
+        for ttf in fonts.glob("*.ttf"):
+            QFontDatabase.addApplicationFont(str(ttf))
+    _fonts_loaded = True
+
+
 def apply_theme(app, name: str) -> None:
     name = name if name in THEMES else DEFAULT_THEME
+    _register_fonts()
     app.setStyle("Fusion")
     app.setStyleSheet(load_stylesheet(name))
     palette = app.palette()
@@ -45,3 +64,28 @@ def apply_theme(app, name: str) -> None:
 
 def app_icon() -> QIcon:
     return QIcon(str(theme_dir() / "wordmute-icon.svg"))
+
+
+def _svg_pixmap(svg_text: str, size: int = 36) -> QPixmap:
+    from PySide6.QtSvg import QSvgRenderer
+    renderer = QSvgRenderer(svg_text.encode("utf-8"))
+    image = QImage(size, size, QImage.Format_ARGB32)
+    image.fill(Qt.transparent)
+    painter = QPainter(image)
+    renderer.render(painter)
+    painter.end()
+    return QPixmap.fromImage(image)
+
+
+def nav_icon(name: str) -> QIcon:
+    """Sidebar icon: muted stroke normally, accent when selected (the
+    design recolors the same SVG rather than shipping two)."""
+    path = theme_dir() / "icons" / "tabs" / f"{name}.svg"
+    icon = QIcon()
+    if not path.exists():
+        return icon
+    svg = path.read_text(encoding="utf-8")
+    icon.addPixmap(_svg_pixmap(svg), QIcon.Normal)
+    icon.addPixmap(_svg_pixmap(svg.replace("#9397ab", "#9184d9")),
+                   QIcon.Selected)
+    return icon

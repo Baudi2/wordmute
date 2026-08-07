@@ -30,13 +30,14 @@ INTRO_HTML = (
     "Hugging Face — each user must accept its terms with their own free "
     "account. Three steps, needed once:")
 
+# (link text, suffix, url) — link text and suffix translate separately
 STEPS = [
-    (f'<a href="{hf_setup.SIGNUP_URL}">Create a free Hugging Face '
-     'account</a> (skip if you have one)'),
-    (f'<a href="{hf_setup.CONSENT_URL}">Open the pyannote/'
-     'segmentation-3.0 page</a> and fill in the short access form'),
-    (f'<a href="{hf_setup.TOKEN_URL}">Create an access token</a> '
-     '(type: <b>read</b>) and paste it below'),
+    ("Create a free Hugging Face account", " (skip if you have one)",
+     hf_setup.SIGNUP_URL),
+    ("Open the pyannote/segmentation-3.0 page",
+     " and fill in the short access form", hf_setup.CONSENT_URL),
+    ("Create an access token",
+     " (type: <b>read</b>) and paste it below", hf_setup.TOKEN_URL),
 ]
 
 FFMPEG_HINT = ("GigaAM also needs FFmpeg's <i>shared</i> build (separate "
@@ -91,13 +92,14 @@ class GigaamWizard(QDialog):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(12)
 
-        intro = QLabel(INTRO_HTML)
+        intro = QLabel(tr(INTRO_HTML))
         intro.setWordWrap(True)
         intro.setTextFormat(Qt.RichText)
         layout.addWidget(intro)
 
-        for i, step in enumerate(STEPS, start=1):
-            layout.addWidget(_step_card(i, step))
+        for i, (link, suffix, url) in enumerate(STEPS, start=1):
+            html = f'<a href="{url}">{tr(link)}</a>{tr(suffix)}'
+            layout.addWidget(_step_card(i, html))
 
         token_row = QHBoxLayout()
         token_row.setSpacing(8)
@@ -158,7 +160,7 @@ class GigaamWizard(QDialog):
             self.ffmpeg_status.setToolTip(str(found))
             self.recheck_button.setVisible(False)
         else:
-            self.ffmpeg_status.setText("✗ " + FFMPEG_HINT)
+            self.ffmpeg_status.setText("✗ " + tr(FFMPEG_HINT))
             self.ffmpeg_status.setProperty("state", "warn")
             self.recheck_button.setVisible(True)
         style = self.ffmpeg_status.style()
@@ -168,10 +170,10 @@ class GigaamWizard(QDialog):
     def _validate(self):
         token = self.token_edit.text().strip()
         if not token:
-            self.token_status.setText("Paste a token first.")
+            self.token_status.setText(tr("Paste a token first."))
             return
         self.validate_button.setEnabled(False)
-        self.token_status.setText("Checking token and model access…")
+        self.token_status.setText(tr("Checking token and model access…"))
         self._worker = ValidateWorker(token)
         self._worker.succeeded.connect(self._on_ok)
         self._worker.failed.connect(self._on_failed)
@@ -191,8 +193,9 @@ class GigaamWizard(QDialog):
         os.environ["HF_TOKEN"] = token
         self.validate_button.setEnabled(True)
         self._set_status(
-            f"✓ Signed in as {user}; pyannote access confirmed. "
-            "Token saved — GigaAM passes are ready to use.", "ok")
+            tr("✓ Signed in as {}; pyannote access confirmed. Token "
+               "saved — GigaAM passes are ready to use.").format(user),
+            "ok")
 
     def _on_failed(self, message: str):
         self._worker = None

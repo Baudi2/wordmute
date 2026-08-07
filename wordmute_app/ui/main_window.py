@@ -42,6 +42,7 @@ from .models_tab import ModelsTab
 from .plan_widget import PassPlanWidget
 from .review_dialog import ReviewDialog
 from .settings_tab import SettingsTab
+from .sidebar import SidebarNav
 from .transcript_tab import TranscriptTab
 from .url_dialog import AddUrlDialog
 from .wordlists_tab import WordListsTab
@@ -67,15 +68,16 @@ def fmt_hms(sec: float) -> str:
     sec = max(0, int(sec))
     h, rem = divmod(sec, 3600)
     m, s = divmod(rem, 60)
+    _h, _m, _s = tr("h"), tr("min"), tr("s")
     if h:
-        return f"{h} h {m} min" if m else f"{h} h"
+        return f"{h} {_h} {m} {_m}" if m else f"{h} {_h}"
     if m:
-        return f"{m} min {s} s" if s else f"{m} min"
-    return f"{s} s"
+        return f"{m} {_m} {s} {_s}" if s else f"{m} {_m}"
+    return f"{s} {_s}"
 
 
 def fmt_eta(sec: float) -> str:
-    return f"~{fmt_hms(max(sec, 1))} left"
+    return tr("~{} left").format(fmt_hms(max(sec, 1)))
 
 
 def fmt_speed(bps) -> str:
@@ -104,7 +106,7 @@ class MainWindow(QMainWindow):
         self._watch_timer.setInterval(5000)
         self._watch_timer.timeout.connect(self._watch_tick)
 
-        # --- shell: header strip + tabs (no menu bar)
+        # --- shell: header strip + sidebar navigation (no menu bar)
         from .theme import app_icon
         container = QWidget()
         shell = QVBoxLayout(container)
@@ -123,14 +125,17 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(title_label)
         header_layout.addStretch()
         shell.addWidget(header_bar)
-        self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(True)
+        self.tabs = SidebarNav()
         shell.addWidget(self.tabs, stretch=1)
         self.setCentralWidget(container)
 
-        queue_tab = QWidget()
-        root = QVBoxLayout(queue_tab)
-        root.setContentsMargins(20, 16, 20, 16)
+        queue_page = QWidget()
+        page_layout = QVBoxLayout(queue_page)
+        page_layout.setContentsMargins(20, 16, 20, 16)
+        page_layout.setSpacing(0)
+        upper = QWidget()
+        root = QVBoxLayout(upper)
+        root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(12)
 
         # --- file queue
@@ -176,9 +181,13 @@ class MainWindow(QMainWindow):
         self.table.setHorizontalHeaderLabels(
             [tr("File"), tr("Duration"), tr("Status")])
         header = self.table.horizontalHeader()
+        # fixed-ish column widths: live status text must never shift
+        # the column layout while progress updates tick in
         header.setSectionResizeMode(COL_FILE, QHeaderView.Stretch)
-        header.setSectionResizeMode(COL_DURATION, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(COL_STATUS, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(COL_DURATION, QHeaderView.Interactive)
+        header.setSectionResizeMode(COL_STATUS, QHeaderView.Interactive)
+        self.table.setColumnWidth(COL_DURATION, 90)
+        self.table.setColumnWidth(COL_STATUS, 400)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.itemDoubleClicked.connect(self._on_row_double_clicked)
@@ -314,31 +323,45 @@ class MainWindow(QMainWindow):
         self.log_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.log_toggle.toggled.connect(self._toggle_log)
         root.addWidget(self.log_toggle)
+
+        # log lives in a splitter so the Details pane is resizable
         self.log = QPlainTextEdit()
         self.log.setObjectName("log_pane")
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(5000)
         self.log.setVisible(False)
-        self.log.setMaximumHeight(180)
-        root.addWidget(self.log)
+        from PySide6.QtWidgets import QSplitter
+        self.queue_splitter = QSplitter(Qt.Vertical)
+        self.queue_splitter.addWidget(upper)
+        self.queue_splitter.addWidget(self.log)
+        self.queue_splitter.setStretchFactor(0, 4)
+        self.queue_splitter.setStretchFactor(1, 1)
+        self.queue_splitter.setCollapsible(0, False)
+        page_layout.addWidget(self.queue_splitter)
+        queue_tab = queue_page
 
-        # --- assemble tabs
-        self.tabs.addTab(queue_tab, tr("Queue"))
+        # --- assemble navigation
+        from .theme import nav_icon
+        self.tabs.addTab(queue_tab, tr("Queue"), nav_icon("queue"))
         self.wordlists_tab = WordListsTab(self._wordlist_paths,
                                           self._settings)
         self.wordlists_tab.dirtyChanged.connect(
             lambda dirty: self.tabs.setTabText(
                 1, tr("Word Lists") + (" •" if dirty else "")))
-        self.tabs.addTab(self.wordlists_tab, tr("Word Lists"))
+        self.tabs.addTab(self.wordlists_tab, tr("Word Lists"),
+                         nav_icon("wordlists"))
         self.transcript_tab = TranscriptTab()
-        self.tabs.addTab(self.transcript_tab, tr("Transcript"))
+        self.tabs.addTab(self.transcript_tab, tr("Transcript"),
+                         nav_icon("transcript"))
         self.models_tab = ModelsTab()
-        self.tabs.addTab(self.models_tab, tr("Models"))
+        self.tabs.addTab(self.models_tab, tr("Models"), nav_icon("models"))
         self.history_tab = HistoryTab()
-        self.tabs.addTab(self.history_tab, tr("History"))
+        self.tabs.addTab(self.history_tab, tr("History"),
+                         nav_icon("history"))
         self.settings_tab = SettingsTab(self._settings)
         self.settings_tab.changed.connect(self._refresh_warnings)
-        self.tabs.addTab(self.settings_tab, tr("Settings"))
+        self.tabs.addTab(self.settings_tab, tr("Settings"),
+                         nav_icon("settings"))
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
     # ---------------------------------------------------------- queue chrome
@@ -402,8 +425,9 @@ class MainWindow(QMainWindow):
             state[1] = True
         self._watch_timer.start()
         self.watch_button.setText(tr("Stop Watching"))
-        self.status_label.setText(f"Watching {d} — new media files are "
-                                  "queued and processed automatically.")
+        self.status_label.setText(
+            tr("Watching {} — new media files are queued and processed "
+               "automatically.").format(d))
         self._append_log(f"Watching folder: {d}")
 
     def _watch_tick(self):
@@ -560,8 +584,8 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.information(
                 self, "WordMute",
-                "No review data for this row yet — it appears after the "
-                "file has been processed and something was muted.")
+                tr("No review data for this row yet — it appears after "
+                   "the file has been processed and something was muted."))
 
     def _pick_review(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -647,27 +671,29 @@ class MainWindow(QMainWindow):
         if not items:
             if not auto:
                 QMessageBox.information(self, "WordMute",
-                                        "Add some files first.")
+                                        tr("Add some files first."))
             return
         lists = self._selected_wordlists()
         if not lists:
             if not auto:
-                QMessageBox.information(self, "WordMute",
-                                        "Select at least one word list.")
+                QMessageBox.information(
+                    self, "WordMute", tr("Select at least one word list."))
             return
         engines = self.plan.engines()
         if not engines:
             if not auto:
-                QMessageBox.information(self, "WordMute",
-                                        "Add at least one pass to the plan.")
+                QMessageBox.information(
+                    self, "WordMute",
+                    tr("Add at least one pass to the plan."))
             return
         if not auto and "gigaam" in engines and not self._gigaam_ready():
             answer = QMessageBox.question(
                 self, "WordMute",
-                "The plan includes GigaAM passes, but the one-time Hugging "
-                "Face setup hasn't been completed — they will likely fail.\n\n"
-                "Open the setup wizard now? (Choose No to try running "
-                "anyway, e.g. if the models are already cached.)")
+                tr("The plan includes GigaAM passes, but the one-time "
+                   "Hugging Face setup hasn't been completed — they will "
+                   "likely fail.\n\nOpen the setup wizard now? (Choose No "
+                   "to try running anyway, e.g. if the models are already "
+                   "cached.)"))
             if answer == QMessageBox.StandardButton.Yes:
                 self._open_gigaam_setup()
                 return
@@ -765,8 +791,9 @@ class MainWindow(QMainWindow):
 
     def _on_engine_event(self, event: str, data: dict):
         if event == "download_start":
-            self._set_row_status("downloading…")
-            self.status_label.setText(f"Downloading {data['url']}…")
+            self._set_row_status(tr("downloading") + "…")
+            self.status_label.setText(
+                tr("Downloading {}…").format(data["url"]))
         elif event == "download_progress":
             self._on_download_progress(data)
             return
@@ -814,11 +841,12 @@ class MainWindow(QMainWindow):
         downloaded, total = d.get("downloaded"), d.get("total")
         parts = []
         if downloaded and total:
-            parts.append(f"downloading {downloaded / total:.0%}")
+            parts.append(f"{tr('downloading')} {downloaded / total:.0%}")
         elif downloaded:
-            parts.append(f"downloading {downloaded / (1024 * 1024):.0f} MB")
+            parts.append(f"{tr('downloading')} "
+                         f"{downloaded / (1024 * 1024):.0f} MB")
         else:
-            parts.append("downloading")
+            parts.append(tr("downloading"))
         speed = fmt_speed(d.get("speed"))
         if speed:
             parts.append(speed)
@@ -857,18 +885,19 @@ class MainWindow(QMainWindow):
         if duration:
             pct = min(processed / duration, 1.0)
             self._pass_pct = 0.9 * pct  # transcription ~= the whole pass
-            text = f"{self._pass_prefix()}transcribing {pct:.0%}"
+            text = f"{self._pass_prefix()}{tr('transcribing')} {pct:.0%}"
             if self._asr_wall_start and pct > 0.02:
                 elapsed = time.monotonic() - self._asr_wall_start
                 speed = processed / elapsed
                 if speed > 0:
                     text += f" · {fmt_eta((duration - processed) / speed)}"
         else:
-            text = (f"{self._pass_prefix()}transcribing "
+            text = (f"{self._pass_prefix()}{tr('transcribing')} "
                     f"{fmt_hms(processed)}")
         self._set_row_status(text)
         self.status_label.setText(
-            f"Transcribing… {fmt_hms(processed)} of audio processed")
+            tr("Transcribing… {} of audio processed")
+            .format(fmt_hms(processed)))
         self._update_overall_progress()
 
     def _on_file_started(self, row: int, name: str):
@@ -877,7 +906,7 @@ class MainWindow(QMainWindow):
         self._pass_pct = 0.0
         self._asr_wall_start = None
         self._set_row_status(tr("processing…"))
-        self.status_label.setText(f"Processing {name}…")
+        self.status_label.setText(tr("Processing {}…").format(name))
         self._append_log(f"\n=== {name} ===")
 
     def _on_file_finished(self, row: int, ok: bool, error: str):
@@ -901,15 +930,16 @@ class MainWindow(QMainWindow):
     def _on_all_finished(self, done: int, total: int):
         self._worker = None
         self._set_running(False)
-        self.status_label.setText(f"Finished: {done}/{total} file(s) ok.")
-        self._append_log(f"\nFinished: {done}/{total} file(s) ok.")
+        summary = tr("Finished: {}/{} file(s) ok.").format(done, total)
+        self.status_label.setText(summary)
+        self._append_log("\n" + summary)
 
     # ---------------------------------------------------------- lifecycle
     def closeEvent(self, event):
         if self._worker is not None:
             if QMessageBox.question(
                     self, "WordMute",
-                    "Processing is still running. Cancel and quit?") \
+                    tr("Processing is still running. Cancel and quit?")) \
                     != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return

@@ -45,7 +45,7 @@ class HistoryTab(QWidget):
         layout.setSpacing(12)
 
         self.table = QTableWidget(0, len(COLUMNS))
-        self.table.setHorizontalHeaderLabels(COLUMNS)
+        self.table.setHorizontalHeaderLabels([tr(c) for c in COLUMNS])
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -96,7 +96,7 @@ class HistoryTab(QWidget):
             for col, item in enumerate(values):
                 self.table.setItem(row, col, item)
         self.count_label.setText(
-            f"{len(self._records)} record(s)" if self._records
+            tr("{} record(s)").format(len(self._records)) if self._records
             else tr("Processed files will appear here."))
 
     # ---------------------------------------------------------- actions
@@ -132,7 +132,7 @@ class HistoryTab(QWidget):
 
     def _clear(self):
         if QMessageBox.question(self, "WordMute",
-                                "Clear the whole processing history?") \
+                                tr("Clear the whole processing history?")) \
                 == QMessageBox.StandardButton.Yes:
             history.clear_history()
             self.refresh()

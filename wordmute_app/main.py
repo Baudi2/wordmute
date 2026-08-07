@@ -27,6 +27,11 @@ def main():
         sys.stderr = open(os.devnull, "w", encoding="utf-8")
     _use_bundled_ffmpeg()
 
+    # libraries (GigaAM/pyannote, yt-dlp) spawn their own ffmpeg/ffprobe;
+    # without this each one flashes a console window under pythonw
+    from .core.proc import install_global_no_window
+    install_global_no_window()
+
     from PySide6.QtWidgets import QApplication
 
     from .core import config

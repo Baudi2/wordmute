@@ -151,6 +151,31 @@ QTabBar::tab:hover    { color: #292b31; }
 QTabBar::tab:selected { color: #292b31; border-bottom: 2px solid #9184d9; }
 QTabBar::tab:disabled { color: rgba(89,93,108,0.4); }
 
+/* ---- Sidebar navigation (main window) — same hooks as dark.
+   Selected-state icon recolor: #9397ab -> #5d5294. ---- */
+QWidget#sidebar { background: #edf0fa; border-right: 1px solid #cfd3e5; }
+QListWidget#nav_sidebar {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 4px 8px;
+  outline: none;
+}
+QListWidget#nav_sidebar::item {
+  color: #595d6c;
+  background: transparent;
+  border-left: 2px solid transparent;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 1px 0;
+}
+QListWidget#nav_sidebar::item:hover { background: #e4e7f5; color: #292b31; }
+QListWidget#nav_sidebar::item:selected {
+  background: #e7e5fe;
+  color: #292b31;
+  border-left: 2px solid #9184d9;
+}
+
 /* ---- Tables ---- */
 QTableView, QTableWidget, QTreeView, QListView, QListWidget {
   background: #f3f5fe;

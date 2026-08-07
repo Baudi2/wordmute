@@ -36,15 +36,15 @@ class PassPlanWidget(QGroupBox):
         layout = QHBoxLayout(self)
 
         self.list = QListWidget()
-        self.list.setToolTip(INFO_TEXT)
+        self.list.setToolTip(tr(INFO_TEXT))
         layout.addWidget(self.list, stretch=1)
 
         buttons = QVBoxLayout()
         self.add_whisper = QPushButton(tr("Add Whisper pass"))
-        self.add_whisper.setToolTip(ENGINE_TIPS["whisper"])
+        self.add_whisper.setToolTip(tr(ENGINE_TIPS["whisper"]))
         self.add_whisper.clicked.connect(lambda: self.add_pass("whisper"))
         self.add_gigaam = QPushButton(tr("Add GigaAM pass"))
-        self.add_gigaam.setToolTip(ENGINE_TIPS["gigaam"])
+        self.add_gigaam.setToolTip(tr(ENGINE_TIPS["gigaam"]))
         self.add_gigaam.clicked.connect(lambda: self.add_pass("gigaam"))
         self.remove_button = QPushButton(tr("Remove"))
         self.remove_button.clicked.connect(self.remove_selected)
@@ -56,10 +56,11 @@ class PassPlanWidget(QGroupBox):
                   self.up_button, self.down_button):
             buttons.addWidget(b)
         buttons.addStretch()
-        info = QLabel("GigaAM: faster, best for pure Russian.\n"
-                      "Whisper: slower, handles English/mixed speech.")
+        info = QLabel(tr("GigaAM: faster, best for pure Russian.\n"
+                         "Whisper: slower, handles English/mixed speech."))
         info.setWordWrap(True)
-        info.setToolTip(ENGINE_TIPS["whisper"] + "\n\n" + ENGINE_TIPS["gigaam"])
+        info.setToolTip(tr(ENGINE_TIPS["whisper"]) + "\n\n"
+                        + tr(ENGINE_TIPS["gigaam"]))
         buttons.addWidget(info)
         layout.addLayout(buttons)
 

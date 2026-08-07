@@ -232,6 +232,35 @@ QTabBar::tab:hover    { color: #e9e9ed; }
 QTabBar::tab:selected { color: #e9e9ed; border-bottom: 2px solid #9184d9; }
 QTabBar::tab:disabled { color: rgba(147,151,171,0.4); }
 
+/* ---- Sidebar navigation (main window) ----
+   QWidget#sidebar (fixed 200px) + QListWidget#nav_sidebar + QStackedWidget.
+   Don't use QTabWidget(West) — Qt rotates the labels 90°.
+   Code: nav.setIconSize(QSize(18,18)); item sizeHint height 36.
+   Icons: icons/tabs/*.svg, stroke #9397ab — for the selected state
+   replace that hex at load (#d2cefd) and add via QIcon.Selected. */
+QWidget#sidebar { background: #131522; border-right: 1px solid #292b31; }
+QListWidget#nav_sidebar {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 4px 8px;
+  outline: none;
+}
+QListWidget#nav_sidebar::item {
+  color: #9397ab;
+  background: transparent;
+  border-left: 2px solid transparent;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 1px 0;
+}
+QListWidget#nav_sidebar::item:hover { background: #1f2130; color: #e9e9ed; }
+QListWidget#nav_sidebar::item:selected {
+  background: #2b2741;
+  color: #e9e9ed;
+  border-left: 2px solid #9184d9;
+}
+
 /* ---- Splitter ---- */
 QSplitter::handle { background: #3f424d; }
 QSplitter::handle:hover { background: #9184d9; }

@@ -54,15 +54,16 @@ class ModelsTab(QWidget):
             g = max(gpus, key=lambda x: x.vram_mb)
             device_text = f"GPU: {g.name} · {g.vram_mb / 1000:.1f} GB VRAM"
         else:
-            device_text = ("No NVIDIA GPU detected — use CPU mode in "
-                           "Settings (roughly 2-4x slower).")
+            device_text = tr("No NVIDIA GPU detected — use CPU mode in "
+                             "Settings (roughly 2-4x slower).")
         gpu_label = QLabel(device_text)
         gpu_label.setProperty("muted", not gpus)
         layout.addWidget(gpu_label)
 
         layout.addWidget(QLabel("<b>Whisper</b>"))
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Model", "Status", "Size", ""])
+        self.table.setHorizontalHeaderLabels(
+            [tr("Model"), tr("Status"), tr("Size"), ""])
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -80,7 +81,7 @@ class ModelsTab(QWidget):
         self.open_cache_button = QPushButton(tr("Open folder"))
         self.open_cache_button.setToolTip(str(models.hf_hub_cache()))
         self.open_cache_button.clicked.connect(self._open_cache)
-        self.gigaam_delete_button = QPushButton("Delete GigaAM caches")
+        self.gigaam_delete_button = QPushButton(tr("Delete GigaAM caches"))
         self.gigaam_delete_button.setProperty("danger", True)
         self.gigaam_delete_button.clicked.connect(self._delete_gigaam)
         gigaam_row.addWidget(self.open_cache_button)
@@ -102,9 +103,9 @@ class ModelsTab(QWidget):
             model = st["model"]
             self.table.setItem(row, COL_MODEL, QTableWidgetItem(model))
             downloading = model == self._downloading
-            status_text = ("downloading…" if downloading else
-                           "downloaded ✓" if st["downloaded"]
-                           else "not downloaded")
+            status_text = (tr("downloading…") if downloading else
+                           tr("downloaded ✓") if st["downloaded"]
+                           else tr("not downloaded"))
             self.table.setItem(row, COL_STATUS,
                                QTableWidgetItem(status_text))
             self.table.setItem(row, COL_SIZE, QTableWidgetItem(
@@ -128,13 +129,15 @@ class ModelsTab(QWidget):
         if caches:
             total = sum(size for _, size in caches)
             self.gigaam_label.setText(
-                f"<b>GigaAM</b>: {models.fmt_size(total)} cached "
-                "(models download automatically on first use).")
+                "<b>GigaAM</b>: "
+                + tr("{} cached (models download automatically on "
+                     "first use).").format(models.fmt_size(total)))
             self.gigaam_delete_button.setEnabled(True)
         else:
             self.gigaam_label.setText(
-                "<b>GigaAM</b>: nothing cached yet — models download "
-                "automatically on first use.")
+                "<b>GigaAM</b>: "
+                + tr("nothing cached yet — models download automatically "
+                     "on first use."))
             self.gigaam_delete_button.setEnabled(False)
 
     # ---------------------------------------------------------- actions
@@ -143,8 +146,8 @@ class ModelsTab(QWidget):
             return
         self._downloading = model
         self.status_label.setText(
-            f"Downloading {model}… (this can take a while; the app stays "
-            "usable)")
+            tr("Downloading {}… (this can take a while; the app stays "
+               "usable)").format(model))
         self._worker = DownloadWorker(model)
         self._worker.succeeded.connect(self._on_download_done)
         self._worker.failed.connect(self._on_download_failed)
@@ -166,8 +169,9 @@ class ModelsTab(QWidget):
     def _delete(self, model: str):
         if QMessageBox.question(
                 self, "WordMute",
-                f"Delete the downloaded '{model}' model? It will be "
-                "re-downloaded automatically the next time it's used.") \
+                tr("Delete the downloaded '{}' model? It will be "
+                   "re-downloaded automatically the next time it's "
+                   "used.").format(model)) \
                 == QMessageBox.StandardButton.Yes:
             models.delete_whisper_model(model)
             self.refresh()
@@ -175,8 +179,8 @@ class ModelsTab(QWidget):
     def _delete_gigaam(self):
         if QMessageBox.question(
                 self, "WordMute",
-                "Delete all GigaAM model caches? They will be re-downloaded "
-                "on the next GigaAM pass.") \
+                tr("Delete all GigaAM model caches? They will be "
+                   "re-downloaded on the next GigaAM pass.")) \
                 == QMessageBox.StandardButton.Yes:
             models.delete_gigaam_caches()
             self.refresh()
