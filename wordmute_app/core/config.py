@@ -21,11 +21,16 @@ WORDLIST_TEMPLATES = {
 DEFAULT_SETTINGS = {
     "device": "cuda",
     "model": "large-v3",
-    "passes": 2,
+    "gigaam_model": "v3_e2e_rnnt",
     "pad_ms": 100,
     "language": "ru",
+    "vad": True,
     "use_russian": True,
     "use_english": False,
+    "plan": ["whisper", "whisper"],
+    "force_passes": False,
+    "output_mode": "beside",   # "beside" = next to input, or "folder"
+    "output_dir": "",
 }
 
 

@@ -19,12 +19,14 @@ class ProcessWorker(QThread):
     file_finished = Signal(int, bool, str)  # row index, ok, error text
     all_finished = Signal(int, int)         # done count, total
 
-    def __init__(self, files, wordlist, plan, options, parent=None):
+    def __init__(self, files, wordlist, plan, options, output_dir=None,
+                 parent=None):
         super().__init__(parent)
         self._files = list(files)
         self._wordlist = wordlist
         self._plan = plan
         self._options = options
+        self._output_dir = output_dir
         self._cancelled = False
 
     def cancel(self):
@@ -42,13 +44,17 @@ class ProcessWorker(QThread):
         engine.set_reporter(self._report)
         done = 0
         total = len(self._files)
+        # output_for treats an out path as a file unless it's an existing
+        # directory, so a configured output folder must exist up front
+        if self._output_dir is not None:
+            self._output_dir.mkdir(parents=True, exist_ok=True)
         try:
             for i, inp in enumerate(self._files):
                 if self._cancelled:
                     self.file_finished.emit(i, False, "cancelled")
                     continue
                 self.file_started.emit(i, inp.name)
-                out = engine.output_for(inp, None, multi=total > 1)
+                out = engine.output_for(inp, self._output_dir, multi=total > 1)
                 try:
                     engine.process_file(inp, out, self._wordlist,
                                         self._options, self._plan)

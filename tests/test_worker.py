@@ -72,6 +72,19 @@ def test_cancel_before_run_marks_all_cancelled(qapp, tmp_path, monkeypatch):
     assert not (tmp_path / "a.clean.mp4").exists()
 
 
+def test_output_dir_is_created_and_used(qapp, tmp_path, monkeypatch):
+    inp = tmp_path / "v.mp4"
+    inp.write_bytes(b"x")
+    worker, log = make_worker([inp], monkeypatch)
+    out_dir = tmp_path / "out" / "nested"
+    worker._output_dir = out_dir
+    worker.run()
+
+    assert log["files"] == [(0, True, "")]
+    assert (out_dir / "v.clean.mp4").read_bytes() == b"muted"
+    assert not (tmp_path / "v.clean.mp4").exists()
+
+
 def test_reporter_restored_after_run(qapp, tmp_path, monkeypatch):
     inp = tmp_path / "v.mp4"
     inp.write_bytes(b"x")

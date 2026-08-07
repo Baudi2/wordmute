@@ -5,6 +5,9 @@ parameter; JobOptions provides the same attribute names so the GUI can
 call the engine without argparse."""
 
 from dataclasses import dataclass
+from pathlib import Path
+
+from ..engine.wordmute import MEDIA_EXTS
 
 
 @dataclass
@@ -18,7 +21,28 @@ class JobOptions:
     no_vad: bool = False
 
 
-def build_plan(engines_models) -> list:
-    """[(engine, model), ...] one entry per pass. Thin helper so the UI
-    has one place that produces the engine's plan format."""
-    return list(engines_models)
+def _is_media(p: Path) -> bool:
+    return (p.suffix.lower() in MEDIA_EXTS
+            and ".clean" not in p.suffixes
+            and not p.stem.endswith(".clean"))
+
+
+def expand_inputs(paths) -> list:
+    """GUI-friendly variant of the engine's collect_inputs: expand files
+    and directories into a list of media files (sorted within each dir,
+    .clean outputs skipped), silently ignoring anything else."""
+    files = []
+    for p in map(Path, paths):
+        if p.is_dir():
+            files.extend(f for f in sorted(p.iterdir())
+                         if f.is_file() and _is_media(f))
+        elif p.is_file() and _is_media(p):
+            files.append(p)
+    return files
+
+
+def build_plan(engine_names, whisper_model: str, gigaam_model: str) -> list:
+    """Turn a pass sequence of engine names into the engine's plan
+    format: [(engine, model), ...]."""
+    model_for = {"whisper": whisper_model, "gigaam": gigaam_model}
+    return [(e, model_for[e]) for e in engine_names]
