@@ -74,6 +74,23 @@ def ensure_user_wordlists() -> dict:
     return out
 
 
+def hf_token_path() -> Path:
+    # kept out of settings.json so sharing settings for debugging can
+    # never leak the token
+    return data_dir() / "hf_token.txt"
+
+
+def load_hf_token() -> str:
+    try:
+        return hf_token_path().read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
+
+
+def save_hf_token(token: str) -> None:
+    hf_token_path().write_text(token.strip() + "\n", encoding="utf-8")
+
+
 def _settings_path() -> Path:
     return data_dir() / "settings.json"
 

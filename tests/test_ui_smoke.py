@@ -58,6 +58,35 @@ def test_settings_saved_on_close(qapp, tmp_path, monkeypatch):
     assert s["force_passes"] is True
 
 
+def test_warning_bar_reflects_plan_and_device(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    from wordmute_app.core import gpu
+    monkeypatch.setattr(gpu, "detect_gpus",
+                        lambda: [gpu.GpuInfo("RTX 4060", 8188)])
+    from wordmute_app.ui.main_window import MainWindow
+
+    w = MainWindow()
+    assert not w.warnings_label.isVisible()  # whisper plan fits, no gigaam
+
+    w.plan.add_pass("gigaam")  # no token saved -> setup hint appears
+    assert "GigaAM Setup" in w.warnings_label.text()
+
+    w._settings["device"] = "cpu"
+    w._refresh_warnings()
+    assert "CPU mode" in w.warnings_label.text()
+
+
+def test_warning_bar_cuda_without_gpu(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import gpu
+    monkeypatch.setattr(gpu, "detect_gpus", lambda: [])
+    from wordmute_app.ui.main_window import MainWindow
+
+    w = MainWindow()
+    assert "will fail" in w.warnings_label.text()
+
+
 def test_plan_widget_add_remove_reorder(qapp):
     from wordmute_app.ui.plan_widget import PassPlanWidget
 

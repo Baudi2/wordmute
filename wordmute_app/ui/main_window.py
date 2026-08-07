@@ -1,6 +1,7 @@
 """Main window: file/folder queue with per-file progress, word list
 selection, pass plan builder, settings dialog, run with live status."""
 
+import os
 import time
 from pathlib import Path
 
@@ -24,11 +25,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import config
+from ..core import config, gpu
 from ..core.jobs import JobOptions, QueueItem, build_plan, expand_inputs
 from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .events import format_event
+from .gigaam_wizard import GigaamWizard
 from .plan_widget import PassPlanWidget
 from .review_dialog import ReviewDialog
 from .settings_dialog import SettingsDialog
@@ -69,6 +71,7 @@ class MainWindow(QMainWindow):
         self._worker = None
         self._wordlist_paths = config.ensure_user_wordlists()
         self._settings = config.load_settings()
+        self._gpus = gpu.detect_gpus()
         self._reset_run_state(total=0)
 
         central = QWidget()
@@ -96,8 +99,14 @@ class MainWindow(QMainWindow):
         file_buttons.addWidget(self.add_folder_button)
         file_buttons.addWidget(self.add_url_button)
         file_buttons.addWidget(self.remove_button)
+        self.gigaam_setup_button = QPushButton("GigaAM Setup…")
+        self.gigaam_setup_button.setToolTip(
+            "One-time Hugging Face setup required for GigaAM passes. "
+            "Whisper works without any of this.")
+        self.gigaam_setup_button.clicked.connect(self._open_gigaam_setup)
         file_buttons.addStretch()
         file_buttons.addWidget(self.review_button)
+        file_buttons.addWidget(self.gigaam_setup_button)
         file_buttons.addWidget(self.settings_button)
         root.addLayout(file_buttons)
 
@@ -138,8 +147,16 @@ class MainWindow(QMainWindow):
 
         self.plan = PassPlanWidget()
         self.plan.set_engines(self._settings["plan"])
+        self.plan.changed.connect(self._refresh_warnings)
         options_row.addWidget(self.plan, stretch=2)
         root.addLayout(options_row)
+
+        self.warnings_label = QLabel("")
+        self.warnings_label.setWordWrap(True)
+        self.warnings_label.setStyleSheet("color: #b8860b;")
+        self.warnings_label.setVisible(False)
+        root.addWidget(self.warnings_label)
+        self._refresh_warnings()
 
         # --- run controls + live status
         run_row = QHBoxLayout()
@@ -268,6 +285,31 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             self._settings.update(dialog.values())
             config.save_settings(self._settings)
+            self._refresh_warnings()
+
+    def _open_gigaam_setup(self):
+        GigaamWizard(self).exec()
+        self._refresh_warnings()
+
+    # ---------------------------------------------------------- warnings
+    def _gigaam_ready(self) -> bool:
+        return bool(config.load_hf_token() or os.environ.get("HF_TOKEN"))
+
+    def _current_warnings(self) -> list:
+        s = self._settings
+        engines = self.plan.engines()
+        plan = build_plan(engines, s["model"], s["gigaam_model"])
+        warnings = gpu.plan_warnings(plan, s["device"], self._gpus)
+        if "gigaam" in engines and not self._gigaam_ready():
+            warnings.append(
+                "GigaAM passes need a one-time Hugging Face setup — "
+                "click 'GigaAM Setup…'.")
+        return warnings
+
+    def _refresh_warnings(self):
+        warnings = self._current_warnings()
+        self.warnings_label.setText("\n".join(f"⚠ {w}" for w in warnings))
+        self.warnings_label.setVisible(bool(warnings))
 
     # ---------------------------------------------------------- run
     def _selected_wordlists(self):
@@ -303,6 +345,19 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "WordMute",
                                     "Add at least one pass to the plan.")
             return
+        if "gigaam" in engines and not self._gigaam_ready():
+            answer = QMessageBox.question(
+                self, "WordMute",
+                "The plan includes GigaAM passes, but the one-time Hugging "
+                "Face setup hasn't been completed — they will likely fail.\n\n"
+                "Open the setup wizard now? (Choose No to try running "
+                "anyway, e.g. if the models are already cached.)")
+            if answer == QMessageBox.StandardButton.Yes:
+                self._open_gigaam_setup()
+                return
+        saved_token = config.load_hf_token()
+        if saved_token:  # validated via the wizard; GigaAM reads the env
+            os.environ["HF_TOKEN"] = saved_token
 
         wordlist = merge_wordlists(lists)
         s = self._settings
