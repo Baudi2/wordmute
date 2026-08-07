@@ -4,10 +4,29 @@ engine.process_file() reads argparse-style attributes off its `args`
 parameter; JobOptions provides the same attribute names so the GUI can
 call the engine without argparse."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..engine.wordmute import MEDIA_EXTS
+
+
+@dataclass
+class QueueItem:
+    """One queue entry: either a local media file or a URL to download
+    first and then process."""
+    kind: str                          # "file" | "url"
+    path: Path | None = None           # kind == "file"
+    url: str = ""                      # kind == "url"
+    format_spec: str = ""              # yt-dlp format selector
+    format_label: str = "best quality"
+    title: str = ""
+    duration: float | None = None
+
+    @property
+    def display_name(self) -> str:
+        if self.kind == "file":
+            return self.path.name
+        return self.title or self.url
 
 
 @dataclass

@@ -41,4 +41,8 @@ def format_event(event: str, d: dict):
         return f"Written: {d['out']}"
     if event == "file_error":
         return f"Error in {d['name']}: {d['error']}"
+    if event == "download_start":
+        return f"Downloading ({d['label']}): {d['url']}"
+    if event == "download_done":
+        return f"Downloaded -> {d['path']}"
     return None

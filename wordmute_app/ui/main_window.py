@@ -25,12 +25,13 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config
-from ..core.jobs import JobOptions, build_plan, expand_inputs
+from ..core.jobs import JobOptions, QueueItem, build_plan, expand_inputs
 from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .events import format_event
 from .plan_widget import PassPlanWidget
 from .settings_dialog import SettingsDialog
+from .url_dialog import AddUrlDialog
 from .worker import ProcessWorker
 
 COL_FILE, COL_DURATION, COL_STATUS = 0, 1, 2
@@ -48,6 +49,13 @@ def fmt_eta(sec: float) -> str:
     if sec >= 90:
         return f"~{round(sec / 60)} min left"
     return f"~{max(1, int(sec))} s left"
+
+
+def fmt_speed(bps) -> str:
+    if not bps:
+        return ""
+    mbps = bps / (1024 * 1024)
+    return f"{mbps:.1f} MB/s" if mbps >= 1 else f"{bps / 1024:.0f} KB/s"
 
 
 class MainWindow(QMainWindow):
@@ -72,12 +80,15 @@ class MainWindow(QMainWindow):
         self.add_button.clicked.connect(self._pick_files)
         self.add_folder_button = QPushButton("Add Folder…")
         self.add_folder_button.clicked.connect(self._pick_folder)
+        self.add_url_button = QPushButton("Add URL…")
+        self.add_url_button.clicked.connect(self._add_url)
         self.remove_button = QPushButton("Remove Selected")
         self.remove_button.clicked.connect(self._remove_selected)
         self.settings_button = QPushButton("Settings…")
         self.settings_button.clicked.connect(self._open_settings)
         file_buttons.addWidget(self.add_button)
         file_buttons.addWidget(self.add_folder_button)
+        file_buttons.addWidget(self.add_url_button)
         file_buttons.addWidget(self.remove_button)
         file_buttons.addStretch()
         file_buttons.addWidget(self.settings_button)
@@ -146,30 +157,42 @@ class MainWindow(QMainWindow):
         root.addWidget(self.log, stretch=1)
 
     # ---------------------------------------------------------- queue
-    def _file_paths(self):
-        return [Path(self.table.item(r, COL_FILE).data(Qt.UserRole))
+    def _items(self):
+        return [self.table.item(r, COL_FILE).data(Qt.UserRole)
                 for r in range(self.table.rowCount())]
 
     def _row_duration(self, row: int):
         return self.table.item(row, COL_DURATION).data(Qt.UserRole)
 
+    def _insert_row(self, item: QueueItem, status: str = "queued"):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        name_item = QTableWidgetItem(item.display_name)
+        name_item.setData(Qt.UserRole, item)
+        name_item.setToolTip(item.url if item.kind == "url"
+                             else str(item.path))
+        self.table.setItem(row, COL_FILE, name_item)
+        dur_item = QTableWidgetItem(fmt_duration(item.duration))
+        dur_item.setData(Qt.UserRole, item.duration)
+        self.table.setItem(row, COL_DURATION, dur_item)
+        self.table.setItem(row, COL_STATUS, QTableWidgetItem(status))
+
     def _add_files(self, paths):
-        existing = set(self._file_paths())
+        existing = {it.path for it in self._items() if it.kind == "file"}
         for p in expand_inputs(paths):
             if p in existing:
                 continue
             existing.add(p)
-            duration = media_duration(p)
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            name_item = QTableWidgetItem(p.name)
-            name_item.setData(Qt.UserRole, str(p))
-            name_item.setToolTip(str(p))
-            self.table.setItem(row, COL_FILE, name_item)
-            dur_item = QTableWidgetItem(fmt_duration(duration))
-            dur_item.setData(Qt.UserRole, duration)
-            self.table.setItem(row, COL_DURATION, dur_item)
-            self.table.setItem(row, COL_STATUS, QTableWidgetItem("queued"))
+            self._insert_row(QueueItem(kind="file", path=p,
+                                       duration=media_duration(p)))
+
+    def _add_url_row(self, item: QueueItem):
+        self._insert_row(item, status=f"queued ({item.format_label})")
+
+    def _add_url(self, url: str = ""):
+        dialog = AddUrlDialog(self, url=url)
+        if dialog.exec():
+            self._add_url_row(dialog.result_item())
 
     def _pick_files(self):
         from ..engine.wordmute import MEDIA_EXTS
@@ -191,12 +214,20 @@ class MainWindow(QMainWindow):
             self.table.removeRow(row)
 
     def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
+        if event.mimeData().hasUrls() or event.mimeData().hasText():
             event.acceptProposedAction()
 
     def dropEvent(self, event):
-        self._add_files(u.toLocalFile() for u in event.mimeData().urls()
+        mime = event.mimeData()
+        self._add_files(u.toLocalFile() for u in mime.urls()
                         if u.isLocalFile())
+        web = [u.toString() for u in mime.urls()
+               if u.scheme() in ("http", "https")]
+        if not web and mime.hasText() \
+                and mime.text().strip().startswith(("http://", "https://")):
+            web = [mime.text().strip()]
+        if web:
+            self._add_url(web[0])
 
     # ---------------------------------------------------------- settings
     def _open_settings(self):
@@ -225,8 +256,8 @@ class MainWindow(QMainWindow):
         self._asr_wall_start = None
 
     def _start(self):
-        files = self._file_paths()
-        if not files:
+        items = self._items()
+        if not items:
             QMessageBox.information(self, "WordMute", "Add some files first.")
             return
         lists = self._selected_wordlists()
@@ -256,10 +287,11 @@ class MainWindow(QMainWindow):
         for row in range(self.table.rowCount()):
             self.table.item(row, COL_STATUS).setText("queued")
 
-        self._reset_run_state(total=len(files))
+        self._reset_run_state(total=len(items))
         self._pass_total = len(plan)
-        self._worker = ProcessWorker(files, wordlist, plan, options,
-                                     output_dir=output_dir)
+        self._worker = ProcessWorker(items, wordlist, plan, options,
+                                     output_dir=output_dir,
+                                     download_dir=config.download_dir(s))
         self._worker.engine_event.connect(self._on_engine_event)
         self._worker.file_started.connect(self._on_file_started)
         self._worker.file_finished.connect(self._on_file_finished)
@@ -282,6 +314,7 @@ class MainWindow(QMainWindow):
         self.cancel_button.setEnabled(running)
         self.add_button.setEnabled(not running)
         self.add_folder_button.setEnabled(not running)
+        self.add_url_button.setEnabled(not running)
         self.remove_button.setEnabled(not running)
         self.settings_button.setEnabled(not running)
         for w in (self.russian_check, self.english_check, self.plan,
@@ -317,7 +350,15 @@ class MainWindow(QMainWindow):
         self.log.appendPlainText(text)
 
     def _on_engine_event(self, event: str, data: dict):
-        if event == "pass_start":
+        if event == "download_start":
+            self._set_row_status("downloading…")
+            self.status_label.setText(f"Downloading {data['url']}…")
+        elif event == "download_progress":
+            self._on_download_progress(data)
+            return
+        elif event == "download_done":
+            self._on_download_done(data["path"])
+        elif event == "pass_start":
             self._pass_n = data["n"]
             self._pass_engine = data["engine"]
             self._pass_pct = 0.0
@@ -342,6 +383,36 @@ class MainWindow(QMainWindow):
         line = format_event(event, data)
         if line:
             self._append_log(line)
+
+    def _on_download_progress(self, d: dict):
+        downloaded, total = d.get("downloaded"), d.get("total")
+        parts = []
+        if downloaded and total:
+            parts.append(f"downloading {downloaded / total:.0%}")
+        elif downloaded:
+            parts.append(f"downloading {downloaded / (1024 * 1024):.0f} MB")
+        else:
+            parts.append("downloading")
+        speed = fmt_speed(d.get("speed"))
+        if speed:
+            parts.append(speed)
+        if d.get("eta"):
+            parts.append(fmt_eta(d["eta"]))
+        self._set_row_status(" · ".join(parts))
+
+    def _on_download_done(self, path: str):
+        # the file is now local: show its real name and duration so
+        # transcription progress/ETA work as for any local file
+        if self._current_row is None:
+            return
+        p = Path(path)
+        name_item = self.table.item(self._current_row, COL_FILE)
+        name_item.setText(p.name)
+        name_item.setToolTip(str(p))
+        duration = media_duration(p)
+        dur_item = self.table.item(self._current_row, COL_DURATION)
+        dur_item.setText(fmt_duration(duration))
+        dur_item.setData(Qt.UserRole, duration)
 
     def _on_asr_progress(self, minutes: float):
         processed = minutes * 60

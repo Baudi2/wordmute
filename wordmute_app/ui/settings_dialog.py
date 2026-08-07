@@ -1,4 +1,5 @@
-"""Settings dialog: models, device, padding, language, VAD, output."""
+"""Settings dialog: models, device, padding, language, VAD, output,
+downloads folder."""
 
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -15,6 +16,8 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
 )
+
+from ..core import config
 
 WHISPER_MODELS = ["large-v3", "medium", "small", "base"]
 GIGAAM_MODELS = ["v3_e2e_rnnt", "v3_e2e_ctc", "v3_rnnt", "v3_ctc"]
@@ -62,6 +65,16 @@ class SettingsDialog(QDialog):
         self.vad_check.setChecked(settings["vad"])
         self.vad_check.setToolTip("Disable if words at clip edges are missed.")
         form.addRow("", self.vad_check)
+
+        download_row = QHBoxLayout()
+        self.download_dir_edit = QLineEdit(settings.get("download_dir", ""))
+        self.download_dir_edit.setPlaceholderText(
+            str(config.download_dir(settings)))
+        download_browse = QPushButton("Browse…")
+        download_browse.clicked.connect(self._browse_download_dir)
+        download_row.addWidget(self.download_dir_edit, stretch=1)
+        download_row.addWidget(download_browse)
+        form.addRow("Downloads folder:", download_row)
         layout.addLayout(form)
 
         layout.addWidget(QLabel("Output location:"))
@@ -93,6 +106,12 @@ class SettingsDialog(QDialog):
             self.output_dir_edit.setText(d)
             self.folder_radio.setChecked(True)
 
+    def _browse_download_dir(self):
+        d = QFileDialog.getExistingDirectory(self, "Downloads folder",
+                                             self.download_dir_edit.text())
+        if d:
+            self.download_dir_edit.setText(d)
+
     def values(self) -> dict:
         return {
             "model": self.model_combo.currentText(),
@@ -105,4 +124,5 @@ class SettingsDialog(QDialog):
                             and self.output_dir_edit.text().strip()
                             else "beside"),
             "output_dir": self.output_dir_edit.text().strip(),
+            "download_dir": self.download_dir_edit.text().strip(),
         }

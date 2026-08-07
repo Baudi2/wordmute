@@ -31,7 +31,15 @@ DEFAULT_SETTINGS = {
     "force_passes": False,
     "output_mode": "beside",   # "beside" = next to input, or "folder"
     "output_dir": "",
+    "download_dir": "",        # empty = default (Downloads\WordMute)
 }
+
+
+def download_dir(settings: dict) -> Path:
+    configured = settings.get("download_dir", "")
+    if configured:
+        return Path(configured)
+    return Path.home() / "Downloads" / "WordMute"
 
 
 def resources_dir() -> Path:

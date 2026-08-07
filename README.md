@@ -63,7 +63,7 @@ by design (обожаю, чудом, верю…). The editor runs tidy
 2. ✅ Minimal GUI: local files, list selection, whisper run with progress
    (`python -m wordmute_app` from the repo root)
 3. ✅ Queue + pass-plan builder + settings
-4. yt-dlp URL flow (format picker → download → pipeline)
+4. ✅ yt-dlp URL flow (format picker → download → pipeline)
 5. Review screen (cached transcript, snippet playback, un-mute, re-render)
 6. GigaAM onboarding wizard (HF token) + GPU detection/warnings
 7. Extras: word tester, transcript/SRT, beep mode, watch folder,

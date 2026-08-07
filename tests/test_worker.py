@@ -3,7 +3,7 @@ cancellation, per-file error isolation."""
 
 from pathlib import Path
 
-from wordmute_app.core.jobs import JobOptions
+from wordmute_app.core.jobs import JobOptions, QueueItem
 from wordmute_app.engine import wordmute as engine
 
 
@@ -23,7 +23,9 @@ def make_worker(files, monkeypatch, words=None, fail_for=()):
     monkeypatch.setattr(engine, "transcribe", fake_transcribe)
     monkeypatch.setattr(engine, "mute", fake_mute)
 
-    worker = ProcessWorker(files, ({"бог"}, [], [], []),
+    items = [f if isinstance(f, QueueItem) else QueueItem(kind="file", path=f)
+             for f in files]
+    worker = ProcessWorker(items, ({"бог"}, [], [], []),
                            [("whisper", "small")], JobOptions(device="cpu"))
     log = {"events": [], "files": [], "finished": []}
     worker.engine_event.connect(lambda e, d: log["events"].append(e))
@@ -91,3 +93,49 @@ def test_reporter_restored_after_run(qapp, tmp_path, monkeypatch):
     worker, _ = make_worker([inp], monkeypatch)
     worker.run()
     assert engine._reporter is engine._default_reporter
+
+
+def test_url_item_downloads_then_processes(qapp, tmp_path, monkeypatch):
+    from wordmute_app.core import downloader
+
+    def fake_download(url, spec, dest_dir, progress=None, cancelled=None):
+        assert url == "https://example.com/v"
+        assert spec == "bv*+ba/b"
+        progress({"status": "downloading", "downloaded_bytes": 10,
+                  "total_bytes": 100, "speed": 1024, "eta": 5})
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)  # real download does this
+        p = dest / "video.mp4"
+        p.write_bytes(b"x")
+        return p
+
+    monkeypatch.setattr(downloader, "download", fake_download)
+    item = QueueItem(kind="url", url="https://example.com/v",
+                     format_spec="bv*+ba/b", title="Video")
+    worker, log = make_worker([item], monkeypatch)
+    worker._download_dir = tmp_path / "dl"
+    worker.run()
+
+    assert log["files"] == [(0, True, "")]
+    assert "download_start" in log["events"]
+    assert "download_progress" in log["events"]
+    assert "download_done" in log["events"]
+    assert (tmp_path / "dl" / "video.clean.mp4").read_bytes() == b"muted"
+
+
+def test_url_download_failure_isolated(qapp, tmp_path, monkeypatch):
+    from wordmute_app.core import downloader
+
+    monkeypatch.setattr(
+        downloader, "download",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("network down")))
+    local = tmp_path / "ok.mp4"
+    local.write_bytes(b"x")
+    item = QueueItem(kind="url", url="https://example.com/bad")
+    worker, log = make_worker([item, local], monkeypatch)
+    worker._download_dir = tmp_path / "dl"
+    worker.run()
+
+    assert log["files"][0] == (0, False, "network down")
+    assert log["files"][1] == (1, True, "")
+    assert log["finished"] == [(1, 2)]
