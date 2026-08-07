@@ -102,7 +102,7 @@ class AddUrlDialog(QDialog):
         self.best_button = QPushButton(tr("Add (best quality)"))
         self.best_button.setProperty("primary", True)
         self.best_button.setToolTip(
-            "Skip the format list and download best video+audio.")
+            tr("Skip the format list and download best video+audio."))
         self.best_button.clicked.connect(self._accept_best)
         buttons_row.addWidget(self.best_button)
         buttons_row.addStretch()

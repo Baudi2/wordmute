@@ -151,8 +151,8 @@ class MainWindow(QMainWindow):
         self.remove_button.clicked.connect(self._remove_selected)
         self.review_button = QPushButton(tr("Review…"))
         self.review_button.setToolTip(
-            "Open a review file (saved next to each processed output) to "
-            "listen to muted moments and un-mute false positives.")
+            tr("Open a review file (saved next to each processed output) "
+               "to listen to muted moments and un-mute false positives."))
         self.review_button.clicked.connect(self._pick_review)
         self.remove_button.setProperty("danger", True)
         file_buttons.setSpacing(8)
@@ -163,13 +163,13 @@ class MainWindow(QMainWindow):
         file_buttons.addWidget(self.remove_button)
         self.gigaam_setup_button = QPushButton(tr("GigaAM Setup…"))
         self.gigaam_setup_button.setToolTip(
-            "One-time Hugging Face setup required for GigaAM passes. "
-            "Whisper works without any of this.")
+            tr("One-time Hugging Face setup required for GigaAM passes. "
+               "Whisper works without any of this."))
         self.gigaam_setup_button.clicked.connect(self._open_gigaam_setup)
         self.watch_button = QPushButton(tr("Watch Folder…"))
         self.watch_button.setToolTip(
-            "Automatically queue and process new media files appearing "
-            "in a chosen folder.")
+            tr("Automatically queue and process new media files appearing "
+               "in a chosen folder."))
         self.watch_button.clicked.connect(self._toggle_watch)
         file_buttons.addStretch()
         file_buttons.addWidget(self.review_button)
@@ -261,12 +261,13 @@ class MainWindow(QMainWindow):
         self.force_passes_check = QCheckBox(tr("Force all passes"))
         self.force_passes_check.setChecked(self._settings["force_passes"])
         self.force_passes_check.setToolTip(
-            "Run every pass even if an earlier one finds nothing; the final "
-            "pass re-transcribes completely fresh, ignoring caches.")
+            tr("Run every pass even if an earlier one finds nothing; the "
+               "final pass re-transcribes completely fresh, ignoring "
+               "caches."))
         self.retranscribe_check = QCheckBox(tr("Ignore cached transcripts"))
         self.retranscribe_check.setToolTip(
-            "Re-transcribe from scratch on the first pass (one-off; "
-            "not remembered).")
+            tr("Re-transcribe from scratch on the first pass (one-off; "
+               "not remembered)."))
         lists_layout.addWidget(self.force_passes_check)
         lists_layout.addWidget(self.retranscribe_check)
         lists_layout.addStretch()

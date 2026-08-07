@@ -27,7 +27,7 @@ from .theme import THEMES, apply_theme
 
 WHISPER_MODELS = ["large-v3", "medium", "small", "base"]
 GIGAAM_MODELS = ["v3_e2e_rnnt", "v3_e2e_ctc", "v3_rnnt", "v3_ctc"]
-GROUP_WIDTH = 420
+GROUP_WIDTH = 500  # RU labels run ~40% longer than EN
 
 
 class SettingsTab(QWidget):
@@ -67,13 +67,16 @@ class SettingsTab(QWidget):
         rec_form.addRow(tr("Device:"), self.device_combo)
 
         self.language_edit = QLineEdit(settings["language"])
-        self.language_edit.setToolTip("Whisper language code (e.g. ru, en); "
-                                      "ignored by GigaAM passes.")
+        self.language_edit.setToolTip(
+            tr("Whisper language code (e.g. ru, en); ignored by GigaAM "
+               "passes."))
         rec_form.addRow(tr("Whisper language:"), self.language_edit)
 
-        self.vad_check = QCheckBox("Voice activity detection (whisper only)")
+        self.vad_check = QCheckBox(
+            tr("Voice activity detection (whisper only)"))
         self.vad_check.setChecked(settings["vad"])
-        self.vad_check.setToolTip("Disable if words at clip edges are missed.")
+        self.vad_check.setToolTip(
+            tr("Disable if words at clip edges are missed."))
         rec_form.addRow("", self.vad_check)
 
         # ---- Muting
@@ -88,17 +91,19 @@ class SettingsTab(QWidget):
         self.pad_spin.setSingleStep(10)
         self.pad_spin.setSuffix(" ms")
         self.pad_spin.setValue(settings["pad_ms"])
-        self.pad_spin.setToolTip("Extra silence around each muted word; "
-                                 "never bleeds into neighboring words.")
+        self.pad_spin.setToolTip(
+            tr("Extra silence around each muted word; never bleeds into "
+               "neighboring words."))
         mute_form.addRow(tr("Mute padding:"), self.pad_spin)
 
         beep_row = QHBoxLayout()
+        beep_row.setSpacing(12)
         self.beep_check = QCheckBox(tr("Beep instead of silence"))
         self.beep_check.setChecked(bool(settings.get("beep_hz", 0)))
         self.beep_check.setToolTip(
-            "Replace muted words with a beep tone instead of silence. "
-            "Note: files with several audio tracks keep only the first "
-            "one in beep mode.")
+            tr("Replace muted words with a beep tone instead of silence. "
+               "Note: files with several audio tracks keep only the "
+               "first one in beep mode."))
         self.beep_spin = QSpinBox()
         self.beep_spin.setRange(200, 4000)
         self.beep_spin.setSingleStep(100)
@@ -129,19 +134,19 @@ class SettingsTab(QWidget):
         self.download_dir_edit = QLineEdit(settings.get("download_dir", ""))
         self.download_dir_edit.setPlaceholderText(
             str(config.download_dir(settings)))
-        download_browse = QPushButton("Browse…")
+        download_browse = QPushButton(tr("Browse…"))
         download_browse.clicked.connect(self._browse_download_dir)
         download_row.addWidget(self.download_dir_edit, stretch=1)
         download_row.addWidget(download_browse)
-        files_form.addRow("Downloads folder:", download_row)
+        files_form.addRow(tr("Downloads folder:"), download_row)
 
         cookies_row = QHBoxLayout()
         self.cookies_edit = QLineEdit(settings.get("cookies_file", ""))
         self.cookies_edit.setPlaceholderText(tr("(optional)"))
         self.cookies_edit.setToolTip(
-            "Cookie file in Netscape format (as exported by yt-dlp or a "
-            "browser extension).")
-        cookies_browse = QPushButton("Browse…")
+            tr("Cookie file in Netscape format (as exported by yt-dlp or "
+               "a browser extension)."))
+        cookies_browse = QPushButton(tr("Browse…"))
         cookies_browse.clicked.connect(self._browse_cookies)
         cookies_row.addWidget(self.cookies_edit, stretch=1)
         cookies_row.addWidget(cookies_browse)
@@ -159,7 +164,7 @@ class SettingsTab(QWidget):
         self.folder_radio = QRadioButton(tr("Into folder:"))
         folder_row = QHBoxLayout()
         self.output_dir_edit = QLineEdit(settings["output_dir"])
-        output_browse = QPushButton("Browse…")
+        output_browse = QPushButton(tr("Browse…"))
         output_browse.clicked.connect(self._browse_output_dir)
         folder_row.addWidget(self.folder_radio)
         folder_row.addWidget(self.output_dir_edit, stretch=1)

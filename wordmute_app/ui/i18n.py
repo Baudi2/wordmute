@@ -299,6 +299,51 @@ RU = {
         "слово = точное совпадение ·  корень* = слово начинается с ·  "
         "*корень* = в любом месте слова ·  слово слово = фраза ·  "
         "# комментарий",
+    # tooltips
+    "Open a review file (saved next to each processed output) "
+    "to listen to muted moments and un-mute false positives.":
+        "Откройте файл проверки (сохраняется рядом с каждым результатом), "
+        "чтобы прослушать заглушенные места и раззаглушить ложные "
+        "срабатывания.",
+    "One-time Hugging Face setup required for GigaAM passes. "
+    "Whisper works without any of this.":
+        "Разовая настройка Hugging Face, нужная для проходов GigaAM. "
+        "Whisper работает без нее.",
+    "Automatically queue and process new media files appearing "
+    "in a chosen folder.":
+        "Автоматически добавлять и обрабатывать новые файлы, появляющиеся "
+        "в выбранной папке.",
+    "Run every pass even if an earlier one finds nothing; the "
+    "final pass re-transcribes completely fresh, ignoring "
+    "caches.":
+        "Выполнять все проходы, даже если ранний ничего не нашел; "
+        "последний проход транскрибирует заново, игнорируя кэш.",
+    "Re-transcribe from scratch on the first pass (one-off; "
+    "not remembered).":
+        "Транскрибировать с нуля на первом проходе (разово; не "
+        "запоминается).",
+    "Whisper language code (e.g. ru, en); ignored by GigaAM "
+    "passes.":
+        "Код языка Whisper (например, ru, en); проходы GigaAM его "
+        "игнорируют.",
+    "Disable if words at clip edges are missed.":
+        "Отключите, если пропускаются слова на краях записи.",
+    "Extra silence around each muted word; never bleeds into "
+    "neighboring words.":
+        "Дополнительная тишина вокруг каждого заглушенного слова; "
+        "никогда не задевает соседние слова.",
+    "Replace muted words with a beep tone instead of silence. "
+    "Note: files with several audio tracks keep only the "
+    "first one in beep mode.":
+        "Заменять заглушенные слова писком вместо тишины. Замечание: у "
+        "файлов с несколькими аудиодорожками в режиме писка остается "
+        "только первая.",
+    "Cookie file in Netscape format (as exported by yt-dlp or "
+    "a browser extension).":
+        "Файл cookies в формате Netscape (как экспортируют yt-dlp или "
+        "расширения браузера).",
+    "Skip the format list and download best video+audio.":
+        "Пропустить список форматов и скачать лучшее видео+аудио.",
     # plan widget tips
     "Whisper: handles English and mixed-language speech well; "
     "slower; works out of the box, no extra setup.":
