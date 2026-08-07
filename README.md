@@ -68,4 +68,10 @@ by design (обожаю, чудом, верю…). The editor runs tidy
 6. ✅ GigaAM onboarding wizard (HF token) + GPU detection/warnings
 7. ✅ Extras: word tester, transcript/SRT, beep mode, watch folder,
    model manager, history, RU/EN UI (Tools menu)
-8. Packaging (PyInstaller + Inno Setup) + licensing checklist
+8. ✅ Packaging (PyInstaller + Inno Setup) + licensing checklist
+   — build with `powershell -File packaging\build.ps1` (produces
+   `dist\WordMute\WordMute.exe`, bundles ffmpeg, compiles the
+   installer when Inno Setup is present). v1 ships the whisper stack
+   incl. CUDA DLLs (~3 GB); GigaAM remains a developer-environment
+   feature — see [docs/LICENSING.md](docs/LICENSING.md) for the
+   redistribution checklist and the GigaAM-in-installer plan.

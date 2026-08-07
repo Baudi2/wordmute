@@ -440,12 +440,24 @@ class MainWindow(QMainWindow):
     def _gigaam_ready(self) -> bool:
         return bool(config.load_hf_token() or os.environ.get("HF_TOKEN"))
 
+    @staticmethod
+    def _gigaam_installed() -> bool:
+        import importlib.util
+        try:
+            return importlib.util.find_spec("gigaam") is not None
+        except (ImportError, ValueError):
+            return False
+
     def _current_warnings(self) -> list:
         s = self._settings
         engines = self.plan.engines()
         plan = build_plan(engines, s["model"], s["gigaam_model"])
         warnings = gpu.plan_warnings(plan, s["device"], self._gpus)
-        if "gigaam" in engines and not self._gigaam_ready():
+        if "gigaam" in engines and not self._gigaam_installed():
+            warnings.append(
+                "GigaAM support is not installed in this build — GigaAM "
+                "passes will fail. Use Whisper passes instead.")
+        elif "gigaam" in engines and not self._gigaam_ready():
             warnings.append(
                 "GigaAM passes need a one-time Hugging Face setup — "
                 "click 'GigaAM Setup…'.")

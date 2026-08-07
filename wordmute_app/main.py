@@ -4,6 +4,20 @@ import os
 import sys
 
 
+def _use_bundled_ffmpeg():
+    """A frozen install ships ffmpeg/ffprobe in an ffmpeg/ subfolder;
+    put it first on PATH so the app works without a system install."""
+    if not getattr(sys, "frozen", False):
+        return
+    from pathlib import Path
+    base = Path(sys.executable).parent
+    for cand in (base / "ffmpeg", base / "ffmpeg" / "bin"):
+        if (cand / "ffmpeg.exe").exists():
+            os.environ["PATH"] = (str(cand) + os.pathsep
+                                  + os.environ.get("PATH", ""))
+            break
+
+
 def main():
     # under pythonw / a frozen GUI there is no stdout; give print()ing
     # code (engine default reporter, libraries) a safe sink
@@ -11,6 +25,7 @@ def main():
         sys.stdout = open(os.devnull, "w", encoding="utf-8")
     if sys.stderr is None:
         sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    _use_bundled_ffmpeg()
 
     from PySide6.QtWidgets import QApplication
 
@@ -25,6 +40,9 @@ def main():
     app.setApplicationName("WordMute")
     window = MainWindow()
     window.show()
+    if os.environ.get("WORDMUTE_SMOKE"):  # automated startup check
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(2000, app.quit)
     return app.exec()
 
 

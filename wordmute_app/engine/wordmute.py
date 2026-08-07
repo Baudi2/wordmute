@@ -112,14 +112,22 @@ def _emit(event: str, **data) -> None:
 
 # ---------------------------------------------------------------- CUDA DLLs
 def add_cuda_dll_dirs():
-    """On Windows, make cuBLAS/cuDNN DLLs from pip packages visible."""
+    """On Windows, make cuBLAS/cuDNN DLLs visible — from pip packages
+    in a normal install, or from the bundle in a frozen app (where
+    site-packages doesn't exist)."""
     if os.name != "nt":
         return
-    import site
+    roots = []
+    if getattr(sys, "frozen", False):
+        roots.append(Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)))
+    else:
+        import site
+        roots.extend(map(Path, site.getsitepackages()
+                         + [site.getusersitepackages()]))
     candidates = []
-    for sp in site.getsitepackages() + [site.getusersitepackages()]:
+    for root in roots:
         for sub in (r"nvidia\cublas\bin", r"nvidia\cudnn\bin"):
-            candidates.append(Path(sp) / sub)
+            candidates.append(root / sub)
     for p in candidates:
         if p.is_dir():
             os.add_dll_directory(str(p))
