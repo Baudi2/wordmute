@@ -1,0 +1,543 @@
+#!/usr/bin/env python3
+"""
+wordmute engine — mute unwanted words/phrases in video or audio files.
+
+Pipeline: ASR with word-level timestamps (faster-whisper or GigaAM)
+          -> match against word list -> ffmpeg mutes matched intervals,
+          video stream copied untouched.
+
+The matching semantics (norm/load_wordlist/find_hits) are shared with the
+author's standalone CLI and must not diverge from it — word lists are
+curated against exactly these rules.
+
+Word list format (one entry per line, UTF-8):
+    слово          exact match (case-insensitive, ё=е)
+    блядск*        stem match: any word starting with "блядск"
+    *корен*        substring match: "корен" anywhere in the word
+    какого хрена   phrase: consecutive words matched together
+    # comment      lines starting with # are ignored
+
+Console output goes through a swappable reporter (set_reporter) so a GUI
+can receive structured progress events; the default reporter prints the
+same lines the CLI always has.
+
+First run per video is slow (transcription); results are cached in
+<video>.words.json / <video>.gigaam.words.json, so re-runs with an edited
+word list take seconds.
+"""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+# ---------------------------------------------------------------- reporting
+def _default_reporter(event: str, d: dict) -> None:
+    if event == "model_load":
+        if d["engine"] == "whisper":
+            print(f"[model] loading whisper {d['model']} on {d['device']} "
+                  f"({d['compute']}) ...")
+        else:
+            print(f"[model] loading GigaAM {d['model']} on {d['device']} ...")
+    elif event == "cache_hit":
+        print(f"[cache] using existing {d['engine']} transcript: {d['cache']}")
+    elif event == "cache_saved":
+        print(f"[cache] transcript saved -> {d['cache']}")
+    elif event == "asr_start":
+        print(f"[asr]   transcribing {d['file']} with {d['engine']} "
+              f"(first run is the slow part) ...")
+    elif event == "asr_progress":
+        print(f"\r[asr]   {d['minutes']:6.1f} min processed", end="", flush=True)
+    elif event == "asr_progress_end":
+        print()
+    elif event == "words_count":
+        print(f"[asr]   {d['count']} words in transcript")
+    elif event == "pass_start":
+        print(f"\n===== pass {d['n']}/{d['total']} ({d['engine']}) =====")
+    elif event == "match_none":
+        if d["pass_n"] == 1:
+            print("[match] no unwanted words found — nothing to do.")
+        else:
+            print("[match] no unwanted words left — output is clean.")
+    elif event == "force_continue":
+        print("[force] --force-passes set: continuing anyway to "
+              "reach the guaranteed-fresh final pass.")
+    elif event == "match_found":
+        print(f"[match] {len(d['intervals'])} interval(s):")
+        for s, e, t in d["intervals"]:
+            print(f"        {fmt_ts(s)} - {fmt_ts(e)}   {t}")
+    elif event == "mute_start":
+        print("[ffmpeg] muting", d["count"], "segment(s) ...")
+    elif event == "mute_done":
+        print(f"[done]  -> {d['out']}")
+    elif event == "list_info":
+        print(f"[list]  {d['exact']} exact, {d['stems']} stems, "
+              f"{d['subs']} substrings, {d['phrases']} phrases loaded")
+    elif event == "plan":
+        print(f"[plan]  {len(d['plan'])} pass(es): "
+              + " -> ".join(f"{e}({m})" for e, m in d["plan"]))
+    elif event == "batch_count":
+        print(f"[batch] {d['count']} file(s) to process")
+    elif event == "file_start":
+        print(f"\n########## [{d['n']}/{d['total']}] {d['name']} ##########")
+    elif event == "interrupted":
+        print("\n[batch] interrupted by user")
+    elif event == "file_error":
+        print(f"[error] {d['name']}: {d['error']}")
+    elif event == "batch_done":
+        print(f"\n[batch] finished: {d['done']}/{d['total']} ok"
+              + (f", failed: {', '.join(d['failed'])}" if d["failed"] else ""))
+
+
+_reporter = _default_reporter
+
+
+def set_reporter(fn) -> None:
+    """Replace console output with a callback fn(event: str, data: dict).
+    Pass None to restore the default CLI printer."""
+    global _reporter
+    _reporter = fn if fn is not None else _default_reporter
+
+
+def _emit(event: str, **data) -> None:
+    _reporter(event, data)
+
+
+# ---------------------------------------------------------------- CUDA DLLs
+def add_cuda_dll_dirs():
+    """On Windows, make cuBLAS/cuDNN DLLs from pip packages visible."""
+    if os.name != "nt":
+        return
+    import site
+    candidates = []
+    for sp in site.getsitepackages() + [site.getusersitepackages()]:
+        for sub in (r"nvidia\cublas\bin", r"nvidia\cudnn\bin"):
+            candidates.append(Path(sp) / sub)
+    for p in candidates:
+        if p.is_dir():
+            os.add_dll_directory(str(p))
+            os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+
+
+# Windows: GigaAM's longform pipeline (via pyannote/torchcodec) needs
+# FFmpeg's SHARED build (separate DLLs), not the static winget default.
+# Having it on the system PATH isn't always enough - Python's own DLL
+# loader needs the directory registered explicitly, same story as CUDA
+# above. The directory is discovered at runtime (winget locations, then
+# PATH); the app can override with configure_ffmpeg_shared_dir().
+FFMPEG_SHARED_BIN = None
+_ffmpeg_dll_dir_registered = False
+
+
+def configure_ffmpeg_shared_dir(path) -> None:
+    """Explicitly set the FFmpeg shared-build bin directory (e.g. from an
+    installer-written config), overriding automatic discovery."""
+    global FFMPEG_SHARED_BIN, _ffmpeg_dll_dir_registered
+    FFMPEG_SHARED_BIN = str(path) if path else None
+    _ffmpeg_dll_dir_registered = False
+
+
+def _has_shared_dlls(p: Path) -> bool:
+    return p.is_dir() and any(p.glob("avcodec-*.dll"))
+
+
+def discover_ffmpeg_shared_dir():
+    """Search likely install locations for FFmpeg's shared-build DLLs:
+    winget package folders (per-user and machine-wide), then PATH."""
+    if os.name != "nt":
+        return None
+    roots = []
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        roots.append(Path(local) / "Microsoft" / "WinGet" / "Packages")
+    for env in ("ProgramFiles", "ProgramFiles(x86)"):
+        pf = os.environ.get(env)
+        if pf:
+            roots.append(Path(pf) / "WinGet" / "Packages")
+    candidates = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for pkg in sorted(root.glob("Gyan.FFmpeg.Shared*"), reverse=True):
+            candidates.extend(sorted(pkg.glob("ffmpeg-*shared/bin"), reverse=True))
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if entry:
+            candidates.append(Path(entry))
+    for c in candidates:
+        if _has_shared_dlls(c):
+            return str(c)
+    return None
+
+
+def add_ffmpeg_shared_dll_dir():
+    global _ffmpeg_dll_dir_registered, FFMPEG_SHARED_BIN
+    if _ffmpeg_dll_dir_registered or os.name != "nt":
+        return
+    if FFMPEG_SHARED_BIN is None:
+        FFMPEG_SHARED_BIN = discover_ffmpeg_shared_dir()
+    if FFMPEG_SHARED_BIN and os.path.isdir(FFMPEG_SHARED_BIN):
+        os.add_dll_directory(FFMPEG_SHARED_BIN)
+        os.environ["PATH"] = FFMPEG_SHARED_BIN + os.pathsep + os.environ.get("PATH", "")
+    _ffmpeg_dll_dir_registered = True
+
+
+# ---------------------------------------------------------------- word list
+def norm(word: str) -> str:
+    """lowercase, ё->е, strip punctuation."""
+    w = word.lower().replace("ё", "е")
+    return re.sub(r"[^\w-]", "", w)
+
+
+def load_wordlist(path: Path):
+    exact, stems, phrases, subs = set(), [], [], []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        line = line.lower().replace("ё", "е")
+        if " " in line:
+            phrases.append(tuple(norm(w) for w in line.split()))
+        elif line.startswith("*") and line.endswith("*") and len(line) > 2:
+            subs.append(norm(line[1:-1]))
+        elif line.endswith("*"):
+            stems.append(norm(line[:-1]))
+        else:
+            exact.add(norm(line))
+    return exact, stems, phrases, subs
+
+
+# ---------------------------------------------------------------- transcribe
+_MODELS = {}         # (name, device) -> faster-whisper model, reused across passes
+_GIGAAM_MODELS = {}  # model_name -> loaded GigaAM model, reused across passes
+
+
+def get_whisper_model(model_name: str, device: str):
+    key = (model_name, device)
+    if key not in _MODELS:
+        add_cuda_dll_dirs()
+        from faster_whisper import WhisperModel
+        compute = "float16" if device == "cuda" else "int8"
+        _emit("model_load", engine="whisper", model=model_name, device=device,
+              compute=compute)
+        _MODELS[key] = WhisperModel(model_name, device=device, compute_type=compute)
+    return _MODELS[key]
+
+
+def get_gigaam_model(model_name: str, device: str):
+    if model_name not in _GIGAAM_MODELS:
+        # Hugging Face's Xet storage backend produces lock-file paths with
+        # characters illegal in Windows filenames (WinError 123)
+        os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+        add_ffmpeg_shared_dll_dir()
+        import gigaam
+        _emit("model_load", engine="gigaam", model=model_name, device=device)
+        _GIGAAM_MODELS[model_name] = gigaam.load_model(model_name, device=device)
+    return _GIGAAM_MODELS[model_name]
+
+
+def _cache_path(media: Path, engine: str) -> Path:
+    # whisper keeps the original untagged cache name for backward
+    # compatibility with transcripts cached before GigaAM support existed.
+    if engine == "whisper":
+        return media.with_suffix(media.suffix + ".words.json")
+    return media.with_suffix(media.suffix + f".{engine}.words.json")
+
+
+def transcribe(media: Path, engine: str, model_name: str, device: str, language: str,
+               force: bool = False, vad: bool = True):
+    cache = _cache_path(media, engine)
+    if cache.exists() and not force:
+        _emit("cache_hit", engine=engine, cache=cache.name)
+        return json.loads(cache.read_text(encoding="utf-8"))
+
+    _emit("asr_start", file=media.name, engine=engine)
+
+    if engine == "whisper":
+        model = get_whisper_model(model_name, device)
+        segments, info = model.transcribe(
+            str(media), language=language, word_timestamps=True, vad_filter=vad,
+        )
+        words = []
+        for seg in segments:
+            for w in seg.words or []:
+                words.append({"w": w.word.strip(), "s": round(w.start, 3),
+                              "e": round(w.end, 3)})
+            _emit("asr_progress", minutes=seg.end / 60)
+        _emit("asr_progress_end")
+
+    elif engine == "gigaam":
+        model = get_gigaam_model(model_name, device)
+        result = model.transcribe_longform(str(media), word_timestamps=True)
+        words = [{"w": w.text.strip(), "s": round(w.start, 3), "e": round(w.end, 3)}
+                 for w in result.words]
+
+    else:
+        raise ValueError(f"unknown engine: {engine!r} (use 'whisper' or 'gigaam')")
+
+    cache.write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
+    _emit("cache_saved", cache=cache.name)
+    return words
+
+
+# ---------------------------------------------------------------- matching
+def find_hits(words, exact, stems, phrases, subs, pad_ms):
+    normed = [norm(x["w"]) for x in words]
+    pad = pad_ms / 1000.0
+    idx_hits = []  # (first_word_idx, last_word_idx)
+
+    # fast lookups that stay O(1)-ish regardless of list size
+    stem_set = set(stems)
+    max_stem = max(map(len, stems), default=0)
+    sub_re = (re.compile("|".join(re.escape(s) for s in
+                                  sorted(subs, key=len, reverse=True)))
+              if subs else None)
+    ph_by_first = {}
+    for ph in phrases:
+        ph_by_first.setdefault(ph[0], []).append(ph)
+
+    def is_bad(nw: str) -> bool:
+        if nw in exact:
+            return True
+        for L in range(1, min(len(nw), max_stem) + 1):
+            if nw[:L] in stem_set:
+                return True
+        return bool(sub_re and sub_re.search(nw))
+
+    for i, nw in enumerate(normed):
+        if not nw:
+            continue
+        if is_bad(nw):
+            idx_hits.append((i, i))
+        for ph in ph_by_first.get(nw, ()):
+            n = len(ph)
+            if i + n <= len(normed) and tuple(normed[i:i + n]) == ph:
+                idx_hits.append((i, i + n - 1))
+
+    # neighbor-aware padding: never mute into the previous/next word
+    hits = []
+    for a, b in sorted(set(idx_hits)):
+        s, e = words[a]["s"], words[b]["e"]
+        prev_end = words[a - 1]["e"] if a > 0 else 0.0
+        next_start = words[b + 1]["s"] if b + 1 < len(words) else e + pad
+        s2 = min(max(s - pad, prev_end, 0.0), s)
+        e2 = max(min(e + pad, next_start), e)
+        text = " ".join(words[j]["w"] for j in range(a, b + 1))
+        hits.append((s2, e2, text))
+
+    # merge overlapping intervals
+    merged = []
+    for s, e, t in sorted(hits):
+        if merged and s <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e),
+                          merged[-1][2] + " | " + t)
+        else:
+            merged.append((s, e, t))
+    return merged
+
+
+# ---------------------------------------------------------------- ffmpeg
+def mute(media: Path, intervals, out: Path):
+    filters = ",".join(
+        f"volume=enable='between(t,{s:.3f},{e:.3f})':volume=0"
+        for s, e, _ in intervals
+    )
+    # filter list can be huge -> pass via script file (avoids cmd length limits)
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
+                                     encoding="utf-8") as f:
+        f.write(filters)
+        script = f.name
+    cmd = [
+        "ffmpeg", "-y",
+        "-err_detect", "ignore_err",
+        "-fflags", "+genpts+igndts+discardcorrupt",
+        "-i", str(media),
+        "-map", "0",
+        "-c", "copy",
+        "-c:a", "aac", "-b:a", "192k",
+        "-filter_script:a", script,
+        str(out),
+    ]
+    _emit("mute_start", count=len(intervals))
+    try:
+        subprocess.run(cmd, check=True)
+    finally:
+        os.unlink(script)
+    _emit("mute_done", out=str(out))
+
+
+def fmt_ts(t):
+    m, s = divmod(t, 60)
+    h, m = divmod(int(m), 60)
+    return f"{h:02d}:{m:02d}:{s:06.3f}"
+
+
+# ---------------------------------------------------------------- main
+MEDIA_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".ts", ".wmv",
+              ".mp3", ".m4a", ".wav", ".flac", ".ogg", ".opus", ".aac"}
+
+
+def collect_inputs(paths):
+    """Expand files and directories into a sorted list of media files."""
+    files = []
+    for p in paths:
+        if p.is_dir():
+            for f in sorted(p.iterdir()):
+                if (f.suffix.lower() in MEDIA_EXTS
+                        and ".clean" not in f.suffixes
+                        and not f.stem.endswith(".clean")):
+                    files.append(f)
+        elif p.is_file():
+            files.append(p)
+        else:
+            sys.exit(f"input not found: {p}")
+    if not files:
+        sys.exit("no media files found in the given input(s)")
+    return files
+
+
+def output_for(inp: Path, out_arg, multi: bool) -> Path:
+    if out_arg is None:
+        return inp.with_suffix(".clean" + inp.suffix)
+    if out_arg.is_dir() or multi:
+        out_arg.mkdir(parents=True, exist_ok=True)
+        return out_arg / (inp.stem + ".clean" + inp.suffix)
+    return out_arg  # single input, explicit file path
+
+
+def process_file(inp: Path, out: Path, wordlist, args, plan) -> None:
+    """plan: list of (engine, model_name) tuples, one entry per pass."""
+    exact, stems, phrases, subs = wordlist
+    current = inp
+    n_passes = len(plan)
+
+    for pass_n, (engine, model_name) in enumerate(plan, start=1):
+        if n_passes > 1:
+            _emit("pass_start", n=pass_n, total=n_passes, engine=engine)
+
+        is_last = (pass_n == n_passes)
+        force_this = ((args.retranscribe and pass_n == 1)
+                      or (args.force_passes and is_last))
+
+        words = transcribe(current, engine, model_name, args.device, args.language,
+                           force=force_this, vad=not args.no_vad)
+        _emit("words_count", count=len(words))
+
+        intervals = find_hits(words, exact, stems, phrases, subs, args.pad)
+        if not intervals:
+            _emit("match_none", pass_n=pass_n)
+            if args.force_passes and not is_last:
+                _emit("force_continue")
+                continue
+            break
+
+        _emit("match_found", intervals=intervals)
+
+        if args.list_only:
+            break
+
+        tmp = out.parent / (out.stem + ".tmp" + out.suffix)
+        mute(current, intervals, tmp)
+        os.replace(tmp, out)
+        # any cached transcript (from either engine) for the previous
+        # version of the output is now stale
+        for suffix in (".words.json", ".gigaam.words.json"):
+            stale = out.with_suffix(out.suffix + suffix)
+            if stale.exists():
+                stale.unlink()
+        current = out
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Mute unwanted words in media files.")
+    ap.add_argument("-i", "--input", required=True, type=Path, nargs="+",
+                    help="one or more video/audio files and/or directories "
+                         "(directories are scanned for media files)")
+    ap.add_argument("-w", "--words", required=True, type=Path)
+    ap.add_argument("-o", "--output", type=Path,
+                    help="output file (single input) or output directory; "
+                         "default: <input>.clean.<ext> next to each input")
+    ap.add_argument("--model", default="large-v3",
+                    help="faster-whisper model for 'whisper' passes "
+                         "(large-v3, medium, small...)")
+    ap.add_argument("--gigaam-model", default="v3_e2e_rnnt",
+                    help="GigaAM model for 'gigaam' passes "
+                         "(v3_e2e_rnnt, v3_e2e_ctc, v3_rnnt, v3_ctc...)")
+    ap.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
+    ap.add_argument("--language", default="ru",
+                    help="whisper language code; ignored for gigaam passes")
+    ap.add_argument("--pad", type=int, default=100,
+                    help="padding in ms around each muted word (default 100)")
+    ap.add_argument("--list-only", action="store_true",
+                    help="print timestamps, don't produce files")
+    ap.add_argument("--retranscribe", action="store_true",
+                    help="ignore cached transcripts")
+    ap.add_argument("--no-vad", action="store_true",
+                    help="disable voice activity detection for whisper passes "
+                         "(try with --retranscribe if words at clip edges "
+                         "are missed); has no effect on gigaam passes")
+    ap.add_argument("--passes", type=int, default=2,
+                    help="number of whisper passes; ignored if --engines is "
+                         "given. Each extra pass re-transcribes the cleaned "
+                         "output to catch words missed the first time "
+                         "(default 2, stops early when clean)")
+    ap.add_argument("--engines", type=str, default=None,
+                    help="comma-separated engine sequence, one entry per "
+                         "pass, e.g. 'gigaam,gigaam,whisper' for two GigaAM "
+                         "passes followed by one whisper pass as a second "
+                         "opinion. Overrides --passes. Valid engines: "
+                         "'whisper', 'gigaam'.")
+    ap.add_argument("--force-passes", action="store_true",
+                    help="always run the full pass count, even if an "
+                         "earlier pass finds nothing new to mute. The final "
+                         "pass is also forced to ignore any cache and "
+                         "re-transcribe completely fresh. Use this for e.g. "
+                         "--engines gigaam,gigaam,whisper --force-passes: "
+                         "passes 1-2 behave normally, pass 3 is guaranteed "
+                         "to run with a brand-new transcription.")
+    args = ap.parse_args()
+
+    if args.engines:
+        engine_names = [e.strip().lower() for e in args.engines.split(",") if e.strip()]
+        for e in engine_names:
+            if e not in ("whisper", "gigaam"):
+                sys.exit(f"unknown engine in --engines: {e!r} "
+                          f"(valid: 'whisper', 'gigaam')")
+        model_for = {"whisper": args.model, "gigaam": args.gigaam_model}
+        plan = [(e, model_for[e]) for e in engine_names]
+    else:
+        plan = [("whisper", args.model)] * args.passes
+
+    files = collect_inputs(args.input)
+    wordlist = load_wordlist(args.words)
+    exact, stems, phrases, subs = wordlist
+    _emit("list_info", exact=len(exact), stems=len(stems),
+          subs=len(subs), phrases=len(phrases))
+    _emit("plan", plan=plan)
+    if len(files) > 1:
+        _emit("batch_count", count=len(files))
+
+    failed = []
+    for n, inp in enumerate(files, 1):
+        if len(files) > 1:
+            _emit("file_start", n=n, total=len(files), name=inp.name)
+        out = output_for(inp, args.output, multi=len(files) > 1)
+        try:
+            process_file(inp, out, wordlist, args, plan)
+        except KeyboardInterrupt:
+            _emit("interrupted")
+            break
+        except Exception as exc:
+            _emit("file_error", name=inp.name, error=str(exc))
+            failed.append(inp.name)
+
+    if len(files) > 1:
+        done = len(files) - len(failed)
+        _emit("batch_done", done=done, total=len(files), failed=failed)
+
+
+if __name__ == "__main__":
+    main()
