@@ -85,8 +85,14 @@ def test_models_tab_lists_status(qapp, tmp_path, monkeypatch):
     tab = ModelsTab()
     rows = {tab.table.item(r, 0).text(): tab.table.item(r, 1).text()
             for r in range(tab.table.rowCount())}
-    assert rows["base"] == "downloaded"
+    assert rows["base"] == "downloaded ✓"
     assert rows["large-v3"] == "not downloaded"
+    # per-row action buttons
+    buttons = {tab.table.item(r, 0).text():
+               tab.table.cellWidget(r, 3).text()
+               for r in range(tab.table.rowCount())}
+    assert buttons["base"] == "Delete"
+    assert buttons["large-v3"] == "Download"
 
 
 def test_history_tab_populates(qapp, tmp_path, monkeypatch):

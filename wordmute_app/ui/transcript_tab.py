@@ -30,11 +30,15 @@ class TranscriptTab(QWidget):
         self._blocks = []
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
         top = QHBoxLayout()
+        top.setSpacing(8)
         open_button = QPushButton(tr("Open Media…"))
         open_button.clicked.connect(self._pick_media)
         top.addWidget(open_button)
         self.file_label = QLabel(tr("No file opened."))
+        self.file_label.setProperty("muted", True)
         top.addWidget(self.file_label, stretch=1)
         layout.addLayout(top)
 
@@ -44,6 +48,7 @@ class TranscriptTab(QWidget):
         self.search.textChanged.connect(self._filter)
         search_row.addWidget(self.search, stretch=1)
         self.count_label = QLabel("")
+        self.count_label.setProperty("muted", True)
         search_row.addWidget(self.count_label)
         layout.addLayout(search_row)
 
@@ -55,6 +60,8 @@ class TranscriptTab(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setWordWrap(True)
+        self.table.setShowGrid(False)
+        self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table, stretch=1)
 
         bottom = QHBoxLayout()
@@ -94,10 +101,14 @@ class TranscriptTab(QWidget):
         self._fill()
 
     def _fill(self):
+        from PySide6.QtGui import QFont
+        mono = QFont("Cascadia Mono")
+        mono.setStyleHint(QFont.Monospace)
         self.table.setRowCount(len(self._blocks))
         for row, block in enumerate(self._blocks):
-            self.table.setItem(row, 0,
-                               QTableWidgetItem(fmt_ts(block[0]["s"])))
+            time_item = QTableWidgetItem(fmt_ts(block[0]["s"]))
+            time_item.setFont(mono)
+            self.table.setItem(row, 0, time_item)
             self.table.setItem(
                 row, 1,
                 QTableWidgetItem(" ".join(w["w"] for w in block)))
@@ -105,13 +116,21 @@ class TranscriptTab(QWidget):
 
     def _filter(self, needle: str):
         needle = norm(needle.strip())
+        visible = 0
         for row, block in enumerate(self._blocks):
             if needle:
                 text = " ".join(norm(w["w"]) for w in block)
                 hide = needle not in text
             else:
                 hide = False
+            if not hide:
+                visible += 1
             self.table.setRowHidden(row, hide)
+        if needle:
+            self.count_label.setText(
+                f"{visible} of {len(self._blocks)} blocks")
+        elif self._words:
+            self.count_label.setText(f"{len(self._words)} words")
 
     def _export_srt(self):
         if not self._media:

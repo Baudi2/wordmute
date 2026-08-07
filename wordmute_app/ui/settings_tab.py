@@ -1,14 +1,16 @@
-"""Settings tab. Unlike the old modal dialog, changes apply and persist
-immediately; a `changed` signal lets the main window refresh advice
-(GPU warnings etc.). Settings never affect a run already in progress —
-options are captured at Start."""
+"""Settings tab. Changes apply and persist immediately (a transient
+"Saved" note confirms); a `changed` signal lets the main window refresh
+advice. Settings never affect a run already in progress — options are
+captured at Start. Grouped per the design spec: Recognition | Muting
+side by side, Files & downloads beneath."""
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -21,9 +23,11 @@ from PySide6.QtWidgets import (
 
 from ..core import config
 from .i18n import tr
+from .theme import THEMES, apply_theme
 
 WHISPER_MODELS = ["large-v3", "medium", "small", "base"]
 GIGAAM_MODELS = ["v3_e2e_rnnt", "v3_e2e_ctc", "v3_rnnt", "v3_ctc"]
+GROUP_WIDTH = 420
 
 
 class SettingsTab(QWidget):
@@ -34,25 +38,50 @@ class SettingsTab(QWidget):
         self._settings = settings
         self._loading = True
 
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 16, 20, 16)
+        outer.setSpacing(20)
+
+        # ---- Recognition
+        recognition = QGroupBox(tr("Recognition"))
+        recognition.setMaximumWidth(GROUP_WIDTH)
+        rec_form = QFormLayout(recognition)
+        rec_form.setVerticalSpacing(12)
+        rec_form.setHorizontalSpacing(16)
 
         self.model_combo = QComboBox()
         self.model_combo.addItems(WHISPER_MODELS)
         if settings["model"] in WHISPER_MODELS:
             self.model_combo.setCurrentText(settings["model"])
-        form.addRow(tr("Whisper model:"), self.model_combo)
+        rec_form.addRow(tr("Whisper model:"), self.model_combo)
 
         self.gigaam_combo = QComboBox()
         self.gigaam_combo.addItems(GIGAAM_MODELS)
         if settings["gigaam_model"] in GIGAAM_MODELS:
             self.gigaam_combo.setCurrentText(settings["gigaam_model"])
-        form.addRow(tr("GigaAM model:"), self.gigaam_combo)
+        rec_form.addRow(tr("GigaAM model:"), self.gigaam_combo)
 
         self.device_combo = QComboBox()
         self.device_combo.addItems(["cuda", "cpu"])
         self.device_combo.setCurrentText(settings["device"])
-        form.addRow(tr("Device:"), self.device_combo)
+        rec_form.addRow(tr("Device:"), self.device_combo)
+
+        self.language_edit = QLineEdit(settings["language"])
+        self.language_edit.setToolTip("Whisper language code (e.g. ru, en); "
+                                      "ignored by GigaAM passes.")
+        rec_form.addRow(tr("Whisper language:"), self.language_edit)
+
+        self.vad_check = QCheckBox("Voice activity detection (whisper only)")
+        self.vad_check.setChecked(settings["vad"])
+        self.vad_check.setToolTip("Disable if words at clip edges are missed.")
+        rec_form.addRow("", self.vad_check)
+
+        # ---- Muting
+        muting = QGroupBox(tr("Muting"))
+        muting.setMaximumWidth(GROUP_WIDTH)
+        mute_form = QFormLayout(muting)
+        mute_form.setVerticalSpacing(12)
+        mute_form.setHorizontalSpacing(16)
 
         self.pad_spin = QSpinBox()
         self.pad_spin.setRange(0, 1000)
@@ -61,12 +90,7 @@ class SettingsTab(QWidget):
         self.pad_spin.setValue(settings["pad_ms"])
         self.pad_spin.setToolTip("Extra silence around each muted word; "
                                  "never bleeds into neighboring words.")
-        form.addRow(tr("Mute padding:"), self.pad_spin)
-
-        self.language_edit = QLineEdit(settings["language"])
-        self.language_edit.setToolTip("Whisper language code (e.g. ru, en); "
-                                      "ignored by GigaAM passes.")
-        form.addRow(tr("Whisper language:"), self.language_edit)
+        mute_form.addRow(tr("Mute padding:"), self.pad_spin)
 
         beep_row = QHBoxLayout()
         self.beep_check = QCheckBox(tr("Beep instead of silence"))
@@ -85,12 +109,21 @@ class SettingsTab(QWidget):
         beep_row.addWidget(self.beep_check)
         beep_row.addWidget(self.beep_spin)
         beep_row.addStretch()
-        form.addRow("", beep_row)
+        mute_form.addRow("", beep_row)
 
-        self.vad_check = QCheckBox("Voice activity detection (whisper only)")
-        self.vad_check.setChecked(settings["vad"])
-        self.vad_check.setToolTip("Disable if words at clip edges are missed.")
-        form.addRow("", self.vad_check)
+        top_row = QHBoxLayout()
+        top_row.setSpacing(20)
+        top_row.addWidget(recognition)
+        top_row.addWidget(muting)
+        top_row.addStretch()
+        outer.addLayout(top_row)
+
+        # ---- Files & downloads
+        files_box = QGroupBox(tr("Files && downloads"))
+        files_box.setMaximumWidth(GROUP_WIDTH * 2 + 20)
+        files_form = QFormLayout(files_box)
+        files_form.setVerticalSpacing(12)
+        files_form.setHorizontalSpacing(16)
 
         download_row = QHBoxLayout()
         self.download_dir_edit = QLineEdit(settings.get("download_dir", ""))
@@ -100,36 +133,27 @@ class SettingsTab(QWidget):
         download_browse.clicked.connect(self._browse_download_dir)
         download_row.addWidget(self.download_dir_edit, stretch=1)
         download_row.addWidget(download_browse)
-        form.addRow("Downloads folder:", download_row)
+        files_form.addRow("Downloads folder:", download_row)
 
         cookies_row = QHBoxLayout()
         self.cookies_edit = QLineEdit(settings.get("cookies_file", ""))
         self.cookies_edit.setPlaceholderText(tr("(optional)"))
         self.cookies_edit.setToolTip(
             "Cookie file in Netscape format (as exported by yt-dlp or a "
-            "browser extension). Lets downloads access sites that need "
-            "your login, e.g. boosty.to. Used for both the format list "
-            "and the download itself.")
+            "browser extension).")
         cookies_browse = QPushButton("Browse…")
         cookies_browse.clicked.connect(self._browse_cookies)
         cookies_row.addWidget(self.cookies_edit, stretch=1)
         cookies_row.addWidget(cookies_browse)
-        form.addRow(tr("Cookies file:"), cookies_row)
+        files_form.addRow(tr("Cookies file:"), cookies_row)
+        cookies_hint = QLabel(tr(
+            "Used for members-only downloads (e.g. Boosty) — exported "
+            "from your browser."))
+        cookies_hint.setProperty("muted", True)
+        cookies_hint.setWordWrap(True)
+        files_form.addRow("", cookies_hint)
 
-        ui_lang_row = QHBoxLayout()
-        self.ui_language_combo = QComboBox()
-        self.ui_language_combo.addItem("English", "en")
-        self.ui_language_combo.addItem("Русский", "ru")
-        idx = self.ui_language_combo.findData(
-            settings.get("ui_language", "en"))
-        self.ui_language_combo.setCurrentIndex(max(idx, 0))
-        ui_lang_row.addWidget(self.ui_language_combo)
-        ui_lang_row.addWidget(QLabel(tr("(takes effect after restart)")))
-        ui_lang_row.addStretch()
-        form.addRow(tr("Interface language:"), ui_lang_row)
-        layout.addLayout(form)
-
-        layout.addWidget(QLabel(tr("Output location:")))
+        output_col = QVBoxLayout()
         self.beside_radio = QRadioButton(
             tr("Next to each input (<name>.clean.<ext>)"))
         self.folder_radio = QRadioButton(tr("Into folder:"))
@@ -140,11 +164,44 @@ class SettingsTab(QWidget):
         folder_row.addWidget(self.folder_radio)
         folder_row.addWidget(self.output_dir_edit, stretch=1)
         folder_row.addWidget(output_browse)
-        layout.addWidget(self.beside_radio)
-        layout.addLayout(folder_row)
+        output_col.addWidget(self.beside_radio)
+        output_col.addLayout(folder_row)
         (self.folder_radio if settings["output_mode"] == "folder"
          else self.beside_radio).setChecked(True)
-        layout.addStretch()
+        files_form.addRow(tr("Output location:"), output_col)
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem(tr("Dark"), "dark")
+        self.theme_combo.addItem(tr("Light"), "light")
+        idx = self.theme_combo.findData(settings.get("theme", "dark"))
+        self.theme_combo.setCurrentIndex(max(idx, 0))
+        files_form.addRow(tr("Theme:"), self.theme_combo)
+
+        ui_lang_row = QHBoxLayout()
+        self.ui_language_combo = QComboBox()
+        self.ui_language_combo.addItem("English", "en")
+        self.ui_language_combo.addItem("Русский", "ru")
+        idx = self.ui_language_combo.findData(
+            settings.get("ui_language", "en"))
+        self.ui_language_combo.setCurrentIndex(max(idx, 0))
+        ui_lang_row.addWidget(self.ui_language_combo)
+        restart_note = QLabel(tr("(takes effect after restart)"))
+        restart_note.setProperty("muted", True)
+        ui_lang_row.addWidget(restart_note)
+        ui_lang_row.addStretch()
+        files_form.addRow(tr("Interface language:"), ui_lang_row)
+        outer.addWidget(files_box)
+
+        self.saved_label = QLabel("")
+        self.saved_label.setProperty("muted", True)
+        outer.addWidget(self.saved_label)
+        outer.addStretch()
+
+        self._saved_timer = QTimer(self)
+        self._saved_timer.setSingleShot(True)
+        self._saved_timer.setInterval(1800)
+        self._saved_timer.timeout.connect(
+            lambda: self.saved_label.setText(""))
 
         self._loading = False
         for signal in (
@@ -159,6 +216,7 @@ class SettingsTab(QWidget):
             self.download_dir_edit.textChanged,
             self.cookies_edit.textChanged,
             self.ui_language_combo.currentIndexChanged,
+            self.theme_combo.currentIndexChanged,
             self.beside_radio.toggled,
             self.folder_radio.toggled,
             self.output_dir_edit.textChanged,
@@ -190,6 +248,7 @@ class SettingsTab(QWidget):
     def _apply(self, *_):
         if self._loading:
             return
+        old_theme = self._settings.get("theme", "dark")
         self._settings.update({
             "model": self.model_combo.currentText(),
             "gigaam_model": self.gigaam_combo.currentText(),
@@ -205,7 +264,16 @@ class SettingsTab(QWidget):
             "beep_hz": (self.beep_spin.value()
                         if self.beep_check.isChecked() else 0),
             "ui_language": self.ui_language_combo.currentData(),
+            "theme": self.theme_combo.currentData(),
             "cookies_file": self.cookies_edit.text().strip(),
         })
         config.save_settings(self._settings)
+        new_theme = self._settings.get("theme", "dark")
+        if new_theme != old_theme and new_theme in THEMES:
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app is not None:
+                apply_theme(app, new_theme)
+        self.saved_label.setText(tr("Saved"))
+        self._saved_timer.start()
         self.changed.emit()

@@ -36,6 +36,8 @@ DEFAULT_SETTINGS = {
     "ui_language": "en",       # interface language: en | ru
     "watch_dir": "",           # last used watch folder
     "cookies_file": "",        # Netscape cookie file for logged-in sites
+    "theme": "dark",           # dark | light
+    "wordlists_note_dismissed": False,
 }
 
 

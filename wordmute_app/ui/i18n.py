@@ -85,6 +85,58 @@ RU = {
     # settings
     "Cookies file:": "Файл cookies:",
     "(optional)": "(необязательно)",
+    "Recognition": "Распознавание",
+    "Muting": "Заглушение",
+    "Files && downloads": "Файлы и загрузки",
+    "Theme:": "Тема:",
+    "Dark": "Темная",
+    "Light": "Светлая",
+    "Saved": "Сохранено",
+    "Used for members-only downloads (e.g. Boosty) — exported "
+    "from your browser.":
+        "Нужен для загрузок по подписке (например, Boosty) — "
+        "экспортируется из браузера.",
+    # queue chrome
+    "Change…": "Изменить…",
+    "Hide": "Скрыть",
+    "Details": "Подробности",
+    "Russian": "Русский",
+    "English": "Английский",
+    "none": "нет",
+    "empty": "пусто",
+    "Drop video or audio files here":
+        "Перетащите сюда видео или аудио",
+    "…or paste a link with Add URL. Matched words from your word "
+    "lists are muted; the video stays untouched.\n"
+    "Everything runs on this computer — nothing is uploaded.":
+        "…или вставьте ссылку через «Добавить ссылку». Совпавшие слова "
+        "из ваших списков заглушаются; видео не изменяется.\n"
+        "Все происходит на этом компьютере — ничего не загружается в сеть.",
+    "View word lists": "Открыть списки слов",
+    # word lists tab
+    "Find in list… (Enter = next)": "Поиск по списку… (Enter = дальше)",
+    "This is the shipped template — one person's curated "
+    "starting point. Edit freely; it's your list.":
+        "Это стартовый шаблон — чьи-то личные настройки. Смело "
+        "редактируйте; это ваш список.",
+    "Testing your current edits (saved or not) "
+    "plus the other saved list.":
+        "Проверка по текущим правкам (даже несохраненным) "
+        "плюс другой сохраненный список.",
+    # history
+    "Copy error": "Копировать ошибку",
+    "Processed files will appear here.":
+        "Обработанные файлы появятся здесь.",
+    # url dialog
+    "Members-only sites (e.g. Boosty) may need your cookies "
+    "file —": "Для сайтов с подпиской (например, Boosty) может быть "
+    "нужен файл cookies —",
+    "set it in Settings": "указать в настройках",
+    # wizard
+    "Show": "Показать",
+    "Token:": "Токен:",
+    "Stored only on this computer.":
+        "Хранится только на этом компьютере.",
     # dialogs (shared)
     "Close": "Закрыть",
     "Browse…": "Обзор…",

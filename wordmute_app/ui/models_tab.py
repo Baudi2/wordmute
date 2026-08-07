@@ -1,5 +1,5 @@
-"""Models tab: whisper model download/delete with disk usage, GigaAM
-cache overview, device indicator."""
+"""Models tab: whisper models with per-row download/delete actions and
+disk usage, GigaAM cache overview, device indicator."""
 
 import subprocess
 
@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
 
 from ..core import gpu, models
 from .i18n import tr
+
+COL_MODEL, COL_STATUS, COL_SIZE, COL_ACTION = range(4)
 
 
 class DownloadWorker(QThread):
@@ -42,52 +44,51 @@ class ModelsTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._worker = None
+        self._downloading = None
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
 
         gpus = gpu.detect_gpus()
         if gpus:
             g = max(gpus, key=lambda x: x.vram_mb)
-            device_text = f"GPU: {g.name} ({g.vram_mb / 1000:.1f} GB VRAM)"
+            device_text = f"GPU: {g.name} · {g.vram_mb / 1000:.1f} GB VRAM"
         else:
             device_text = ("No NVIDIA GPU detected — use CPU mode in "
                            "Settings (roughly 2-4x slower).")
-        layout.addWidget(QLabel(device_text))
+        gpu_label = QLabel(device_text)
+        gpu_label.setProperty("muted", not gpus)
+        layout.addWidget(gpu_label)
 
         layout.addWidget(QLabel("<b>Whisper</b>"))
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Model", "Status", "Size"])
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Model", "Status", "Size", ""])
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        layout.addWidget(self.table, stretch=1)
+        self.table.verticalHeader().setDefaultSectionSize(38)
+        self.table.setShowGrid(False)
+        layout.addWidget(self.table)
 
-        buttons = QHBoxLayout()
-        self.download_button = QPushButton(tr("Download"))
-        self.download_button.clicked.connect(self._download_selected)
-        self.delete_button = QPushButton(tr("Delete"))
-        self.delete_button.clicked.connect(self._delete_selected)
-        open_cache = QPushButton(tr("Open folder"))
-        open_cache.setToolTip(str(models.hf_hub_cache()))
-        open_cache.clicked.connect(self._open_cache)
-        buttons.addWidget(self.download_button)
-        buttons.addWidget(self.delete_button)
-        buttons.addWidget(open_cache)
-        buttons.addStretch()
-        layout.addLayout(buttons)
-
+        gigaam_row = QHBoxLayout()
+        gigaam_row.setSpacing(8)
         self.gigaam_label = QLabel()
         self.gigaam_label.setWordWrap(True)
-        layout.addWidget(self.gigaam_label)
-        gigaam_row = QHBoxLayout()
+        gigaam_row.addWidget(self.gigaam_label, stretch=1)
+        self.open_cache_button = QPushButton(tr("Open folder"))
+        self.open_cache_button.setToolTip(str(models.hf_hub_cache()))
+        self.open_cache_button.clicked.connect(self._open_cache)
         self.gigaam_delete_button = QPushButton("Delete GigaAM caches")
+        self.gigaam_delete_button.setProperty("danger", True)
         self.gigaam_delete_button.clicked.connect(self._delete_gigaam)
+        gigaam_row.addWidget(self.open_cache_button)
         gigaam_row.addWidget(self.gigaam_delete_button)
-        gigaam_row.addStretch()
         layout.addLayout(gigaam_row)
 
         self.status_label = QLabel("")
+        self.status_label.setProperty("muted", True)
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
         layout.addStretch()
@@ -98,12 +99,31 @@ class ModelsTab(QWidget):
         status = models.whisper_model_status()
         self.table.setRowCount(len(status))
         for row, st in enumerate(status):
-            self.table.setItem(row, 0, QTableWidgetItem(st["model"]))
-            self.table.setItem(row, 1, QTableWidgetItem(
-                "downloaded" if st["downloaded"] else "not downloaded"))
-            self.table.setItem(row, 2, QTableWidgetItem(
+            model = st["model"]
+            self.table.setItem(row, COL_MODEL, QTableWidgetItem(model))
+            downloading = model == self._downloading
+            status_text = ("downloading…" if downloading else
+                           "downloaded ✓" if st["downloaded"]
+                           else "not downloaded")
+            self.table.setItem(row, COL_STATUS,
+                               QTableWidgetItem(status_text))
+            self.table.setItem(row, COL_SIZE, QTableWidgetItem(
                 models.fmt_size(st["size_bytes"]) if st["downloaded"]
                 else ""))
+            button = QPushButton(
+                tr("Delete") if st["downloaded"] else tr("Download"))
+            if st["downloaded"]:
+                button.setProperty("danger", True)
+            button.setEnabled(not downloading and self._worker is None)
+            button.clicked.connect(
+                lambda _=False, m=model, d=st["downloaded"]:
+                self._delete(m) if d else self._download(m))
+            self.table.setCellWidget(row, COL_ACTION, button)
+        # natural height: this table lists 4 models, not a data grid
+        header_h = self.table.horizontalHeader().height() or 32
+        self.table.setFixedHeight(
+            header_h + len(status) * 38 + 2 * self.table.frameWidth())
+
         caches = models.gigaam_cache_dirs()
         if caches:
             total = sum(size for _, size in caches)
@@ -117,16 +137,11 @@ class ModelsTab(QWidget):
                 "automatically on first use.")
             self.gigaam_delete_button.setEnabled(False)
 
-    def _selected_model(self):
-        rows = self.table.selectionModel().selectedRows()
-        return self.table.item(rows[0].row(), 0).text() if rows else None
-
     # ---------------------------------------------------------- actions
-    def _download_selected(self):
-        model = self._selected_model()
-        if not model or self._worker is not None:
+    def _download(self, model: str):
+        if self._worker is not None:
             return
-        self.download_button.setEnabled(False)
+        self._downloading = model
         self.status_label.setText(
             f"Downloading {model}… (this can take a while; the app stays "
             "usable)")
@@ -134,22 +149,21 @@ class ModelsTab(QWidget):
         self._worker.succeeded.connect(self._on_download_done)
         self._worker.failed.connect(self._on_download_failed)
         self._worker.start()
+        self.refresh()
 
     def _on_download_done(self, model: str):
         self._worker = None
-        self.download_button.setEnabled(True)
+        self._downloading = None
         self.status_label.setText(f"{model} downloaded.")
         self.refresh()
 
     def _on_download_failed(self, model: str, message: str):
         self._worker = None
-        self.download_button.setEnabled(True)
+        self._downloading = None
         self.status_label.setText(f"Download of {model} failed: {message}")
+        self.refresh()
 
-    def _delete_selected(self):
-        model = self._selected_model()
-        if not model:
-            return
+    def _delete(self, model: str):
         if QMessageBox.question(
                 self, "WordMute",
                 f"Delete the downloaded '{model}' model? It will be "

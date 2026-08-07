@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from ..core import downloader
 from ..core.jobs import QueueItem
+from .i18n import tr
 
 # keep fetch threads alive if their dialog closes early; Qt drops the
 # signal connections with the dialog, so late emits are harmless
@@ -67,7 +68,22 @@ class AddUrlDialog(QDialog):
         self.status = QLabel("Paste a video URL, then either fetch the "
                              "format list or add it at best quality.")
         self.status.setWordWrap(True)
+        self.status.setProperty("muted", True)
         layout.addWidget(self.status)
+
+        if not self._cookies:
+            cookies_row = QHBoxLayout()
+            self.cookies_hint = QLabel(tr(
+                "Members-only sites (e.g. Boosty) may need your cookies "
+                "file —"))
+            self.cookies_hint.setProperty("muted", True)
+            cookies_link = QPushButton(tr("set it in Settings"))
+            cookies_link.setFlat(True)
+            cookies_link.clicked.connect(self._goto_settings)
+            cookies_row.addWidget(self.cookies_hint)
+            cookies_row.addWidget(cookies_link)
+            cookies_row.addStretch()
+            layout.addLayout(cookies_row)
 
         self.table = QTableWidget(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
@@ -83,6 +99,7 @@ class AddUrlDialog(QDialog):
 
         buttons_row = QHBoxLayout()
         self.best_button = QPushButton("Add (best quality)")
+        self.best_button.setProperty("primary", True)
         self.best_button.setToolTip(
             "Skip the format list and download best video+audio.")
         self.best_button.clicked.connect(self._accept_best)
@@ -96,6 +113,13 @@ class AddUrlDialog(QDialog):
         buttons_row.addWidget(self.buttons)
         layout.addLayout(buttons_row)
         self._update_ok()
+
+    def _goto_settings(self):
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "tabs") \
+                and hasattr(parent, "settings_tab"):
+            parent.tabs.setCurrentWidget(parent.settings_tab)
+        self.reject()
 
     # ---------------------------------------------------------- fetching
     def _url(self) -> str:

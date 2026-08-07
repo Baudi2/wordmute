@@ -31,13 +31,17 @@ def main():
 
     from .core import config
     from .ui.i18n import set_language
+    from .ui.theme import app_icon, apply_theme
 
-    set_language(config.load_settings().get("ui_language", "en"))
+    settings = config.load_settings()
+    set_language(settings.get("ui_language", "en"))
 
     from .ui.main_window import MainWindow
 
     app = QApplication(sys.argv)
     app.setApplicationName("WordMute")
+    apply_theme(app, settings.get("theme", "dark"))
+    app.setWindowIcon(app_icon())
     window = MainWindow()
     window.show()
     if os.environ.get("WORDMUTE_SMOKE"):  # automated startup check

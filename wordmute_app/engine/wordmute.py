@@ -204,8 +204,13 @@ def norm(word: str) -> str:
 
 
 def load_wordlist(path: Path):
+    return parse_wordlist_lines(
+        path.read_text(encoding="utf-8").splitlines())
+
+
+def parse_wordlist_lines(lines):
     exact, stems, phrases, subs = set(), [], [], []
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    for raw in lines:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue

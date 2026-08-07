@@ -73,9 +73,12 @@ class ReviewDialog(QDialog):
         self.setWindowTitle(f"Review — {output_name}")
         self.resize(860, 560)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
 
         header = QLabel(f"<b>{output_name}</b><br>"
                         f"Source: {self._data['source']}")
+        header.setObjectName("review_summary")
         header.setWordWrap(True)
         layout.addWidget(header)
         if not self._source_ok:
@@ -95,6 +98,9 @@ class ReviewDialog(QDialog):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.itemChanged.connect(self._on_item_changed)
         self.table.itemSelectionChanged.connect(self._on_selection)
+        self.table.verticalHeader().setDefaultSectionSize(34)
+        self.table.setShowGrid(False)
+        self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table, stretch=1)
         self._fill_table()
 
@@ -104,9 +110,11 @@ class ReviewDialog(QDialog):
             "Click a row to hear the original audio around it. Uncheck "
             "intervals that should not be muted, then Re-render.")
         self.status_label.setWordWrap(True)
+        self.status_label.setProperty("muted", True)
         layout.addWidget(self.status_label)
 
         buttons = QHBoxLayout()
+        buttons.setSpacing(8)
         self.stop_button = QPushButton(tr("Stop playback"))
         self.stop_button.clicked.connect(self._player.stop)
         self.mute_all_button = QPushButton(tr("Mute all"))
@@ -114,6 +122,7 @@ class ReviewDialog(QDialog):
         self.unmute_all_button = QPushButton(tr("Unmute all"))
         self.unmute_all_button.clicked.connect(lambda: self._set_all(False))
         self.rerender_button = QPushButton(tr("Re-render output"))
+        self.rerender_button.setProperty("primary", True)
         self.rerender_button.clicked.connect(self._rerender)
         self.rerender_button.setEnabled(self._source_ok)
         close_button = QPushButton(tr("Close"))

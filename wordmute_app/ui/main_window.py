@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -19,9 +20,11 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -90,6 +93,7 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
 
         self._worker = None
+        self._review_windows = []
         self._wordlist_paths = config.ensure_user_wordlists()
         self._settings = config.load_settings()
         self._gpus = gpu.detect_gpus()
@@ -99,12 +103,35 @@ class MainWindow(QMainWindow):
         self._watch_timer = QTimer(self)
         self._watch_timer.setInterval(5000)
         self._watch_timer.timeout.connect(self._watch_tick)
-        self._build_menu()
 
+        # --- shell: header strip + tabs (no menu bar)
+        from .theme import app_icon
+        container = QWidget()
+        shell = QVBoxLayout(container)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+        header_bar = QWidget()
+        header_bar.setObjectName("header_bar")
+        header_layout = QHBoxLayout(header_bar)
+        header_layout.setContentsMargins(16, 8, 16, 8)
+        header_layout.setSpacing(8)
+        icon_label = QLabel()
+        icon_label.setPixmap(app_icon().pixmap(20, 20))
+        header_layout.addWidget(icon_label)
+        title_label = QLabel("WordMute")
+        title_label.setObjectName("app_title")
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
+        shell.addWidget(header_bar)
         self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
+        self.tabs.setDocumentMode(True)
+        shell.addWidget(self.tabs, stretch=1)
+        self.setCentralWidget(container)
+
         queue_tab = QWidget()
         root = QVBoxLayout(queue_tab)
+        root.setContentsMargins(20, 16, 20, 16)
+        root.setSpacing(12)
 
         # --- file queue
         file_buttons = QHBoxLayout()
@@ -122,18 +149,27 @@ class MainWindow(QMainWindow):
             "Open a review file (saved next to each processed output) to "
             "listen to muted moments and un-mute false positives.")
         self.review_button.clicked.connect(self._pick_review)
+        self.remove_button.setProperty("danger", True)
+        file_buttons.setSpacing(8)
         file_buttons.addWidget(self.add_button)
         file_buttons.addWidget(self.add_folder_button)
         file_buttons.addWidget(self.add_url_button)
+        file_buttons.addSpacing(16)
         file_buttons.addWidget(self.remove_button)
         self.gigaam_setup_button = QPushButton(tr("GigaAM Setup…"))
         self.gigaam_setup_button.setToolTip(
             "One-time Hugging Face setup required for GigaAM passes. "
             "Whisper works without any of this.")
         self.gigaam_setup_button.clicked.connect(self._open_gigaam_setup)
+        self.watch_button = QPushButton(tr("Watch Folder…"))
+        self.watch_button.setToolTip(
+            "Automatically queue and process new media files appearing "
+            "in a chosen folder.")
+        self.watch_button.clicked.connect(self._toggle_watch)
         file_buttons.addStretch()
         file_buttons.addWidget(self.review_button)
         file_buttons.addWidget(self.gigaam_setup_button)
+        file_buttons.addWidget(self.watch_button)
         root.addLayout(file_buttons)
 
         self.table = QTableWidget(0, 3)
@@ -148,10 +184,63 @@ class MainWindow(QMainWindow):
         self.table.itemDoubleClicked.connect(self._on_row_double_clicked)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._table_menu)
-        root.addWidget(self.table, stretch=2)
+        self.table.verticalHeader().setDefaultSectionSize(34)
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
 
-        # --- word lists + pass plan
-        options_row = QHBoxLayout()
+        # empty state shown until the first item is queued
+        empty = QWidget()
+        empty_layout = QVBoxLayout(empty)
+        empty_layout.addStretch()
+        empty_title = QLabel(tr("Drop video or audio files here"))
+        empty_title.setObjectName("empty_state_title")
+        empty_title.setAlignment(Qt.AlignCenter)
+        empty_body = QLabel(tr(
+            "…or paste a link with Add URL. Matched words from your word "
+            "lists are muted; the video stays untouched.\n"
+            "Everything runs on this computer — nothing is uploaded."))
+        empty_body.setObjectName("empty_state_body")
+        empty_body.setAlignment(Qt.AlignCenter)
+        empty_body.setWordWrap(True)
+        empty_layout.addWidget(empty_title)
+        empty_layout.addWidget(empty_body)
+        empty_buttons = QHBoxLayout()
+        empty_buttons.addStretch()
+        empty_add = QPushButton(tr("Add Files…"))
+        empty_add.setProperty("primary", True)
+        empty_add.clicked.connect(self._pick_files)
+        empty_view_lists = QPushButton(tr("View word lists"))
+        empty_view_lists.clicked.connect(
+            lambda: self.tabs.setCurrentWidget(self.wordlists_tab))
+        empty_buttons.addWidget(empty_add)
+        empty_buttons.addWidget(empty_view_lists)
+        empty_buttons.addStretch()
+        empty_layout.addSpacing(12)
+        empty_layout.addLayout(empty_buttons)
+        empty_layout.addStretch()
+
+        self.queue_stack = QStackedWidget()
+        self.queue_stack.addWidget(empty)
+        self.queue_stack.addWidget(self.table)
+        root.addWidget(self.queue_stack, stretch=2)
+
+        # --- setup: collapsed summary bar, expandable panel
+        self.setup_bar = QWidget()
+        self.setup_bar.setObjectName("setup_bar")
+        setup_bar_layout = QHBoxLayout(self.setup_bar)
+        setup_bar_layout.setContentsMargins(12, 6, 12, 6)
+        self.setup_summary = QLabel("")
+        self.setup_summary.setObjectName("setup_summary")
+        setup_bar_layout.addWidget(self.setup_summary, stretch=1)
+        self.setup_toggle = QPushButton(tr("Change…"))
+        self.setup_toggle.clicked.connect(self._toggle_setup_panel)
+        setup_bar_layout.addWidget(self.setup_toggle)
+        root.addWidget(self.setup_bar)
+
+        self.setup_panel = QWidget()
+        options_row = QHBoxLayout(self.setup_panel)
+        options_row.setContentsMargins(0, 0, 0, 0)
+        options_row.setSpacing(20)
         lists_box = QGroupBox(tr("Word lists"))
         lists_layout = QVBoxLayout(lists_box)
         self.russian_check = QCheckBox(tr("Russian list"))
@@ -177,19 +266,27 @@ class MainWindow(QMainWindow):
         self.plan = PassPlanWidget()
         self.plan.set_engines(self._settings["plan"])
         self.plan.changed.connect(self._refresh_warnings)
+        self.plan.changed.connect(self._update_setup_summary)
         options_row.addWidget(self.plan, stretch=2)
-        root.addLayout(options_row)
+        self.setup_panel.setVisible(False)
+        root.addWidget(self.setup_panel)
+        for check in (self.russian_check, self.english_check):
+            check.toggled.connect(self._update_setup_summary)
+            check.toggled.connect(self._refresh_warnings)
+        self._update_setup_summary()
 
         self.warnings_label = QLabel("")
+        self.warnings_label.setObjectName("warnings_label")
         self.warnings_label.setWordWrap(True)
-        self.warnings_label.setStyleSheet("color: #b8860b;")
         self.warnings_label.setVisible(False)
         root.addWidget(self.warnings_label)
         self._refresh_warnings()
 
         # --- run controls + live status
         run_row = QHBoxLayout()
+        run_row.setSpacing(8)
         self.start_button = QPushButton(tr("Start"))
+        self.start_button.setProperty("primary", True)
         self.start_button.clicked.connect(lambda: self._start())
         self.cancel_button = QPushButton(tr("Cancel"))
         self.cancel_button.clicked.connect(self._cancel)
@@ -199,20 +296,39 @@ class MainWindow(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
         run_row.addWidget(self.progress_bar, stretch=1)
+        self.percent_label = QLabel("")
+        self.percent_label.setProperty("muted", True)
+        run_row.addWidget(self.percent_label)
         root.addLayout(run_row)
 
         self.status_label = QLabel(tr("Ready."))
+        self.status_label.setObjectName("status_label")
         root.addWidget(self.status_label)
 
+        self.log_toggle = QToolButton()
+        self.log_toggle.setText(tr("Details"))
+        self.log_toggle.setCheckable(True)
+        self.log_toggle.setArrowType(Qt.RightArrow)
+        self.log_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.log_toggle.toggled.connect(self._toggle_log)
+        root.addWidget(self.log_toggle)
         self.log = QPlainTextEdit()
+        self.log.setObjectName("log_pane")
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(5000)
-        root.addWidget(self.log, stretch=1)
+        self.log.setVisible(False)
+        self.log.setMaximumHeight(180)
+        root.addWidget(self.log)
 
         # --- assemble tabs
         self.tabs.addTab(queue_tab, tr("Queue"))
-        self.wordlists_tab = WordListsTab(self._wordlist_paths)
+        self.wordlists_tab = WordListsTab(self._wordlist_paths,
+                                          self._settings)
+        self.wordlists_tab.dirtyChanged.connect(
+            lambda dirty: self.tabs.setTabText(
+                1, tr("Word Lists") + (" •" if dirty else "")))
         self.tabs.addTab(self.wordlists_tab, tr("Word Lists"))
         self.transcript_tab = TranscriptTab()
         self.tabs.addTab(self.transcript_tab, tr("Transcript"))
@@ -225,11 +341,35 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.settings_tab, tr("Settings"))
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
-    # ---------------------------------------------------------- menu / tabs
-    def _build_menu(self):
-        tools = self.menuBar().addMenu(tr("Tools"))
-        self.watch_action = tools.addAction(tr("Watch Folder…"),
-                                            self._toggle_watch)
+    # ---------------------------------------------------------- queue chrome
+    def _toggle_setup_panel(self):
+        show = not self.setup_panel.isVisible()
+        self.setup_panel.setVisible(show)
+        self.setup_toggle.setText(tr("Hide") if show else tr("Change…"))
+
+    def _update_setup_summary(self):
+        lists = []
+        if self.russian_check.isChecked():
+            lists.append(tr("Russian"))
+        if self.english_check.isChecked():
+            lists.append(tr("English"))
+        engines = self.plan.engines()
+        plan_text = " → ".join(
+            "GigaAM" if e == "gigaam" else "Whisper" for e in engines) \
+            or tr("empty")
+        self.setup_summary.setText(
+            f"{tr('Word lists')}: {', '.join(lists) or tr('none')} · "
+            f"{tr('Pass plan')}: {plan_text}")
+
+    def _toggle_log(self, checked: bool):
+        self.log.setVisible(checked)
+        self.log_toggle.setArrowType(
+            Qt.DownArrow if checked else Qt.RightArrow)
+
+    def _update_queue_stack(self):
+        self.queue_stack.setCurrentWidget(
+            self.table if self.table.rowCount() else
+            self.queue_stack.widget(0))
 
     def _on_tab_changed(self, index: int):
         widget = self.tabs.widget(index)
@@ -245,7 +385,7 @@ class MainWindow(QMainWindow):
             self._watch_timer.stop()
             self._watch_dir = None
             self._watch_seen = {}
-            self.watch_action.setText(tr("Watch Folder…"))
+            self.watch_button.setText(tr("Watch Folder…"))
             self.status_label.setText(tr("Ready."))
             return
         d = QFileDialog.getExistingDirectory(
@@ -261,7 +401,7 @@ class MainWindow(QMainWindow):
         for state in self._watch_seen.values():
             state[1] = True
         self._watch_timer.start()
-        self.watch_action.setText(tr("Stop Watching"))
+        self.watch_button.setText(tr("Stop Watching"))
         self.status_label.setText(f"Watching {d} — new media files are "
                                   "queued and processed automatically.")
         self._append_log(f"Watching folder: {d}")
@@ -287,6 +427,7 @@ class MainWindow(QMainWindow):
             status = self.table.item(row, COL_STATUS).text()
             if not status.startswith(tr("queued")):
                 self.table.removeRow(row)
+        self._update_queue_stack()
 
     # ---------------------------------------------------------- queue
     def _items(self):
@@ -310,6 +451,7 @@ class MainWindow(QMainWindow):
         dur_item.setData(Qt.UserRole, item.duration)
         self.table.setItem(row, COL_DURATION, dur_item)
         self.table.setItem(row, COL_STATUS, QTableWidgetItem(status))
+        self._update_queue_stack()
 
     def _add_files(self, paths):
         existing = {it.path for it in self._items() if it.kind == "file"}
@@ -351,6 +493,7 @@ class MainWindow(QMainWindow):
         for row in sorted({i.row() for i in self.table.selectedIndexes()},
                           reverse=True):
             self.table.removeRow(row)
+        self._update_queue_stack()
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls() or event.mimeData().hasText():
@@ -397,12 +540,23 @@ class MainWindow(QMainWindow):
             import subprocess
             subprocess.Popen(["explorer", "/select,", str(Path(out))])
         elif chosen is act_review:
-            ReviewDialog(rev, self).exec()
+            self._open_review(rev)
+
+    def _open_review(self, path):
+        # non-modal: the queue stays visible/alive while reviewing
+        dialog = ReviewDialog(path, self)
+        dialog.setWindowModality(Qt.NonModal)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        self._review_windows.append(dialog)
+        dialog.destroyed.connect(
+            lambda *_: self._review_windows.remove(dialog)
+            if dialog in self._review_windows else None)
+        dialog.show()
 
     def _on_row_double_clicked(self, item):
         path = self._review_path_for_row(item.row())
         if path and Path(path).exists():
-            ReviewDialog(path, self).exec()
+            self._open_review(path)
         else:
             QMessageBox.information(
                 self, "WordMute",
@@ -415,7 +569,7 @@ class MainWindow(QMainWindow):
             "WordMute review (*.wordmute.json);;All files (*)")
         if path:
             try:
-                ReviewDialog(path, self).exec()
+                self._open_review(path)
             except Exception as exc:
                 QMessageBox.warning(self, "WordMute",
                                     f"Could not open review file: {exc}")
@@ -456,6 +610,14 @@ class MainWindow(QMainWindow):
         warnings = self._current_warnings()
         self.warnings_label.setText("\n".join(f"⚠ {w}" for w in warnings))
         self.warnings_label.setVisible(bool(warnings))
+        severe = any("will fail" in w for w in warnings)
+        if self.warnings_label.property("severity") != \
+                ("error" if severe else None):
+            self.warnings_label.setProperty(
+                "severity", "error" if severe else None)
+            style = self.warnings_label.style()
+            style.unpolish(self.warnings_label)
+            style.polish(self.warnings_label)
 
     # ---------------------------------------------------------- run
     def _selected_wordlists(self):
@@ -568,9 +730,12 @@ class MainWindow(QMainWindow):
         if running:
             self.progress_bar.setRange(0, self._total_files * 100)
             self.progress_bar.setValue(0)
+            self.percent_label.setText("0%")
         else:
             self.progress_bar.setRange(0, 1)
             self.progress_bar.setValue(0)
+            self.percent_label.setText("")
+            self.tabs.setTabText(0, tr("Queue"))
 
     # ---------------------------------------------------------- progress
     def _update_overall_progress(self):
@@ -580,6 +745,10 @@ class MainWindow(QMainWindow):
             / max(self._pass_total, 1)
         value = self._done_files * 100 + int(min(pass_fraction, 0.99) * 100)
         self.progress_bar.setValue(value)
+        pct = int(value / (self._total_files * 100) * 100)
+        self.percent_label.setText(f"{pct}%")
+        # progress stays visible from any tab
+        self.tabs.setTabText(0, f"{tr('Queue')} · {pct}%")
 
     def _set_row_status(self, text: str):
         if self._current_row is not None:

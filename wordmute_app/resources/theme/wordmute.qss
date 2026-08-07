@@ -1,0 +1,318 @@
+/* ============================================================
+   WordMute — Nocturne dark theme (QSS)
+   ------------------------------------------------------------
+   Apply in wordmute_app/main.py:
+
+       app.setStyle("Fusion")                     # predictable QSS base
+       qss = Path("wordmute.qss").read_text(encoding="utf-8")
+       app.setStyleSheet(qss)
+
+   Icon urls below are relative to the process working directory;
+   ship the icons/ folder next to the .qss and load with
+   os.chdir or rewrite url(...) to absolute/resource paths at load.
+
+   Font: Inter (bundle Inter-Regular/Medium/SemiBold .ttf and
+   register via QFontDatabase.addApplicationFont). Falls back to
+   Segoe UI.
+
+   Layout metrics (set in code, not QSS — the "room to breathe" pass):
+     tab-page contentsMargins 20,16,20,16 · vertical spacing 12
+     between control rows, 20 between sections · table row height 34
+     (verticalHeader().setDefaultSectionSize) · button rows spacing 8
+
+   Tokens (Nocturne):
+     bg          #161826      surface     #232532
+     text        #e9e9ed      text-muted  #9397ab
+     accent      #9184d9      accent-300  #d2cefd
+     accent-400  #b5abfc      accent-800  #423a6a
+     accent-900  #2b2741      neutral-700 #595d6c
+     neutral-800 #3f424d      neutral-900 #292b31
+   Semantic (derived on the same OKLCH lightness scale, low chroma):
+     warning #cdb380 (text #e6d5ae)   error #cd8484 (text #eab7b7)
+   ============================================================ */
+
+* {
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-size: 13px;
+  color: #e9e9ed;
+  selection-background-color: #423a6a;
+  selection-color: #f5f4ff;
+}
+
+QMainWindow, QDialog, QWidget { background-color: #161826; }
+
+QLabel { background: transparent; }
+
+/* ---- Muted / secondary text: label.setProperty("muted", True) ---- */
+QLabel[muted="true"] { color: #9397ab; }
+
+/* ---- Buttons — outlined, never filled (Nocturne) ---- */
+QPushButton {
+  background: transparent;
+  border: 1px solid #3f424d;
+  border-radius: 6px;
+  padding: 7px 18px;
+  min-height: 24px;
+}
+QPushButton:hover  { background: #292b31; border-color: #595d6c; }
+QPushButton:pressed{ background: #3f424d; }
+QPushButton:focus  { border-color: #b5abfc; }
+QPushButton:disabled {
+  color: rgba(233,233,237,0.45);
+  border-color: rgba(63,66,77,0.6);
+}
+
+/* Primary action: button.setProperty("primary", True)  (Start, Re-render,
+   Validate & Save, Add best quality, OK).  Accent outline, tinted hover. */
+QPushButton[primary="true"] { border-color: #9184d9; color: #d2cefd; }
+QPushButton[primary="true"]:hover   { background: #2b2741; }
+QPushButton[primary="true"]:pressed { background: #423a6a; }
+QPushButton[primary="true"]:disabled {
+  border-color: rgba(145,132,217,0.35); color: rgba(210,206,253,0.4);
+}
+
+/* Destructive: button.setProperty("danger", True)  (Delete, Clear,
+   Remove Selected, Delete GigaAM caches). */
+QPushButton[danger="true"] { border-color: #6c4a4a; color: #eab7b7; }
+QPushButton[danger="true"]:hover   { background: rgba(205,132,132,0.10); border-color: #cd8484; }
+QPushButton[danger="true"]:pressed { background: rgba(205,132,132,0.18); }
+
+/* ---- Text inputs ---- */
+QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+  background: #232532;
+  border: 1px solid #3f424d;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover { border-color: #595d6c; }
+QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus,
+QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus { border-color: #9184d9; }
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {
+  color: rgba(233,233,237,0.45); background: #1c1e2b;
+}
+QLineEdit[placeholderText] { }  /* placeholder color set via QPalette.PlaceholderText */
+
+/* ---- Combo box ---- */
+QComboBox { padding-right: 26px; }
+QComboBox::drop-down { border: none; width: 24px; }
+QComboBox::down-arrow { image: url(icons/chevron-down.svg); width: 12px; height: 12px; }
+QComboBox QAbstractItemView {
+  background: #232532;
+  border: 1px solid #595d6c;
+  border-radius: 6px;
+  padding: 4px;
+  outline: none;
+}
+QComboBox QAbstractItemView::item { padding: 6px 10px; border-radius: 4px; }
+QComboBox QAbstractItemView::item:selected { background: #423a6a; }
+
+/* ---- Spin boxes ---- */
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+  background: transparent; border: none; width: 20px;
+}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow   { image: url(icons/chevron-up.svg);   width: 10px; height: 10px; }
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow{ image: url(icons/chevron-down.svg); width: 10px; height: 10px; }
+QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover { background: #292b31; }
+
+/* ---- Check boxes / radios ---- */
+QCheckBox, QRadioButton { background: transparent; spacing: 8px; }
+QCheckBox::indicator, QRadioButton::indicator { width: 16px; height: 16px; }
+QCheckBox::indicator {
+  border: 1px solid #595d6c; border-radius: 4px; background: #232532;
+}
+QCheckBox::indicator:hover { border-color: #9184d9; }
+QCheckBox::indicator:checked {
+  background: #9184d9; border-color: #9184d9;
+  image: url(icons/check.svg);
+}
+QCheckBox::indicator:disabled { border-color: #3f424d; background: #1c1e2b; }
+QRadioButton::indicator {
+  border: 1px solid #595d6c; border-radius: 8px; background: #232532;
+}
+QRadioButton::indicator:hover { border-color: #9184d9; }
+QRadioButton::indicator:checked {
+  border-color: #9184d9; image: url(icons/radio-dot.svg);
+}
+
+/* ---- Group boxes — quiet frames, muted small-caps-style title ---- */
+QGroupBox {
+  border: 1px solid #3f424d;
+  border-radius: 8px;
+  margin-top: 14px;
+  padding: 16px 16px 12px 16px;
+  background: transparent;
+}
+QGroupBox::title {
+  subcontrol-origin: margin;
+  left: 10px; padding: 0 4px;
+  color: #9397ab;
+  background: #161826;
+}
+
+/* ---- Tables ---- */
+QTableView, QTableWidget, QTreeView, QListView, QListWidget {
+  background: #161826;
+  alternate-background-color: #1b1d2c;
+  border: 1px solid #3f424d;
+  border-radius: 8px;
+  gridline-color: rgba(233,233,237,0.07);
+  outline: none;
+}
+QTableView::item, QTableWidget::item { padding: 6px 10px; }
+QTableView::item:selected, QTableWidget::item:selected,
+QListView::item:selected, QTreeView::item:selected {
+  background: #2b2741; color: #e9e9ed;
+}
+QTableView::item:hover, QTableWidget::item:hover { background: #1f2130; }
+QHeaderView { background: transparent; }
+QHeaderView::section {
+  background: #161826;
+  color: #9397ab;
+  border: none;
+  border-bottom: 1px solid #3f424d;
+  padding: 8px 10px;
+  font-weight: 500;
+}
+QHeaderView::section:vertical {
+  border-bottom: none; border-right: 1px solid #3f424d; color: #75798c;
+}
+QTableCornerButton::section { background: #161826; border: none; border-bottom: 1px solid #3f424d; }
+
+/* ---- Progress bars ---- */
+QProgressBar {
+  background: #292b31;
+  border: none;
+  border-radius: 3px;
+  max-height: 6px;
+  text-align: right;   /* percent text drawn by neighbouring label instead */
+}
+QProgressBar::chunk { background: #9184d9; border-radius: 3px; }
+/* Thin in-cell row progress (delegate/cell-widget): same rules apply. */
+
+/* ---- Scroll bars — slim, quiet ---- */
+QScrollBar:vertical   { background: transparent; width: 10px; margin: 2px; }
+QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }
+QScrollBar::handle {
+  background: #3f424d; border-radius: 4px; min-height: 24px; min-width: 24px;
+}
+QScrollBar::handle:hover { background: #595d6c; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+
+/* ---- Menus / tooltips ---- */
+QMenu {
+  background: #232532;
+  border: 1px solid #595d6c;
+  border-radius: 8px;   /* needs Qt.WA_TranslucentBackground on the menu, else corners square */
+  padding: 5px;
+}
+QMenu::item { padding: 7px 26px 7px 14px; border-radius: 4px; }
+QMenu::item:selected { background: #423a6a; }
+QMenu::item:disabled { color: rgba(233,233,237,0.4); }
+QMenu::separator { height: 1px; background: rgba(233,233,237,0.12); margin: 5px 8px; }
+QToolTip {
+  background: #232532; color: #e9e9ed;
+  border: 1px solid #595d6c; border-radius: 4px; padding: 5px 8px;
+}
+
+/* ---- Tabs — quiet text tabs with an accent underline ---- */
+QTabWidget::pane { border: none; border-top: 1px solid #292b31; top: -1px; }
+QTabBar { background: transparent; }
+QTabBar::tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 18px;
+  margin-right: 2px;
+  color: #9397ab;
+}
+QTabBar::tab:hover    { color: #e9e9ed; }
+QTabBar::tab:selected { color: #e9e9ed; border-bottom: 2px solid #9184d9; }
+QTabBar::tab:disabled { color: rgba(147,151,171,0.4); }
+
+/* ---- Splitter ---- */
+QSplitter::handle { background: #3f424d; }
+QSplitter::handle:hover { background: #9184d9; }
+QSplitter::handle:vertical { height: 3px; }
+QSplitter::handle:horizontal { width: 3px; }
+
+/* ============================================================
+   App-specific hooks (objectName / property targets)
+   ============================================================ */
+
+/* Warning banner (main window): warnings_label — quiet amber, never yellow-flood */
+QLabel#warnings_label {
+  background: rgba(205,179,128,0.10);
+  border: 1px solid rgba(205,179,128,0.45);
+  border-radius: 6px;
+  color: #e6d5ae;
+  padding: 7px 12px;
+}
+/* Error variant: label.setProperty("severity", "error") + re-polish */
+QLabel#warnings_label[severity="error"] {
+  background: rgba(205,132,132,0.10);
+  border-color: rgba(205,132,132,0.5);
+  color: #eab7b7;
+}
+
+/* Status line under the progress bar */
+QLabel#status_label { color: #9397ab; }
+
+/* Log pane — one step darker than the ground (shade, not a color) */
+QPlainTextEdit#log_pane {
+  background: #111322;
+  border: 1px solid #292b31;
+  color: #9397ab;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12px;
+}
+
+/* Header bar (proposed) — app title strip above the queue */
+QWidget#header_bar { background: #161826; border-bottom: 1px solid #292b31; }
+QLabel#app_title { font-size: 15px; font-weight: 500; letter-spacing: -0.2px; }
+
+/* Collapsed setup summary bar (proposed, main window) */
+QWidget#setup_bar {
+  background: #1b1d2c; border: 1px solid #3f424d; border-radius: 8px;
+}
+QLabel#setup_summary { color: #b2b6ca; }
+
+/* Empty-queue placeholder (proposed) */
+QLabel#empty_state_title { font-size: 16px; font-weight: 500; color: #e9e9ed; }
+QLabel#empty_state_body  { color: #9397ab; }
+
+/* Review dialog summary strip */
+QLabel#review_summary { color: #b2b6ca; }
+
+/* Tester result view — the *-notation is data: keep it monospace */
+QPlainTextEdit#tester_results, QListWidget#tester_results {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+}
+
+/* Word-list editor (Word Lists tab) — user data, monospace, roomy */
+QPlainTextEdit#wordlist_editor {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 13px;
+  padding: 10px 12px;
+  line-height: 150%;
+}
+/* Entry-syntax hint line + entries count: muted */
+QLabel#syntax_hint, QLabel#entries_count { color: #9397ab; }
+
+/* GigaAM wizard step cards (proposed): QFrame with property step-card */
+QFrame[stepCard="true"] {
+  background: #232532; border: 1px solid #3f424d; border-radius: 8px;
+}
+QLabel[stepNumber="true"] {
+  color: #d2cefd; background: #2b2741;
+  border: 1px solid #423a6a; border-radius: 11px;
+  min-width: 22px; max-width: 22px; min-height: 22px; max-height: 22px;
+  qproperty-alignment: AlignCenter;
+}
+
+/* Success/ok inline indicators: label.setProperty("state", "ok"|"warn"|"err") */
+QLabel[state="ok"]   { color: #d2cefd; }
+QLabel[state="warn"] { color: #e6d5ae; }
+QLabel[state="err"]  { color: #eab7b7; }
