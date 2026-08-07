@@ -1,0 +1,11 @@
+# GUI
+PySide6>=6.7
+
+# Processing engine dependencies (already present on the dev machine;
+# the installer will handle these for end users — see milestone 8):
+#   faster-whisper, nvidia-cublas-cu12, nvidia-cudnn-cu12   (whisper)
+#   gigaam, torch (CUDA), pyannote.audio, torchcodec        (GigaAM)
+#   ffmpeg on PATH (static) + FFmpeg shared build           (mute / GigaAM)
+
+# Development
+pytest
