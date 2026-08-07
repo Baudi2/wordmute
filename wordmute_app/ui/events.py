@@ -47,4 +47,6 @@ def format_event(event: str, d: dict):
         return f"Downloaded -> {d['path']}"
     if event == "review_saved":
         return f"Review data -> {d['path']}"
+    if event == "item_output":
+        return f"Output -> {d['path']}"
     return None

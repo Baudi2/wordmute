@@ -45,6 +45,10 @@ from .worker import ProcessWorker
 
 COL_FILE, COL_DURATION, COL_STATUS = 0, 1, 2
 
+# data roles on the status item
+REVIEW_ROLE = Qt.UserRole          # path of the review sidecar
+OUTPUT_ROLE = Qt.UserRole + 1      # path of the produced output file
+
 
 def fmt_duration(sec) -> str:
     if sec is None:
@@ -133,6 +137,8 @@ class MainWindow(QMainWindow):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.itemDoubleClicked.connect(self._on_row_double_clicked)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._table_menu)
         root.addWidget(self.table, stretch=2)
 
         # --- word lists + pass plan
@@ -356,9 +362,36 @@ class MainWindow(QMainWindow):
         if web:
             self._add_url(web[0])
 
-    # ---------------------------------------------------------- review
+    # ---------------------------------------------------------- row context
     def _review_path_for_row(self, row: int):
-        return self.table.item(row, COL_STATUS).data(Qt.UserRole)
+        return self.table.item(row, COL_STATUS).data(REVIEW_ROLE)
+
+    def _output_path_for_row(self, row: int):
+        return self.table.item(row, COL_STATUS).data(OUTPUT_ROLE)
+
+    def _table_menu(self, pos):
+        row = self.table.rowAt(pos.y())
+        if row < 0:
+            return
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        out = self._output_path_for_row(row)
+        out_ok = bool(out and Path(out).exists())
+        act_open = menu.addAction(tr("Open output"))
+        act_open.setEnabled(out_ok)
+        act_show = menu.addAction(tr("Show output in folder"))
+        act_show.setEnabled(out_ok)
+        rev = self._review_path_for_row(row)
+        act_review = menu.addAction(tr("Review…"))
+        act_review.setEnabled(bool(rev and Path(rev).exists()))
+        chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
+        if chosen is act_open:
+            os.startfile(out)
+        elif chosen is act_show:
+            import subprocess
+            subprocess.Popen(["explorer", "/select,", str(Path(out))])
+        elif chosen is act_review:
+            ReviewDialog(rev, self).exec()
 
     def _on_row_double_clicked(self, item):
         path = self._review_path_for_row(item.row())
@@ -560,7 +593,12 @@ class MainWindow(QMainWindow):
         elif event == "review_saved":
             if self._current_row is not None:
                 self.table.item(self._current_row, COL_STATUS).setData(
-                    Qt.UserRole, data["path"])
+                    REVIEW_ROLE, data["path"])
+        elif event == "item_output":
+            if self._current_row is not None:
+                status_item = self.table.item(self._current_row, COL_STATUS)
+                status_item.setData(OUTPUT_ROLE, data["path"])
+                status_item.setToolTip(data["path"])
         elif event == "pass_start":
             self._pass_n = data["n"]
             self._pass_engine = data["engine"]
@@ -649,12 +687,17 @@ class MainWindow(QMainWindow):
     def _on_file_finished(self, row: int, ok: bool, error: str):
         self._done_files += 1
         self._pass_pct = 0.0
-        has_review = ok and self._review_path_for_row(row)
-        self.table.item(row, COL_STATUS).setText(
-            (tr("done — double-click to review") if has_review
-             else tr("done"))
-            if ok else (tr("cancelled") if error == "cancelled"
-                        else f"error: {error}"))
+        if ok:
+            text = tr("done")
+            out = self._output_path_for_row(row)
+            if out:
+                text += f" → {Path(out).name}"
+            if self._review_path_for_row(row):
+                text += " — " + tr("double-click to review")
+        else:
+            text = (tr("cancelled") if error == "cancelled"
+                    else f"error: {error}")
+        self.table.item(row, COL_STATUS).setText(text)
         if not ok and error != "cancelled":
             self._append_log(f"Error: {error}")
         self._update_overall_progress()

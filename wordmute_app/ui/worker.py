@@ -130,6 +130,9 @@ class ProcessWorker(QThread):
                     self.file_finished.emit(i, False, str(exc))
                 else:
                     done += 1
+                    if out.exists():  # nothing muted -> no output file
+                        self.engine_event.emit("item_output",
+                                               {"path": str(out)})
                     if self._records:  # something was muted -> reviewable
                         rp = review.save_review(path, out, self._options.pad,
                                                 self._records,

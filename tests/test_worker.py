@@ -96,6 +96,26 @@ def test_reporter_restored_after_run(qapp, tmp_path, monkeypatch):
     assert engine._reporter is engine._default_reporter
 
 
+def test_item_output_event_carries_final_path(qapp, tmp_path, monkeypatch):
+    inp = tmp_path / "v.mp4"
+    inp.write_bytes(b"x")
+    events = []
+    worker, log = make_worker([inp], monkeypatch)
+    worker.engine_event.connect(
+        lambda e, d: events.append(d) if e == "item_output" else None)
+    worker.run()
+    assert events == [{"path": str(tmp_path / "v.clean.mp4")}]
+
+
+def test_no_output_event_when_nothing_muted(qapp, tmp_path, monkeypatch):
+    inp = tmp_path / "v.mp4"
+    inp.write_bytes(b"x")
+    worker, log = make_worker([inp], monkeypatch,
+                              words=[{"w": "мир", "s": 0.0, "e": 0.5}])
+    worker.run()
+    assert "item_output" not in log["events"]
+
+
 def test_review_sidecar_written_with_pass_info(qapp, tmp_path, monkeypatch):
     from wordmute_app.core import review
 
