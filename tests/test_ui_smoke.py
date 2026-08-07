@@ -87,7 +87,26 @@ def test_warning_bar_cuda_without_gpu(qapp, tmp_path, monkeypatch):
     assert "will fail" in w.warnings_label.text()
 
 
-def test_plan_widget_add_remove_reorder(qapp):
+def test_add_url_button_click_opens_dialog_with_empty_url(qapp, tmp_path,
+                                                          monkeypatch):
+    # regression: clicked(checked) used to leak False into the url arg
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.ui import main_window as mw
+
+    opened = []
+
+    class FakeDialog:
+        def __init__(self, parent=None, url=""):
+            assert isinstance(url, str), f"url must be str, got {url!r}"
+            opened.append(url)
+
+        def exec(self):
+            return 0
+
+    monkeypatch.setattr(mw, "AddUrlDialog", FakeDialog)
+    w = mw.MainWindow()
+    w.add_url_button.click()
+    assert opened == [""]
     from wordmute_app.ui.plan_widget import PassPlanWidget
 
     p = PassPlanWidget()

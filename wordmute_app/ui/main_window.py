@@ -96,8 +96,9 @@ class MainWindow(QMainWindow):
         self.add_button.clicked.connect(self._pick_files)
         self.add_folder_button = QPushButton(tr("Add Folder…"))
         self.add_folder_button.clicked.connect(self._pick_folder)
+        # lambda: clicked(checked) must not leak its bool into url=
         self.add_url_button = QPushButton(tr("Add URL…"))
-        self.add_url_button.clicked.connect(self._add_url)
+        self.add_url_button.clicked.connect(lambda: self._add_url())
         self.remove_button = QPushButton(tr("Remove Selected"))
         self.remove_button.clicked.connect(self._remove_selected)
         self.review_button = QPushButton(tr("Review…"))
@@ -314,6 +315,8 @@ class MainWindow(QMainWindow):
                          status=f"{tr('queued')} ({item.format_label})")
 
     def _add_url(self, url: str = ""):
+        if not isinstance(url, str):  # a stray signal bool must never win
+            url = ""
         dialog = AddUrlDialog(self, url=url)
         if dialog.exec():
             self._add_url_row(dialog.result_item())
