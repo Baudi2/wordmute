@@ -66,6 +66,6 @@ by design (обожаю, чудом, верю…). The editor runs tidy
 4. ✅ yt-dlp URL flow (format picker → download → pipeline)
 5. ✅ Review screen (interval sidecar, snippet playback, un-mute, re-render)
 6. ✅ GigaAM onboarding wizard (HF token) + GPU detection/warnings
-7. Extras: word tester, transcript/SRT, beep mode, watch folder,
-   model manager, history, RU/EN UI
+7. ✅ Extras: word tester, transcript/SRT, beep mode, watch folder,
+   model manager, history, RU/EN UI (Tools menu)
 8. Packaging (PyInstaller + Inno Setup) + licensing checklist

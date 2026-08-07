@@ -32,6 +32,9 @@ DEFAULT_SETTINGS = {
     "output_mode": "beside",   # "beside" = next to input, or "folder"
     "output_dir": "",
     "download_dir": "",        # empty = default (Downloads\WordMute)
+    "beep_hz": 0,              # 0 = mute with silence
+    "ui_language": "en",       # interface language: en | ru
+    "watch_dir": "",           # last used watch folder
 }
 
 

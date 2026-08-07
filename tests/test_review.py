@@ -46,7 +46,7 @@ def test_apply_review_mutes_only_checked(tmp_path, monkeypatch):
 
     muted_calls = []
 
-    def fake_mute(media, intervals, out):
+    def fake_mute(media, intervals, out, beep_hz=None):
         muted_calls.append((media, list(intervals)))
         out.write_bytes(b"re-rendered")
 

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config
+from .i18n import tr
 
 WHISPER_MODELS = ["large-v3", "medium", "small", "base"]
 GIGAAM_MODELS = ["v3_e2e_rnnt", "v3_e2e_ctc", "v3_rnnt", "v3_ctc"]
@@ -26,7 +27,7 @@ GIGAAM_MODELS = ["v3_e2e_rnnt", "v3_e2e_ctc", "v3_rnnt", "v3_ctc"]
 class SettingsDialog(QDialog):
     def __init__(self, settings: dict, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Settings")
+        self.setWindowTitle(tr("Settings"))
         layout = QVBoxLayout(self)
         form = QFormLayout()
 
@@ -34,18 +35,18 @@ class SettingsDialog(QDialog):
         self.model_combo.addItems(WHISPER_MODELS)
         if settings["model"] in WHISPER_MODELS:
             self.model_combo.setCurrentText(settings["model"])
-        form.addRow("Whisper model:", self.model_combo)
+        form.addRow(tr("Whisper model:"), self.model_combo)
 
         self.gigaam_combo = QComboBox()
         self.gigaam_combo.addItems(GIGAAM_MODELS)
         if settings["gigaam_model"] in GIGAAM_MODELS:
             self.gigaam_combo.setCurrentText(settings["gigaam_model"])
-        form.addRow("GigaAM model:", self.gigaam_combo)
+        form.addRow(tr("GigaAM model:"), self.gigaam_combo)
 
         self.device_combo = QComboBox()
         self.device_combo.addItems(["cuda", "cpu"])
         self.device_combo.setCurrentText(settings["device"])
-        form.addRow("Device:", self.device_combo)
+        form.addRow(tr("Device:"), self.device_combo)
 
         self.pad_spin = QSpinBox()
         self.pad_spin.setRange(0, 1000)
@@ -54,12 +55,43 @@ class SettingsDialog(QDialog):
         self.pad_spin.setValue(settings["pad_ms"])
         self.pad_spin.setToolTip("Extra silence around each muted word; "
                                  "never bleeds into neighboring words.")
-        form.addRow("Mute padding:", self.pad_spin)
+        form.addRow(tr("Mute padding:"), self.pad_spin)
 
         self.language_edit = QLineEdit(settings["language"])
         self.language_edit.setToolTip("Whisper language code (e.g. ru, en); "
                                       "ignored by GigaAM passes.")
-        form.addRow("Whisper language:", self.language_edit)
+        form.addRow(tr("Whisper language:"), self.language_edit)
+
+        beep_row = QHBoxLayout()
+        self.beep_check = QCheckBox(tr("Beep instead of silence"))
+        self.beep_check.setChecked(bool(settings.get("beep_hz", 0)))
+        self.beep_check.setToolTip(
+            "Replace muted words with a beep tone instead of silence. "
+            "Note: files with several audio tracks keep only the first "
+            "one in beep mode.")
+        self.beep_spin = QSpinBox()
+        self.beep_spin.setRange(200, 4000)
+        self.beep_spin.setSingleStep(100)
+        self.beep_spin.setSuffix(" Hz")
+        self.beep_spin.setValue(settings.get("beep_hz", 0) or 1000)
+        self.beep_spin.setEnabled(self.beep_check.isChecked())
+        self.beep_check.toggled.connect(self.beep_spin.setEnabled)
+        beep_row.addWidget(self.beep_check)
+        beep_row.addWidget(self.beep_spin)
+        beep_row.addStretch()
+        form.addRow("", beep_row)
+
+        ui_lang_row = QHBoxLayout()
+        self.ui_language_combo = QComboBox()
+        self.ui_language_combo.addItem("English", "en")
+        self.ui_language_combo.addItem("Русский", "ru")
+        idx = self.ui_language_combo.findData(
+            settings.get("ui_language", "en"))
+        self.ui_language_combo.setCurrentIndex(max(idx, 0))
+        ui_lang_row.addWidget(self.ui_language_combo)
+        ui_lang_row.addWidget(QLabel(tr("(takes effect after restart)")))
+        ui_lang_row.addStretch()
+        form.addRow(tr("Interface language:"), ui_lang_row)
 
         self.vad_check = QCheckBox("Voice activity detection (whisper only)")
         self.vad_check.setChecked(settings["vad"])
@@ -125,4 +157,7 @@ class SettingsDialog(QDialog):
                             else "beside"),
             "output_dir": self.output_dir_edit.text().strip(),
             "download_dir": self.download_dir_edit.text().strip(),
+            "beep_hz": (self.beep_spin.value()
+                        if self.beep_check.isChecked() else 0),
+            "ui_language": self.ui_language_combo.currentData(),
         }

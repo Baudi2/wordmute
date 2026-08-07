@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from .i18n import tr
+
 ENGINE_LABELS = {"whisper": "Whisper", "gigaam": "GigaAM"}
 
 ENGINE_TIPS = {
@@ -30,7 +32,7 @@ class PassPlanWidget(QGroupBox):
     changed = Signal()
 
     def __init__(self, parent=None):
-        super().__init__("Pass plan", parent)
+        super().__init__(tr("Pass plan"), parent)
         layout = QHBoxLayout(self)
 
         self.list = QListWidget()
@@ -38,17 +40,17 @@ class PassPlanWidget(QGroupBox):
         layout.addWidget(self.list, stretch=1)
 
         buttons = QVBoxLayout()
-        self.add_whisper = QPushButton("Add Whisper pass")
+        self.add_whisper = QPushButton(tr("Add Whisper pass"))
         self.add_whisper.setToolTip(ENGINE_TIPS["whisper"])
         self.add_whisper.clicked.connect(lambda: self.add_pass("whisper"))
-        self.add_gigaam = QPushButton("Add GigaAM pass")
+        self.add_gigaam = QPushButton(tr("Add GigaAM pass"))
         self.add_gigaam.setToolTip(ENGINE_TIPS["gigaam"])
         self.add_gigaam.clicked.connect(lambda: self.add_pass("gigaam"))
-        self.remove_button = QPushButton("Remove")
+        self.remove_button = QPushButton(tr("Remove"))
         self.remove_button.clicked.connect(self.remove_selected)
-        self.up_button = QPushButton("Move Up")
+        self.up_button = QPushButton(tr("Move Up"))
         self.up_button.clicked.connect(lambda: self.move_selected(-1))
-        self.down_button = QPushButton("Move Down")
+        self.down_button = QPushButton(tr("Move Down"))
         self.down_button.clicked.connect(lambda: self.move_selected(1))
         for b in (self.add_whisper, self.add_gigaam, self.remove_button,
                   self.up_button, self.down_button):

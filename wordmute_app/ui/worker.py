@@ -7,7 +7,7 @@ at a time (the engine's reporter is module-global)."""
 
 from PySide6.QtCore import QThread, Signal
 
-from ..core import downloader, review
+from ..core import downloader, history, review
 from ..engine import wordmute as engine
 
 
@@ -84,6 +84,20 @@ class ProcessWorker(QThread):
         self.engine_event.emit("download_done", {"path": str(path)})
         return path
 
+    def _log_history(self, item, status: str, error: str, output=None):
+        try:
+            history.append_history({
+                "name": item.display_name,
+                "source": item.url if item.kind == "url" else str(item.path),
+                "output": str(output) if output else "",
+                "status": status,
+                "error": error,
+                "muted": len(self._records),
+                "plan": " -> ".join(f"{e}({m})" for e, m in self._plan),
+            })
+        except OSError:
+            pass  # history must never break processing
+
     def run(self):
         engine.set_reporter(self._report)
         done = 0
@@ -109,16 +123,20 @@ class ProcessWorker(QThread):
                     engine.process_file(path, out, self._wordlist,
                                         self._options, self._plan)
                 except (JobCancelled, downloader.DownloadCancelled):
+                    self._log_history(item, "cancelled", "")
                     self.file_finished.emit(i, False, "cancelled")
                 except Exception as exc:
+                    self._log_history(item, "error", str(exc))
                     self.file_finished.emit(i, False, str(exc))
                 else:
                     done += 1
                     if self._records:  # something was muted -> reviewable
                         rp = review.save_review(path, out, self._options.pad,
-                                                self._records)
+                                                self._records,
+                                                beep_hz=self._options.beep_hz)
                         self.engine_event.emit("review_saved",
                                                {"path": str(rp)})
+                    self._log_history(item, "ok", "", output=out)
                     self.file_finished.emit(i, True, "")
         finally:
             engine.set_reporter(None)

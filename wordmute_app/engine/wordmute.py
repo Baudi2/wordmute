@@ -340,25 +340,55 @@ def find_hits(words, exact, stems, phrases, subs, pad_ms):
 
 
 # ---------------------------------------------------------------- ffmpeg
-def mute(media: Path, intervals, out: Path):
-    filters = ",".join(
+def _silence_filters(intervals) -> str:
+    return ",".join(
         f"volume=enable='between(t,{s:.3f},{e:.3f})':volume=0"
         for s, e, _ in intervals
     )
+
+
+def _beep_filtergraph(intervals, beep_hz: int) -> str:
+    """Replace matched intervals with a beep tone: the original audio is
+    silenced there while a sine tone (silenced everywhere else) is mixed
+    in. amix halves levels, the trailing volume=2 restores them."""
+    gate = "+".join(f"between(t,{s:.3f},{e:.3f})" for s, e, _ in intervals)
+    return (f"[0:a]{_silence_filters(intervals)}[muted];"
+            f"sine=frequency={beep_hz}[tone];"
+            f"[tone]volume=enable='not({gate})':volume=0,volume=0.25[beep];"
+            f"[muted][beep]amix=inputs=2:duration=first:"
+            f"dropout_transition=0,volume=2[aout]")
+
+
+def mute(media: Path, intervals, out: Path, beep_hz=None):
+    filters = (_beep_filtergraph(intervals, beep_hz) if beep_hz
+               else _silence_filters(intervals))
     # filter list can be huge -> pass via script file (avoids cmd length limits)
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
                                      encoding="utf-8") as f:
         f.write(filters)
         script = f.name
+    if beep_hz:
+        # a filter_complex graph needs explicit maps; secondary audio
+        # tracks are not carried over in beep mode
+        io_args = [
+            "-filter_complex_script", script,
+            "-map", "0:v?", "-map", "[aout]", "-map", "0:s?",
+            "-c:v", "copy", "-c:s", "copy",
+            "-c:a", "aac", "-b:a", "192k",
+        ]
+    else:
+        io_args = [
+            "-map", "0",
+            "-c", "copy",
+            "-c:a", "aac", "-b:a", "192k",
+            "-filter_script:a", script,
+        ]
     cmd = [
         "ffmpeg", "-y",
         "-err_detect", "ignore_err",
         "-fflags", "+genpts+igndts+discardcorrupt",
         "-i", str(media),
-        "-map", "0",
-        "-c", "copy",
-        "-c:a", "aac", "-b:a", "192k",
-        "-filter_script:a", script,
+        *io_args,
         str(out),
     ]
     _emit("mute_start", count=len(intervals))
@@ -440,7 +470,7 @@ def process_file(inp: Path, out: Path, wordlist, args, plan) -> None:
             break
 
         tmp = out.parent / (out.stem + ".tmp" + out.suffix)
-        mute(current, intervals, tmp)
+        mute(current, intervals, tmp, beep_hz=getattr(args, "beep_hz", None))
         os.replace(tmp, out)
         # any cached transcript (from either engine) for the previous
         # version of the output is now stale
@@ -471,6 +501,10 @@ def main():
                     help="whisper language code; ignored for gigaam passes")
     ap.add_argument("--pad", type=int, default=100,
                     help="padding in ms around each muted word (default 100)")
+    ap.add_argument("--beep-hz", type=int, default=None,
+                    help="replace muted words with a beep tone of this "
+                         "frequency (e.g. 1000) instead of silence; "
+                         "note: beep mode keeps only the first audio track")
     ap.add_argument("--list-only", action="store_true",
                     help="print timestamps, don't produce files")
     ap.add_argument("--retranscribe", action="store_true",

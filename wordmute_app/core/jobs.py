@@ -38,6 +38,7 @@ class JobOptions:
     retranscribe: bool = False
     force_passes: bool = False
     no_vad: bool = False
+    beep_hz: int | None = None  # None/0 = mute with silence
 
 
 def _is_media(p: Path) -> bool:
@@ -58,6 +59,33 @@ def expand_inputs(paths) -> list:
         elif p.is_file() and _is_media(p):
             files.append(p)
     return files
+
+
+def scan_watch_dir(folder, seen: dict) -> list:
+    """One watch-folder poll. seen maps path -> [size, ready]; a file is
+    returned once, on the first scan where its size stopped changing
+    (so half-copied files are never picked up)."""
+    folder = Path(folder)
+    ready = []
+    if not folder.is_dir():
+        return ready
+    for f in sorted(folder.iterdir()):
+        if not (f.is_file() and _is_media(f)):
+            continue
+        try:
+            size = f.stat().st_size
+        except OSError:
+            continue
+        state = seen.get(str(f))
+        if state is None:
+            seen[str(f)] = [size, False]
+        elif not state[1]:
+            if state[0] == size:
+                state[1] = True
+                ready.append(f)
+            else:
+                state[0] = size
+    return ready
 
 
 def build_plan(engine_names, whisper_model: str, gigaam_model: str) -> list:

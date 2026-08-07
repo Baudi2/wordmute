@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from ..core import review
 from ..engine.wordmute import fmt_ts
+from .i18n import tr
 from .player import SnippetPlayer
 
 COL_MUTE, COL_START, COL_END, COL_PASS, COL_ENGINE, COL_TEXT = range(6)
@@ -70,7 +71,8 @@ class ReviewDialog(QDialog):
 
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
-            ["Mute", "Start", "End", "Pass", "Engine", "Words"])
+            [tr("Mute"), "Start", "End", tr("Pass"), tr("Engine"),
+             tr("Words")])
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -90,16 +92,16 @@ class ReviewDialog(QDialog):
         layout.addWidget(self.status_label)
 
         buttons = QHBoxLayout()
-        self.stop_button = QPushButton("Stop playback")
+        self.stop_button = QPushButton(tr("Stop playback"))
         self.stop_button.clicked.connect(self._player.stop)
-        self.mute_all_button = QPushButton("Mute all")
+        self.mute_all_button = QPushButton(tr("Mute all"))
         self.mute_all_button.clicked.connect(lambda: self._set_all(True))
-        self.unmute_all_button = QPushButton("Unmute all")
+        self.unmute_all_button = QPushButton(tr("Unmute all"))
         self.unmute_all_button.clicked.connect(lambda: self._set_all(False))
-        self.rerender_button = QPushButton("Re-render output")
+        self.rerender_button = QPushButton(tr("Re-render output"))
         self.rerender_button.clicked.connect(self._rerender)
         self.rerender_button.setEnabled(self._source_ok)
-        close_button = QPushButton("Close")
+        close_button = QPushButton(tr("Close"))
         close_button.clicked.connect(self.close)
         buttons.addWidget(self.stop_button)
         buttons.addWidget(self.mute_all_button)

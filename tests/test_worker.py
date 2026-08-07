@@ -17,7 +17,7 @@ def make_worker(files, monkeypatch, words=None, fail_for=(), plan=None):
             raise RuntimeError("boom")
         return words
 
-    def fake_mute(media, intervals, out):
+    def fake_mute(media, intervals, out, beep_hz=None):
         Path(out).write_bytes(b"muted")
 
     monkeypatch.setattr(engine, "transcribe", fake_transcribe)

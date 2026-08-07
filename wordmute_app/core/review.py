@@ -22,7 +22,8 @@ def review_path_for(output) -> Path:
     return output.with_suffix(output.suffix + REVIEW_SUFFIX)
 
 
-def save_review(source, output, pad_ms: int, intervals: list) -> Path:
+def save_review(source, output, pad_ms: int, intervals: list,
+                beep_hz=None) -> Path:
     """intervals: [{"s", "e", "text", "pass", "engine", "muted"}, ...]"""
     path = review_path_for(output)
     data = {
@@ -30,6 +31,7 @@ def save_review(source, output, pad_ms: int, intervals: list) -> Path:
         "source": str(source),
         "output": str(output),
         "pad_ms": pad_ms,
+        "beep_hz": beep_hz,
         "intervals": intervals,
     }
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1),
@@ -59,7 +61,7 @@ def apply_review(data: dict) -> None:
              for iv in data["intervals"] if iv.get("muted", True)]
     tmp = output.parent / (output.stem + ".tmp" + output.suffix)
     if muted:
-        engine.mute(source, muted, tmp)
+        engine.mute(source, muted, tmp, beep_hz=data.get("beep_hz") or None)
     else:
         shutil.copyfile(source, tmp)
     os.replace(tmp, output)
@@ -68,4 +70,5 @@ def apply_review(data: dict) -> None:
         stale = output.with_suffix(output.suffix + suffix)
         if stale.exists():
             stale.unlink()
-    save_review(source, output, data.get("pad_ms", 100), data["intervals"])
+    save_review(source, output, data.get("pad_ms", 100), data["intervals"],
+                beep_hz=data.get("beep_hz"))

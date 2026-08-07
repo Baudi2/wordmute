@@ -5,7 +5,7 @@ import os
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -26,14 +26,20 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config, gpu
-from ..core.jobs import JobOptions, QueueItem, build_plan, expand_inputs
+from ..core.jobs import (JobOptions, QueueItem, build_plan, expand_inputs,
+                         scan_watch_dir)
 from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .events import format_event
 from .gigaam_wizard import GigaamWizard
+from .history_dialog import HistoryDialog
+from .i18n import tr
+from .models_dialog import ModelsDialog
 from .plan_widget import PassPlanWidget
 from .review_dialog import ReviewDialog
 from .settings_dialog import SettingsDialog
+from .tester_dialog import TesterDialog
+from .transcript_dialog import TranscriptDialog
 from .url_dialog import AddUrlDialog
 from .worker import ProcessWorker
 
@@ -73,6 +79,12 @@ class MainWindow(QMainWindow):
         self._settings = config.load_settings()
         self._gpus = gpu.detect_gpus()
         self._reset_run_state(total=0)
+        self._watch_dir = None
+        self._watch_seen = {}
+        self._watch_timer = QTimer(self)
+        self._watch_timer.setInterval(5000)
+        self._watch_timer.timeout.connect(self._watch_tick)
+        self._build_menu()
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -80,26 +92,26 @@ class MainWindow(QMainWindow):
 
         # --- file queue
         file_buttons = QHBoxLayout()
-        self.add_button = QPushButton("Add Files…")
+        self.add_button = QPushButton(tr("Add Files…"))
         self.add_button.clicked.connect(self._pick_files)
-        self.add_folder_button = QPushButton("Add Folder…")
+        self.add_folder_button = QPushButton(tr("Add Folder…"))
         self.add_folder_button.clicked.connect(self._pick_folder)
-        self.add_url_button = QPushButton("Add URL…")
+        self.add_url_button = QPushButton(tr("Add URL…"))
         self.add_url_button.clicked.connect(self._add_url)
-        self.remove_button = QPushButton("Remove Selected")
+        self.remove_button = QPushButton(tr("Remove Selected"))
         self.remove_button.clicked.connect(self._remove_selected)
-        self.review_button = QPushButton("Review…")
+        self.review_button = QPushButton(tr("Review…"))
         self.review_button.setToolTip(
             "Open a review file (saved next to each processed output) to "
             "listen to muted moments and un-mute false positives.")
         self.review_button.clicked.connect(self._pick_review)
-        self.settings_button = QPushButton("Settings…")
+        self.settings_button = QPushButton(tr("Settings…"))
         self.settings_button.clicked.connect(self._open_settings)
         file_buttons.addWidget(self.add_button)
         file_buttons.addWidget(self.add_folder_button)
         file_buttons.addWidget(self.add_url_button)
         file_buttons.addWidget(self.remove_button)
-        self.gigaam_setup_button = QPushButton("GigaAM Setup…")
+        self.gigaam_setup_button = QPushButton(tr("GigaAM Setup…"))
         self.gigaam_setup_button.setToolTip(
             "One-time Hugging Face setup required for GigaAM passes. "
             "Whisper works without any of this.")
@@ -111,7 +123,8 @@ class MainWindow(QMainWindow):
         root.addLayout(file_buttons)
 
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["File", "Duration", "Status"])
+        self.table.setHorizontalHeaderLabels(
+            [tr("File"), tr("Duration"), tr("Status")])
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(COL_FILE, QHeaderView.Stretch)
         header.setSectionResizeMode(COL_DURATION, QHeaderView.ResizeToContents)
@@ -123,20 +136,20 @@ class MainWindow(QMainWindow):
 
         # --- word lists + pass plan
         options_row = QHBoxLayout()
-        lists_box = QGroupBox("Word lists")
+        lists_box = QGroupBox(tr("Word lists"))
         lists_layout = QVBoxLayout(lists_box)
-        self.russian_check = QCheckBox("Russian list")
+        self.russian_check = QCheckBox(tr("Russian list"))
         self.russian_check.setChecked(self._settings["use_russian"])
-        self.english_check = QCheckBox("English list")
+        self.english_check = QCheckBox(tr("English list"))
         self.english_check.setChecked(self._settings["use_english"])
         lists_layout.addWidget(self.russian_check)
         lists_layout.addWidget(self.english_check)
-        self.force_passes_check = QCheckBox("Force all passes")
+        self.force_passes_check = QCheckBox(tr("Force all passes"))
         self.force_passes_check.setChecked(self._settings["force_passes"])
         self.force_passes_check.setToolTip(
             "Run every pass even if an earlier one finds nothing; the final "
             "pass re-transcribes completely fresh, ignoring caches.")
-        self.retranscribe_check = QCheckBox("Ignore cached transcripts")
+        self.retranscribe_check = QCheckBox(tr("Ignore cached transcripts"))
         self.retranscribe_check.setToolTip(
             "Re-transcribe from scratch on the first pass (one-off; "
             "not remembered).")
@@ -160,9 +173,9 @@ class MainWindow(QMainWindow):
 
         # --- run controls + live status
         run_row = QHBoxLayout()
-        self.start_button = QPushButton("Start")
-        self.start_button.clicked.connect(self._start)
-        self.cancel_button = QPushButton("Cancel")
+        self.start_button = QPushButton(tr("Start"))
+        self.start_button.clicked.connect(lambda: self._start())
+        self.cancel_button = QPushButton(tr("Cancel"))
         self.cancel_button.clicked.connect(self._cancel)
         self.cancel_button.setEnabled(False)
         run_row.addWidget(self.start_button)
@@ -173,13 +186,96 @@ class MainWindow(QMainWindow):
         run_row.addWidget(self.progress_bar, stretch=1)
         root.addLayout(run_row)
 
-        self.status_label = QLabel("Ready.")
+        self.status_label = QLabel(tr("Ready."))
         root.addWidget(self.status_label)
 
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(5000)
         root.addWidget(self.log, stretch=1)
+
+    # ---------------------------------------------------------- menu
+    def _build_menu(self):
+        tools = self.menuBar().addMenu(tr("Tools"))
+        tools.addAction(tr("Word Tester…"), self._open_tester)
+        tools.addAction(tr("Transcript / Subtitles…"), self._open_transcript)
+        tools.addAction(tr("Model Manager…"), self._open_models)
+        tools.addAction(tr("History…"), self._open_history)
+        tools.addSeparator()
+        self.watch_action = tools.addAction(tr("Watch Folder…"),
+                                            self._toggle_watch)
+
+    def _open_tester(self):
+        paths = self._selected_wordlists() or list(
+            self._wordlist_paths.values())
+        TesterDialog(paths, self).exec()
+
+    def _open_transcript(self):
+        from ..engine.wordmute import MEDIA_EXTS
+        exts = " ".join(f"*{e}" for e in sorted(MEDIA_EXTS))
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open media file", "", f"Media files ({exts})")
+        if not path:
+            return
+        try:
+            TranscriptDialog(path, self).exec()
+        except FileNotFoundError as exc:
+            QMessageBox.information(self, "WordMute", str(exc))
+
+    def _open_models(self):
+        ModelsDialog(self).exec()
+
+    def _open_history(self):
+        HistoryDialog(self).exec()
+
+    # ---------------------------------------------------------- watch folder
+    def _toggle_watch(self):
+        if self._watch_dir is not None:
+            self._watch_timer.stop()
+            self._watch_dir = None
+            self._watch_seen = {}
+            self.watch_action.setText(tr("Watch Folder…"))
+            self.status_label.setText(tr("Ready."))
+            return
+        d = QFileDialog.getExistingDirectory(
+            self, "Watch folder", self._settings.get("watch_dir", ""))
+        if not d:
+            return
+        self._watch_dir = Path(d)
+        self._settings["watch_dir"] = d
+        config.save_settings(self._settings)
+        # files already present are treated as known, not auto-queued
+        self._watch_seen = {}
+        scan_watch_dir(self._watch_dir, self._watch_seen)
+        for state in self._watch_seen.values():
+            state[1] = True
+        self._watch_timer.start()
+        self.watch_action.setText(tr("Stop Watching"))
+        self.status_label.setText(f"Watching {d} — new media files are "
+                                  "queued and processed automatically.")
+        self._append_log(f"Watching folder: {d}")
+
+    def _watch_tick(self):
+        if self._watch_dir is None:
+            return
+        new_files = scan_watch_dir(self._watch_dir, self._watch_seen)
+        if new_files:
+            self._add_files(new_files)
+            self._append_log("Watch folder: queued "
+                             + ", ".join(f.name for f in new_files))
+        if self._worker is None and self._queued_rows():
+            self._start(auto=True)
+
+    def _queued_rows(self) -> list:
+        return [r for r in range(self.table.rowCount())
+                if self.table.item(r, COL_STATUS).text()
+                .startswith(tr("queued"))]
+
+    def _clear_finished_rows(self):
+        for row in reversed(range(self.table.rowCount())):
+            status = self.table.item(row, COL_STATUS).text()
+            if not status.startswith(tr("queued")):
+                self.table.removeRow(row)
 
     # ---------------------------------------------------------- queue
     def _items(self):
@@ -189,7 +285,9 @@ class MainWindow(QMainWindow):
     def _row_duration(self, row: int):
         return self.table.item(row, COL_DURATION).data(Qt.UserRole)
 
-    def _insert_row(self, item: QueueItem, status: str = "queued"):
+    def _insert_row(self, item: QueueItem, status: str = None):
+        if status is None:
+            status = tr("queued")
         row = self.table.rowCount()
         self.table.insertRow(row)
         name_item = QTableWidgetItem(item.display_name)
@@ -212,7 +310,8 @@ class MainWindow(QMainWindow):
                                        duration=media_duration(p)))
 
     def _add_url_row(self, item: QueueItem):
-        self._insert_row(item, status=f"queued ({item.format_label})")
+        self._insert_row(item,
+                         status=f"{tr('queued')} ({item.format_label})")
 
     def _add_url(self, url: str = ""):
         dialog = AddUrlDialog(self, url=url)
@@ -330,22 +429,30 @@ class MainWindow(QMainWindow):
         self._pass_pct = 0.0
         self._asr_wall_start = None
 
-    def _start(self):
+    def _start(self, auto: bool = False):
+        if auto:
+            # watch-folder runs: keep only still-queued rows so earlier
+            # results are never reprocessed
+            self._clear_finished_rows()
         items = self._items()
         if not items:
-            QMessageBox.information(self, "WordMute", "Add some files first.")
+            if not auto:
+                QMessageBox.information(self, "WordMute",
+                                        "Add some files first.")
             return
         lists = self._selected_wordlists()
         if not lists:
-            QMessageBox.information(self, "WordMute",
-                                    "Select at least one word list.")
+            if not auto:
+                QMessageBox.information(self, "WordMute",
+                                        "Select at least one word list.")
             return
         engines = self.plan.engines()
         if not engines:
-            QMessageBox.information(self, "WordMute",
-                                    "Add at least one pass to the plan.")
+            if not auto:
+                QMessageBox.information(self, "WordMute",
+                                        "Add at least one pass to the plan.")
             return
-        if "gigaam" in engines and not self._gigaam_ready():
+        if not auto and "gigaam" in engines and not self._gigaam_ready():
             answer = QMessageBox.question(
                 self, "WordMute",
                 "The plan includes GigaAM passes, but the one-time Hugging "
@@ -366,6 +473,7 @@ class MainWindow(QMainWindow):
             no_vad=not s["vad"],
             retranscribe=self.retranscribe_check.isChecked(),
             force_passes=self.force_passes_check.isChecked(),
+            beep_hz=s.get("beep_hz", 0) or None,
         )
         plan = build_plan(engines, s["model"], s["gigaam_model"])
         output_dir = (Path(s["output_dir"])
@@ -373,7 +481,7 @@ class MainWindow(QMainWindow):
                       else None)
 
         for row in range(self.table.rowCount()):
-            self.table.item(row, COL_STATUS).setText("queued")
+            self.table.item(row, COL_STATUS).setText(tr("queued"))
 
         self._reset_run_state(total=len(items))
         self._pass_total = len(plan)
@@ -394,7 +502,7 @@ class MainWindow(QMainWindow):
     def _cancel(self):
         if self._worker is not None:
             self._worker.cancel()
-            self.status_label.setText("Cancelling…")
+            self.status_label.setText(tr("Cancelling…"))
             self.cancel_button.setEnabled(False)
 
     def _set_running(self, running: bool):
@@ -531,7 +639,7 @@ class MainWindow(QMainWindow):
         self._pass_n = 1
         self._pass_pct = 0.0
         self._asr_wall_start = None
-        self._set_row_status("processing…")
+        self._set_row_status(tr("processing…"))
         self.status_label.setText(f"Processing {name}…")
         self._append_log(f"\n=== {name} ===")
 
@@ -540,8 +648,9 @@ class MainWindow(QMainWindow):
         self._pass_pct = 0.0
         has_review = ok and self._review_path_for_row(row)
         self.table.item(row, COL_STATUS).setText(
-            ("done — double-click to review" if has_review else "done")
-            if ok else (error if error == "cancelled"
+            (tr("done — double-click to review") if has_review
+             else tr("done"))
+            if ok else (tr("cancelled") if error == "cancelled"
                         else f"error: {error}"))
         if not ok and error != "cancelled":
             self._append_log(f"Error: {error}")
