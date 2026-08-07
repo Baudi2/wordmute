@@ -42,9 +42,17 @@ def sort_formats(formats) -> list:
     return sorted(formats, key=key)
 
 
-def list_formats(url: str) -> dict:
+def _with_cookies(opts: dict, cookies) -> dict:
+    """cookies: path to a Netscape-format cookie file (as exported by
+    yt-dlp or browser extensions) for sites that need a login."""
+    if cookies:
+        opts["cookiefile"] = str(cookies)
+    return opts
+
+
+def list_formats(url: str, cookies=None) -> dict:
     import yt_dlp
-    with yt_dlp.YoutubeDL(_base_opts()) as ydl:
+    with yt_dlp.YoutubeDL(_with_cookies(_base_opts(), cookies)) as ydl:
         info = ydl.extract_info(url, download=False)
     if info.get("_type") == "playlist":
         raise ValueError(
@@ -101,7 +109,7 @@ def format_label(f) -> str:
 
 
 def download(url: str, format_spec: str, dest_dir,
-             progress=None, cancelled=None) -> Path:
+             progress=None, cancelled=None, cookies=None) -> Path:
     """Download url at the given format spec into dest_dir. progress
     receives yt-dlp progress-hook dicts; cancelled is polled between
     chunks and aborts with DownloadCancelled. Returns the final file
@@ -116,13 +124,13 @@ def download(url: str, format_spec: str, dest_dir,
         if progress and d.get("status") in ("downloading", "finished"):
             progress(d)
 
-    opts = _base_opts() | {
+    opts = _with_cookies(_base_opts() | {
         "format": format_spec or BEST_SPEC,
         "outtmpl": str(dest / "%(title).120B [%(id)s].%(ext)s"),
         "windowsfilenames": True,
         "overwrites": True,
         "progress_hooks": [hook],
-    }
+    }, cookies)
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)

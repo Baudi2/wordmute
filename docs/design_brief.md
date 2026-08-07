@@ -63,17 +63,21 @@ videos through it, often unattended/overnight.
 
 ## 4. Current screens (screenshots in docs/design/)
 
+The main window is a QTabWidget: Queue / Word Lists / Transcript /
+Models / History. Flow steps (Settings, Add URL, per-file Review,
+GigaAM setup) remain modal dialogs.
+
 | # | File | Screen | Purpose |
 |---|---|---|---|
-| 1 | 01_main_window.png | Main window | Queue table (File/Duration/Status), add files/folder/URL, word-list checkboxes, pass-plan builder, Start/Cancel + overall progress, status line, scrolling log pane. Tools menu: tester, transcript, model manager, history, watch folder. |
-| 2 | 02_settings.png | Settings | Models (whisper + GigaAM), device, mute padding, whisper language, beep-instead-of-silence, VAD, downloads folder, output location, interface language. |
-| 3 | 03_add_url.png | Add URL | Paste link → fetch format table (quality/ext/fps/type/size) or one-click "best quality". |
-| 4 | 04_review.png | Review screen | THE trust feature. Table of muted intervals (checkbox, times, pass, engine, words); clicking a row plays the original audio around it; uncheck false positives; "Re-render output" rebuilds in seconds. |
-| 5 | 05_gigaam_wizard.png | GigaAM setup | One-time onboarding for the optional, more-accurate Russian engine: 3 linked steps on Hugging Face, token paste + online validation, ffmpeg-shared check. Currently ugly/overwide — needs real design. |
-| 6 | 06_word_tester.png | Word tester | "Why was this muted?" — type a word/phrase, see which list entries catch it (`колд*`, `*монстр*`, phrases). |
-| 7 | 07_transcript.png | Transcript viewer | Searchable transcript blocks from cache + SRT export. |
-| 8 | 08_model_manager.png | Model manager | Whisper models: downloaded/size/download/delete; GigaAM cache size; GPU indicator. |
-| 9 | 09_history.png | History | Log of processed items (time, file, status, muted count, plan, output). |
+| 1 | 01_queue_tab.png | Queue tab | Queue table (File/Duration/Status), add files/folder/URL, word-list checkboxes, pass-plan builder, Start/Cancel + overall progress, status line, scrolling log pane. Tools menu: watch folder toggle. |
+| 2 | 02_wordlists_tab.png | Word Lists tab | In-app editor for both lists (combo to switch, live entry count, format hint line); Save auto-sorts/dedupes (lowercase, ё→е); Revert; plus the "why would this be muted?" tester with live results against the saved lists. |
+| 3 | 03_transcript_tab.png | Transcript tab | Open a processed file → searchable transcript blocks from cache + SRT export; empty state when nothing opened. |
+| 4 | 04_models_tab.png | Models tab | Whisper models: downloaded/size/download/delete; GigaAM cache size; GPU indicator. |
+| 5 | 05_history_tab.png | History tab | Log of processed items (time, file, status, muted count, plan, output) + clear. |
+| 6 | 06_settings.png | Settings dialog | Models (whisper + GigaAM), device, mute padding, whisper language, beep-instead-of-silence, VAD, downloads folder, cookies file (Netscape format, for logged-in sites like boosty.to), output location, interface language. |
+| 7 | 07_add_url.png | Add URL dialog | Paste link → fetch format table (quality/ext/fps/type/size) or one-click "best quality". Uses the configured cookies file for gated sites. |
+| 8 | 08_review.png | Review dialog | THE trust feature. Table of muted intervals (checkbox, times, pass, engine, words); clicking a row plays the original audio around it; uncheck false positives; "Re-render output" rebuilds in seconds. |
+| 9 | 09_gigaam_wizard.png | GigaAM setup dialog | One-time onboarding for the optional, more-accurate Russian engine: 3 linked steps on Hugging Face, token paste + online validation, ffmpeg-shared check. |
 
 ## 5. Dynamic states the design must cover
 
@@ -116,8 +120,8 @@ Review.
    visible even though most users set it once.
 3. The log pane is developer-grade; useful facts (output location,
    intervals found) deserve first-class UI, not log lines.
-4. Everything is a modal dialog; review — the most important screen —
-   feels like a popup, and only one can be open.
+4. Review — arguably the most important screen — is still a modal
+   dialog (the tool screens are now tabs).
 5. GigaAM wizard layout is broken-wide (see screenshot) and reads like
    documentation.
 6. No dark mode; default Qt widget look throughout; no in-app
@@ -125,8 +129,9 @@ Review.
    (`packaging/wordmute.ico` — flat muted-speaker mark, recolorable).
 7. Status cell packs pass/percent/ETA into one string — could be a
    per-row progress visual.
-8. Word list editing happens in Notepad (app opens no editor); at
-   minimum the design should give lists a visible home.
+8. The word list editor is a bare QPlainTextEdit over a 4600-line
+   file — usable, but scrolling/finding entries deserves design
+   attention (search-in-list, grouping, virtualized list?).
 9. No keyboard shortcuts, no drag-handle affordance for reordering
    passes (buttons only).
 10. Warning bar is plain yellow text; easy to miss or to over-alarm.

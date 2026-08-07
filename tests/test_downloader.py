@@ -99,3 +99,18 @@ def test_download_cancellation(fake_ydl, tmp_path):
     with pytest.raises(downloader.DownloadCancelled):
         downloader.download("https://example.com/v", "", tmp_path,
                             cancelled=lambda: True)
+
+
+def test_cookies_passed_to_ytdlp(fake_ydl, tmp_path):
+    cookies = tmp_path / "cookies.txt"
+    downloader.list_formats("https://example.com/v", cookies=cookies)
+    assert FakeYDL.captured_opts["cookiefile"] == str(cookies)
+
+    downloader.download("https://example.com/v", "", tmp_path / "dl",
+                        cookies=cookies)
+    assert FakeYDL.captured_opts["cookiefile"] == str(cookies)
+
+
+def test_no_cookies_key_when_unset(fake_ydl):
+    downloader.list_formats("https://example.com/v")
+    assert "cookiefile" not in FakeYDL.captured_opts

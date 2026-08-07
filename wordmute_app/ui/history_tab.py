@@ -1,8 +1,7 @@
-"""Processing history viewer."""
+"""History tab: log of processed items."""
 
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -11,6 +10,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..core import history
@@ -19,11 +19,9 @@ from .i18n import tr
 COLUMNS = ["Time", "File", "Status", "Muted", "Plan", "Output"]
 
 
-class HistoryDialog(QDialog):
+class HistoryTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(tr("History…").rstrip("…"))
-        self.resize(820, 480)
         layout = QVBoxLayout(self)
 
         self.table = QTableWidget(0, len(COLUMNS))
@@ -35,18 +33,14 @@ class HistoryDialog(QDialog):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         layout.addWidget(self.table, stretch=1)
 
+        bottom = QHBoxLayout()
         self.count_label = QLabel("")
-        layout.addWidget(self.count_label)
-
-        buttons = QHBoxLayout()
+        bottom.addWidget(self.count_label)
+        bottom.addStretch()
         clear = QPushButton(tr("Clear"))
         clear.clicked.connect(self._clear)
-        buttons.addWidget(clear)
-        buttons.addStretch()
-        close = QPushButton(tr("Close"))
-        close.clicked.connect(self.close)
-        buttons.addWidget(close)
-        layout.addLayout(buttons)
+        bottom.addWidget(clear)
+        layout.addLayout(bottom)
         self.refresh()
 
     def refresh(self):

@@ -28,15 +28,17 @@ class FormatListWorker(QThread):
     ready = Signal(dict)
     error = Signal(str)
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, cookies=None):
         super().__init__()
         self._url = url
+        self._cookies = cookies
         _live_workers.add(self)
         self.finished.connect(lambda: _live_workers.discard(self))
 
     def run(self):
         try:
-            self.ready.emit(downloader.list_formats(self._url))
+            self.ready.emit(
+                downloader.list_formats(self._url, cookies=self._cookies))
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -44,12 +46,13 @@ class FormatListWorker(QThread):
 class AddUrlDialog(QDialog):
     COLUMNS = ["Quality", "Ext", "FPS", "Type", "Size", "Note"]
 
-    def __init__(self, parent=None, url: str = ""):
+    def __init__(self, parent=None, url: str = "", cookies=None):
         super().__init__(parent)
         self.setWindowTitle("Add URL")
         self.resize(640, 480)
         self._info = None
         self._use_best = False
+        self._cookies = cookies
 
         layout = QVBoxLayout(self)
         url_row = QHBoxLayout()
@@ -104,7 +107,7 @@ class AddUrlDialog(QDialog):
             return
         self.fetch_button.setEnabled(False)
         self.status.setText("Fetching format list…")
-        worker = FormatListWorker(url)
+        worker = FormatListWorker(url, cookies=self._cookies)
         worker.ready.connect(self._on_formats_ready)
         worker.error.connect(self._on_fetch_error)
         worker.start()

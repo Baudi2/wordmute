@@ -60,12 +60,31 @@ RU = {
     "cancelled": "отменено",
     "Cancelling…": "Отмена…",
     "Tools": "Инструменты",
-    "Word Tester…": "Проверка слова…",
-    "Transcript / Subtitles…": "Транскрипт / субтитры…",
-    "Model Manager…": "Менеджер моделей…",
-    "History…": "История…",
     "Watch Folder…": "Следить за папкой…",
     "Stop Watching": "Перестать следить",
+    # tabs
+    "Queue": "Очередь",
+    "Transcript": "Транскрипт",
+    "Models": "Модели",
+    "History": "История",
+    # word list editor
+    "Save (auto-sort)": "Сохранить (с сортировкой)",
+    "Revert": "Отменить правки",
+    "Why would this be muted?": "Почему это заглушится?",
+    "checks the saved lists — save your edits first":
+        "проверка по сохраненным спискам — сначала сохраните правки",
+    "The word list has unsaved changes. Save them?":
+        "В списке слов есть несохраненные изменения. Сохранить?",
+    # transcript tab
+    "Open Media…": "Открыть файл…",
+    "No file opened.": "Файл не открыт.",
+    "Open a processed media file to view its transcript "
+    "(the cache appears after transcription).":
+        "Откройте обработанный файл, чтобы посмотреть его транскрипт "
+        "(кэш появляется после транскрибации).",
+    # settings
+    "Cookies file:": "Файл cookies:",
+    "(optional)": "(необязательно)",
     # dialogs (shared)
     "Close": "Закрыть",
     "Browse…": "Обзор…",

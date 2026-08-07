@@ -35,6 +35,7 @@ DEFAULT_SETTINGS = {
     "beep_hz": 0,              # 0 = mute with silence
     "ui_language": "en",       # interface language: en | ru
     "watch_dir": "",           # last used watch folder
+    "cookies_file": "",        # Netscape cookie file for logged-in sites
 }
 
 

@@ -22,7 +22,7 @@ class ProcessWorker(QThread):
     all_finished = Signal(int, int)         # done count, total
 
     def __init__(self, items, wordlist, plan, options, output_dir=None,
-                 download_dir=None, parent=None):
+                 download_dir=None, cookies=None, parent=None):
         super().__init__(parent)
         self._items = list(items)
         self._wordlist = wordlist
@@ -30,6 +30,7 @@ class ProcessWorker(QThread):
         self._options = options
         self._output_dir = output_dir
         self._download_dir = download_dir
+        self._cookies = cookies
         self._cancelled = False
         self._records = []      # muted intervals of the current item
         self._cur_pass = 1
@@ -71,6 +72,7 @@ class ProcessWorker(QThread):
                                {"url": item.url, "label": item.format_label})
         path = downloader.download(
             item.url, item.format_spec, self._download_dir,
+            cookies=self._cookies,
             progress=lambda d: self.engine_event.emit("download_progress", {
                 "status": d.get("status"),
                 "downloaded": d.get("downloaded_bytes"),

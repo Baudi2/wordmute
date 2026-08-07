@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -32,15 +33,15 @@ from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .events import format_event
 from .gigaam_wizard import GigaamWizard
-from .history_dialog import HistoryDialog
+from .history_tab import HistoryTab
 from .i18n import tr
-from .models_dialog import ModelsDialog
+from .models_tab import ModelsTab
 from .plan_widget import PassPlanWidget
 from .review_dialog import ReviewDialog
 from .settings_dialog import SettingsDialog
-from .tester_dialog import TesterDialog
-from .transcript_dialog import TranscriptDialog
+from .transcript_tab import TranscriptTab
 from .url_dialog import AddUrlDialog
+from .wordlists_tab import WordListsTab
 from .worker import ProcessWorker
 
 COL_FILE, COL_DURATION, COL_STATUS = 0, 1, 2
@@ -100,9 +101,10 @@ class MainWindow(QMainWindow):
         self._watch_timer.timeout.connect(self._watch_tick)
         self._build_menu()
 
-        central = QWidget()
-        self.setCentralWidget(central)
-        root = QVBoxLayout(central)
+        self.tabs = QTabWidget()
+        self.setCentralWidget(self.tabs)
+        queue_tab = QWidget()
+        root = QVBoxLayout(queue_tab)
 
         # --- file queue
         file_buttons = QHBoxLayout()
@@ -211,39 +213,31 @@ class MainWindow(QMainWindow):
         self.log.setMaximumBlockCount(5000)
         root.addWidget(self.log, stretch=1)
 
-    # ---------------------------------------------------------- menu
+        # --- assemble tabs
+        self.tabs.addTab(queue_tab, tr("Queue"))
+        self.wordlists_tab = WordListsTab(self._wordlist_paths)
+        self.tabs.addTab(self.wordlists_tab, tr("Word Lists"))
+        self.transcript_tab = TranscriptTab()
+        self.tabs.addTab(self.transcript_tab, tr("Transcript"))
+        self.models_tab = ModelsTab()
+        self.tabs.addTab(self.models_tab, tr("Models"))
+        self.history_tab = HistoryTab()
+        self.tabs.addTab(self.history_tab, tr("History"))
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+
+    # ---------------------------------------------------------- menu / tabs
     def _build_menu(self):
         tools = self.menuBar().addMenu(tr("Tools"))
-        tools.addAction(tr("Word Tester…"), self._open_tester)
-        tools.addAction(tr("Transcript / Subtitles…"), self._open_transcript)
-        tools.addAction(tr("Model Manager…"), self._open_models)
-        tools.addAction(tr("History…"), self._open_history)
-        tools.addSeparator()
         self.watch_action = tools.addAction(tr("Watch Folder…"),
                                             self._toggle_watch)
 
-    def _open_tester(self):
-        paths = self._selected_wordlists() or list(
-            self._wordlist_paths.values())
-        TesterDialog(paths, self).exec()
-
-    def _open_transcript(self):
-        from ..engine.wordmute import MEDIA_EXTS
-        exts = " ".join(f"*{e}" for e in sorted(MEDIA_EXTS))
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Open media file", "", f"Media files ({exts})")
-        if not path:
-            return
-        try:
-            TranscriptDialog(path, self).exec()
-        except FileNotFoundError as exc:
-            QMessageBox.information(self, "WordMute", str(exc))
-
-    def _open_models(self):
-        ModelsDialog(self).exec()
-
-    def _open_history(self):
-        HistoryDialog(self).exec()
+    def _on_tab_changed(self, index: int):
+        widget = self.tabs.widget(index)
+        # data shown in these tabs can change while other tabs work
+        if widget is self.history_tab:
+            self.history_tab.refresh()
+        elif widget is self.models_tab:
+            self.models_tab.refresh()
 
     # ---------------------------------------------------------- watch folder
     def _toggle_watch(self):
@@ -333,7 +327,9 @@ class MainWindow(QMainWindow):
     def _add_url(self, url: str = ""):
         if not isinstance(url, str):  # a stray signal bool must never win
             url = ""
-        dialog = AddUrlDialog(self, url=url)
+        dialog = AddUrlDialog(self, url=url,
+                              cookies=self._settings.get("cookies_file")
+                              or None)
         if dialog.exec():
             self._add_url_row(dialog.result_item())
 
@@ -545,7 +541,8 @@ class MainWindow(QMainWindow):
         self._pass_total = len(plan)
         self._worker = ProcessWorker(items, wordlist, plan, options,
                                      output_dir=output_dir,
-                                     download_dir=config.download_dir(s))
+                                     download_dir=config.download_dir(s),
+                                     cookies=s.get("cookies_file") or None)
         self._worker.engine_event.connect(self._on_engine_event)
         self._worker.file_started.connect(self._on_file_started)
         self._worker.file_finished.connect(self._on_file_finished)
@@ -755,6 +752,10 @@ class MainWindow(QMainWindow):
                 return
             self._worker.cancel()
             self._worker.wait(15000)
+        if not self.wordlists_tab.maybe_save():
+            event.ignore()
+            return
+        self.models_tab.shutdown()
         self._settings.update({
             "use_russian": self.russian_check.isChecked(),
             "use_english": self.english_check.isChecked(),

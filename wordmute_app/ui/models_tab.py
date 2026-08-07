@@ -1,4 +1,4 @@
-"""Model manager: whisper model download/delete with disk usage, GigaAM
+"""Models tab: whisper model download/delete with disk usage, GigaAM
 cache overview, device indicator."""
 
 import subprocess
@@ -6,7 +6,6 @@ import subprocess
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -15,6 +14,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..core import gpu, models
@@ -38,11 +38,9 @@ class DownloadWorker(QThread):
             self.succeeded.emit(self._model)
 
 
-class ModelsDialog(QDialog):
+class ModelsTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(tr("Model Manager…").rstrip("…"))
-        self.resize(560, 480)
         self._worker = None
         layout = QVBoxLayout(self)
 
@@ -70,8 +68,12 @@ class ModelsDialog(QDialog):
         self.download_button.clicked.connect(self._download_selected)
         self.delete_button = QPushButton(tr("Delete"))
         self.delete_button.clicked.connect(self._delete_selected)
+        open_cache = QPushButton(tr("Open folder"))
+        open_cache.setToolTip(str(models.hf_hub_cache()))
+        open_cache.clicked.connect(self._open_cache)
         buttons.addWidget(self.download_button)
         buttons.addWidget(self.delete_button)
+        buttons.addWidget(open_cache)
         buttons.addStretch()
         layout.addLayout(buttons)
 
@@ -88,17 +90,7 @@ class ModelsDialog(QDialog):
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
-
-        close_row = QHBoxLayout()
-        open_cache = QPushButton(tr("Open folder"))
-        open_cache.setToolTip(str(models.hf_hub_cache()))
-        open_cache.clicked.connect(self._open_cache)
-        close_row.addWidget(open_cache)
-        close_row.addStretch()
-        close = QPushButton(tr("Close"))
-        close.clicked.connect(self.close)
-        close_row.addWidget(close)
-        layout.addLayout(close_row)
+        layout.addStretch()
         self.refresh()
 
     # ---------------------------------------------------------- data
@@ -178,8 +170,6 @@ class ModelsDialog(QDialog):
     def _open_cache(self):
         subprocess.Popen(["explorer", str(models.hf_hub_cache())])
 
-    def closeEvent(self, event):
+    def shutdown(self):
         if self._worker is not None:
-            self.status_label.setText("Waiting for the download to stop…")
             self._worker.wait(30000)
-        event.accept()

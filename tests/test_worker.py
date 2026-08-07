@@ -170,7 +170,8 @@ def test_no_review_when_nothing_muted(qapp, tmp_path, monkeypatch):
 def test_url_item_downloads_then_processes(qapp, tmp_path, monkeypatch):
     from wordmute_app.core import downloader
 
-    def fake_download(url, spec, dest_dir, progress=None, cancelled=None):
+    def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
+                      cookies=None):
         assert url == "https://example.com/v"
         assert spec == "bv*+ba/b"
         progress({"status": "downloading", "downloaded_bytes": 10,

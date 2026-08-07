@@ -107,6 +107,20 @@ class SettingsDialog(QDialog):
         download_row.addWidget(self.download_dir_edit, stretch=1)
         download_row.addWidget(download_browse)
         form.addRow("Downloads folder:", download_row)
+
+        cookies_row = QHBoxLayout()
+        self.cookies_edit = QLineEdit(settings.get("cookies_file", ""))
+        self.cookies_edit.setPlaceholderText(tr("(optional)"))
+        self.cookies_edit.setToolTip(
+            "Cookie file in Netscape format (as exported by yt-dlp or a "
+            "browser extension). Lets downloads access sites that need "
+            "your login, e.g. boosty.to. Used for both the format list "
+            "and the download itself.")
+        cookies_browse = QPushButton("Browse…")
+        cookies_browse.clicked.connect(self._browse_cookies)
+        cookies_row.addWidget(self.cookies_edit, stretch=1)
+        cookies_row.addWidget(cookies_browse)
+        form.addRow(tr("Cookies file:"), cookies_row)
         layout.addLayout(form)
 
         layout.addWidget(QLabel("Output location:"))
@@ -144,6 +158,13 @@ class SettingsDialog(QDialog):
         if d:
             self.download_dir_edit.setText(d)
 
+    def _browse_cookies(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Cookies file", self.cookies_edit.text(),
+            "Cookie files (*.txt);;All files (*)")
+        if path:
+            self.cookies_edit.setText(path)
+
     def values(self) -> dict:
         return {
             "model": self.model_combo.currentText(),
@@ -160,4 +181,5 @@ class SettingsDialog(QDialog):
             "beep_hz": (self.beep_spin.value()
                         if self.beep_check.isChecked() else 0),
             "ui_language": self.ui_language_combo.currentData(),
+            "cookies_file": self.cookies_edit.text().strip(),
         }
