@@ -15,5 +15,7 @@ $sc.TargetPath = $python
 $sc.Arguments = "-m wordmute_app"
 $sc.WorkingDirectory = $repo
 $sc.Description = "WordMute - mute unwanted words in video/audio"
+$icon = Join-Path $repo "packaging\wordmute.ico"
+if (Test-Path $icon) { $sc.IconLocation = "$icon,0" }
 $sc.Save()
 Write-Host "Shortcut created: $(Join-Path $desktop 'WordMute.lnk')"

@@ -1,4 +1,6 @@
-"""Generate packaging/wordmute.ico — a simple flat 'muted speaker' mark.
+"""Render packaging/wordmute.ico from the designer's SVG mark
+(resources/theme/wordmute-icon.svg). Used by the desktop shortcut,
+the PyInstaller build, and the installer.
 Run: python scripts/make_icon.py (offscreen-safe)."""
 
 import os
@@ -7,45 +9,31 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QGuiApplication, QPainter, QPen, \
-    QPixmap, QPolygonF
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication, QImage, QPainter, QPixmap
+from PySide6.QtSvg import QSvgRenderer
+
+ROOT = Path(__file__).resolve().parents[1]
+SVG = ROOT / "wordmute_app" / "resources" / "theme" / "wordmute-icon.svg"
+OUT = ROOT / "packaging" / "wordmute.ico"
 
 
-def draw(size: int) -> QPixmap:
-    pm = QPixmap(size, size)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing)
-    s = size / 256.0
-
-    p.setBrush(QBrush(QColor("#2b3a55")))
-    p.setPen(Qt.NoPen)
-    p.drawRoundedRect(QRectF(8 * s, 8 * s, 240 * s, 240 * s), 48 * s, 48 * s)
-
-    # speaker body
-    p.setBrush(QBrush(QColor("#e8ecf4")))
-    p.drawRect(QRectF(56 * s, 104 * s, 40 * s, 48 * s))
-    p.drawPolygon(QPolygonF([
-        QPointF(96 * s, 104 * s), QPointF(148 * s, 60 * s),
-        QPointF(148 * s, 196 * s), QPointF(96 * s, 152 * s),
-    ]))
-
-    # mute slash
-    pen = QPen(QColor("#e05d5d"), 22 * s, Qt.SolidLine, Qt.RoundCap)
-    p.setPen(pen)
-    p.drawLine(QPointF(178 * s, 88 * s), QPointF(74 * s, 192 * s))
-    p.end()
-    return pm
+def render(size: int) -> QPixmap:
+    renderer = QSvgRenderer(str(SVG))
+    image = QImage(size, size, QImage.Format_ARGB32)
+    image.fill(Qt.transparent)
+    painter = QPainter(image)
+    renderer.render(painter)
+    painter.end()
+    return QPixmap.fromImage(image)
 
 
 def main():
     QGuiApplication(sys.argv)
-    out = Path(__file__).resolve().parents[1] / "packaging" / "wordmute.ico"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    if not draw(256).save(str(out), "ICO"):
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    if not render(256).save(str(OUT), "ICO"):
         sys.exit("failed to write ICO")
-    print(f"icon written: {out}")
+    print(f"icon written: {OUT}")
 
 
 if __name__ == "__main__":
