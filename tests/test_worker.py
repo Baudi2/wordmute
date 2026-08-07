@@ -7,7 +7,7 @@ from wordmute_app.core.jobs import JobOptions, QueueItem
 from wordmute_app.engine import wordmute as engine
 
 
-def make_worker(files, monkeypatch, words=None, fail_for=()):
+def make_worker(files, monkeypatch, words=None, fail_for=(), plan=None):
     from wordmute_app.ui.worker import ProcessWorker
 
     words = words or [{"w": "бог", "s": 1.0, "e": 1.5}]
@@ -26,7 +26,8 @@ def make_worker(files, monkeypatch, words=None, fail_for=()):
     items = [f if isinstance(f, QueueItem) else QueueItem(kind="file", path=f)
              for f in files]
     worker = ProcessWorker(items, ({"бог"}, [], [], []),
-                           [("whisper", "small")], JobOptions(device="cpu"))
+                           plan or [("whisper", "small")],
+                           JobOptions(device="cpu"))
     log = {"events": [], "files": [], "finished": []}
     worker.engine_event.connect(lambda e, d: log["events"].append(e))
     worker.file_finished.connect(
@@ -93,6 +94,57 @@ def test_reporter_restored_after_run(qapp, tmp_path, monkeypatch):
     worker, _ = make_worker([inp], monkeypatch)
     worker.run()
     assert engine._reporter is engine._default_reporter
+
+
+def test_review_sidecar_written_with_pass_info(qapp, tmp_path, monkeypatch):
+    from wordmute_app.core import review
+
+    inp = tmp_path / "v.mp4"
+    inp.write_bytes(b"x")
+    worker, log = make_worker([inp], monkeypatch)
+    worker.run()
+
+    assert "review_saved" in log["events"]
+    data = review.load_review(
+        review.review_path_for(tmp_path / "v.clean.mp4"))
+    assert data["source"] == str(inp)
+    assert len(data["intervals"]) == 1
+    iv = data["intervals"][0]
+    assert iv["text"] == "бог"
+    assert iv["pass"] == 1
+    assert iv["engine"] == "whisper"
+    assert iv["muted"] is True
+
+
+def test_review_dedupes_repeat_finds_across_passes(qapp, tmp_path,
+                                                   monkeypatch):
+    # the stubbed transcribe returns the same words every pass, so a
+    # 2-pass plan re-finds the identical interval; it must appear once
+    from wordmute_app.core import review
+
+    inp = tmp_path / "v.mp4"
+    inp.write_bytes(b"x")
+    worker, _ = make_worker([inp], monkeypatch,
+                            plan=[("whisper", "small"), ("gigaam", "v3")])
+    worker.run()
+
+    data = review.load_review(
+        review.review_path_for(tmp_path / "v.clean.mp4"))
+    assert len(data["intervals"]) == 1
+
+
+def test_no_review_when_nothing_muted(qapp, tmp_path, monkeypatch):
+    from wordmute_app.core import review
+
+    inp = tmp_path / "v.mp4"
+    inp.write_bytes(b"x")
+    worker, log = make_worker([inp], monkeypatch,
+                              words=[{"w": "мир", "s": 0.0, "e": 0.5}])
+    worker.run()
+
+    assert log["files"] == [(0, True, "")]
+    assert "review_saved" not in log["events"]
+    assert not review.review_path_for(tmp_path / "v.clean.mp4").exists()
 
 
 def test_url_item_downloads_then_processes(qapp, tmp_path, monkeypatch):

@@ -7,7 +7,7 @@ at a time (the engine's reporter is module-global)."""
 
 from PySide6.QtCore import QThread, Signal
 
-from ..core import downloader
+from ..core import downloader, review
 from ..engine import wordmute as engine
 
 
@@ -31,6 +31,9 @@ class ProcessWorker(QThread):
         self._output_dir = output_dir
         self._download_dir = download_dir
         self._cancelled = False
+        self._records = []      # muted intervals of the current item
+        self._cur_pass = 1
+        self._cur_engine = plan[0][0] if plan else "whisper"
 
     def cancel(self):
         # Takes effect at the next reporter event (per transcribed
@@ -41,7 +44,27 @@ class ProcessWorker(QThread):
     def _report(self, event: str, data: dict):
         if self._cancelled:
             raise JobCancelled()
+        if event == "pass_start":
+            self._cur_pass = data["n"]
+            self._cur_engine = data["engine"]
+        elif event == "asr_start":
+            self._cur_engine = data["engine"]
+        elif event == "match_found":
+            self._record_intervals(data["intervals"])
         self.engine_event.emit(event, data)
+
+    def _record_intervals(self, intervals):
+        # a later forced pass can re-find an already-recorded interval
+        # in the fresh transcript; keep one entry per (s, e)
+        for s, e, text in intervals:
+            if any(abs(r["s"] - s) < 0.002 and abs(r["e"] - e) < 0.002
+                   for r in self._records):
+                continue
+            self._records.append({
+                "s": s, "e": e, "text": text,
+                "pass": self._cur_pass, "engine": self._cur_engine,
+                "muted": True,
+            })
 
     def _download(self, item):
         self.engine_event.emit("download_start",
@@ -75,6 +98,8 @@ class ProcessWorker(QThread):
                     self.file_finished.emit(i, False, "cancelled")
                     continue
                 self.file_started.emit(i, item.display_name)
+                self._records = []
+                self._cur_pass = 1
                 try:
                     path = item.path
                     if item.kind == "url":
@@ -89,6 +114,11 @@ class ProcessWorker(QThread):
                     self.file_finished.emit(i, False, str(exc))
                 else:
                     done += 1
+                    if self._records:  # something was muted -> reviewable
+                        rp = review.save_review(path, out, self._options.pad,
+                                                self._records)
+                        self.engine_event.emit("review_saved",
+                                               {"path": str(rp)})
                     self.file_finished.emit(i, True, "")
         finally:
             engine.set_reporter(None)

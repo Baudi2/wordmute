@@ -45,4 +45,6 @@ def format_event(event: str, d: dict):
         return f"Downloading ({d['label']}): {d['url']}"
     if event == "download_done":
         return f"Downloaded -> {d['path']}"
+    if event == "review_saved":
+        return f"Review data -> {d['path']}"
     return None

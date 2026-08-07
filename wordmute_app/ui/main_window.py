@@ -30,6 +30,7 @@ from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .events import format_event
 from .plan_widget import PassPlanWidget
+from .review_dialog import ReviewDialog
 from .settings_dialog import SettingsDialog
 from .url_dialog import AddUrlDialog
 from .worker import ProcessWorker
@@ -84,6 +85,11 @@ class MainWindow(QMainWindow):
         self.add_url_button.clicked.connect(self._add_url)
         self.remove_button = QPushButton("Remove Selected")
         self.remove_button.clicked.connect(self._remove_selected)
+        self.review_button = QPushButton("Review…")
+        self.review_button.setToolTip(
+            "Open a review file (saved next to each processed output) to "
+            "listen to muted moments and un-mute false positives.")
+        self.review_button.clicked.connect(self._pick_review)
         self.settings_button = QPushButton("Settings…")
         self.settings_button.clicked.connect(self._open_settings)
         file_buttons.addWidget(self.add_button)
@@ -91,6 +97,7 @@ class MainWindow(QMainWindow):
         file_buttons.addWidget(self.add_url_button)
         file_buttons.addWidget(self.remove_button)
         file_buttons.addStretch()
+        file_buttons.addWidget(self.review_button)
         file_buttons.addWidget(self.settings_button)
         root.addLayout(file_buttons)
 
@@ -102,6 +109,7 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(COL_STATUS, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.itemDoubleClicked.connect(self._on_row_double_clicked)
         root.addWidget(self.table, stretch=2)
 
         # --- word lists + pass plan
@@ -228,6 +236,31 @@ class MainWindow(QMainWindow):
             web = [mime.text().strip()]
         if web:
             self._add_url(web[0])
+
+    # ---------------------------------------------------------- review
+    def _review_path_for_row(self, row: int):
+        return self.table.item(row, COL_STATUS).data(Qt.UserRole)
+
+    def _on_row_double_clicked(self, item):
+        path = self._review_path_for_row(item.row())
+        if path and Path(path).exists():
+            ReviewDialog(path, self).exec()
+        else:
+            QMessageBox.information(
+                self, "WordMute",
+                "No review data for this row yet — it appears after the "
+                "file has been processed and something was muted.")
+
+    def _pick_review(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open review file", "",
+            "WordMute review (*.wordmute.json);;All files (*)")
+        if path:
+            try:
+                ReviewDialog(path, self).exec()
+            except Exception as exc:
+                QMessageBox.warning(self, "WordMute",
+                                    f"Could not open review file: {exc}")
 
     # ---------------------------------------------------------- settings
     def _open_settings(self):
@@ -358,6 +391,10 @@ class MainWindow(QMainWindow):
             return
         elif event == "download_done":
             self._on_download_done(data["path"])
+        elif event == "review_saved":
+            if self._current_row is not None:
+                self.table.item(self._current_row, COL_STATUS).setData(
+                    Qt.UserRole, data["path"])
         elif event == "pass_start":
             self._pass_n = data["n"]
             self._pass_engine = data["engine"]
@@ -446,9 +483,11 @@ class MainWindow(QMainWindow):
     def _on_file_finished(self, row: int, ok: bool, error: str):
         self._done_files += 1
         self._pass_pct = 0.0
+        has_review = ok and self._review_path_for_row(row)
         self.table.item(row, COL_STATUS).setText(
-            "done" if ok else (error if error == "cancelled"
-                               else f"error: {error}"))
+            ("done — double-click to review" if has_review else "done")
+            if ok else (error if error == "cancelled"
+                        else f"error: {error}"))
         if not ok and error != "cancelled":
             self._append_log(f"Error: {error}")
         self._update_overall_progress()
