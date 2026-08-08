@@ -40,12 +40,13 @@ class _Chip(QFrame):
         self.setProperty("passChip", True)
         self.setToolTip(tr(ENGINE_TIPS[engine]))
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(3, 3, 4, 3)
+        layout.setContentsMargins(3, 3, 6, 3)
         layout.setSpacing(6)
         badge = QLabel(str(number))
         badge.setProperty("stepNumber", True)
         layout.addWidget(badge)
         layout.addWidget(QLabel(ENGINE_LABELS[engine]))
+        layout.addStretch()  # full-row chip: ✕ sits at the right edge
         remove = QToolButton()
         remove.setProperty("chipRemove", True)
         remove.setText("✕")
@@ -68,21 +69,20 @@ class _ChipsList(QListWidget):
 
 class PassPlanWidget(QGroupBox):
     changed = Signal()
-    MAX_CHIP_ROWS = 3  # taller plans scroll vertically
+    MAX_VISIBLE_ROWS = 4  # taller plans scroll vertically
 
     def __init__(self, parent=None):
         super().__init__(tr("Pass plan"), parent)
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
 
-        # chips take the full group width and wrap onto more lines;
-        # the + buttons sit on their own row below (design feedback)
+        # one pass per row (a vertical column, like the old plain list),
+        # add buttons in their own column on the right
+        row = QHBoxLayout()
+        row.setSpacing(12)
         self.chips = _ChipsList(self._update_height)
         self.chips.setObjectName("pass_chips")
-        self.chips.setFlow(QListView.LeftToRight)
-        self.chips.setWrapping(True)
-        self.chips.setResizeMode(QListView.Adjust)
-        self.chips.setSpacing(3)
+        self.chips.setSpacing(2)
         self.chips.setDragDropMode(QAbstractItemView.InternalMove)
         self.chips.setSelectionMode(QAbstractItemView.SingleSelection)
         self.chips.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -93,20 +93,21 @@ class PassPlanWidget(QGroupBox):
         # from the items' data once the move settles
         self.chips.model().rowsMoved.connect(
             lambda *_: QTimer.singleShot(0, self._on_reordered))
-        layout.addWidget(self.chips)
+        row.addWidget(self.chips, stretch=1)
 
-        buttons_row = QHBoxLayout()
-        buttons_row.setSpacing(8)
+        buttons_col = QVBoxLayout()
+        buttons_col.setSpacing(8)
         self.add_whisper = QPushButton("+ Whisper")
         self.add_whisper.setToolTip(tr(ENGINE_TIPS["whisper"]))
         self.add_whisper.clicked.connect(lambda: self.add_pass("whisper"))
         self.add_gigaam = QPushButton("+ GigaAM")
         self.add_gigaam.setToolTip(tr(ENGINE_TIPS["gigaam"]))
         self.add_gigaam.clicked.connect(lambda: self.add_pass("gigaam"))
-        buttons_row.addWidget(self.add_whisper)
-        buttons_row.addWidget(self.add_gigaam)
-        buttons_row.addStretch()
-        layout.addLayout(buttons_row)
+        buttons_col.addWidget(self.add_whisper)
+        buttons_col.addWidget(self.add_gigaam)
+        buttons_col.addStretch()
+        row.addLayout(buttons_col)
+        layout.addLayout(row)
 
         note = QLabel(tr("GigaAM: faster, best for pure Russian.\n"
                          "Whisper: slower, handles English/mixed speech."))
@@ -165,24 +166,17 @@ class PassPlanWidget(QGroupBox):
             chip = _Chip(i + 1, engine,
                          lambda _=False, it=item: self.remove_pass(
                              self.chips.row(it)))
-            item.setSizeHint(chip.sizeHint() + QSize(4, 4))
+            # width comes from the list; only the height matters here
+            item.setSizeHint(QSize(24, chip.sizeHint().height() + 4))
             self.chips.setItemWidget(item, chip)
         self._update_height()
 
     def _update_height(self):
-        """Grow with wrapped chip rows, scroll beyond MAX_CHIP_ROWS."""
+        """Show every row up to MAX_VISIBLE_ROWS, then scroll."""
         spacing = self.chips.spacing()
-        width = max(self.chips.viewport().width(), 120)
         row_height = 40
-        x = 0
-        rows = 1
-        for i in range(self.chips.count()):
-            hint = self.chips.item(i).sizeHint()
-            row_height = max(row_height, hint.height() + spacing)
-            w = hint.width() + spacing
-            if x and x + w > width:
-                rows += 1
-                x = 0
-            x += w
-        visible = min(rows, self.MAX_CHIP_ROWS)
-        self.chips.setFixedHeight(visible * row_height + 2 * spacing + 2)
+        if self.chips.count():
+            row_height = (self.chips.item(0).sizeHint().height()
+                          + 2 * spacing)
+        visible = max(1, min(self.chips.count(), self.MAX_VISIBLE_ROWS))
+        self.chips.setFixedHeight(visible * row_height + 6)
