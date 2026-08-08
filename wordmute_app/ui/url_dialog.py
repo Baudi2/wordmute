@@ -108,6 +108,7 @@ class AddUrlDialog(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setShowGrid(False)
+        self.table.setAlternatingRowColors(True)
         self.table.itemDoubleClicked.connect(lambda _: self.accept())
         self.table.itemSelectionChanged.connect(self._update_ok)
         layout.addWidget(self.table, stretch=1)
