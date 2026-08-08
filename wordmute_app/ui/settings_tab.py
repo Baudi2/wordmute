@@ -96,14 +96,15 @@ class SettingsTab(QWidget):
                "neighboring words."))
         mute_form.addRow(tr("Mute padding:"), self.pad_spin)
 
-        beep_row = QHBoxLayout()
-        beep_row.setSpacing(12)
+        # design v3: checkbox gets its own full-width row, the frequency
+        # its own labeled row beneath (enabled only when checked)
         self.beep_check = QCheckBox(tr("Beep instead of silence"))
         self.beep_check.setChecked(bool(settings.get("beep_hz", 0)))
         self.beep_check.setToolTip(
             tr("Replace muted words with a beep tone instead of silence. "
                "Note: files with several audio tracks keep only the "
                "first one in beep mode."))
+        mute_form.addRow(self.beep_check)
         self.beep_spin = QSpinBox()
         self.beep_spin.setRange(200, 4000)
         self.beep_spin.setSingleStep(100)
@@ -111,10 +112,7 @@ class SettingsTab(QWidget):
         self.beep_spin.setValue(settings.get("beep_hz", 0) or 1000)
         self.beep_spin.setEnabled(self.beep_check.isChecked())
         self.beep_check.toggled.connect(self.beep_spin.setEnabled)
-        beep_row.addWidget(self.beep_check)
-        beep_row.addWidget(self.beep_spin)
-        beep_row.addStretch()
-        mute_form.addRow("", beep_row)
+        mute_form.addRow(tr("Frequency:"), self.beep_spin)
 
         top_row = QHBoxLayout()
         top_row.setSpacing(20)

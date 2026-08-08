@@ -160,16 +160,16 @@ QTableView, QTableWidget, QTreeView, QListView, QListWidget {
   gridline-color: rgba(233,233,237,0.07);
   outline: none;
 }
+/* local merge: thin vertical column separators; NO per-cell hover —
+   whole-row hover is done in code (HoverRowTable) */
 QTableView::item, QTableWidget::item {
   padding: 6px 10px;
-  border-right: 1px solid rgba(233,233,237,0.07);  /* thin column separator */
+  border-right: 1px solid rgba(233,233,237,0.07);
 }
 QTableView::item:selected, QTableWidget::item:selected,
 QListView::item:selected, QTreeView::item:selected {
   background: #2b2741; color: #e9e9ed;
 }
-/* no per-cell hover: Qt can't hover whole rows via QSS, and a single
-   highlighted cell reads as broken — selection carries the highlight */
 QHeaderView { background: transparent; }
 QHeaderView::section {
   background: #161826;
@@ -333,6 +333,74 @@ QPlainTextEdit#wordlist_editor {
 }
 /* Entry-syntax hint line + entries count: muted */
 QLabel#syntax_hint, QLabel#entries_count { color: #9397ab; }
+
+/* ---- Tool buttons (the toolbar's "…" menu) ---- */
+QToolButton {
+  background: transparent;
+  border: 1px solid #3f424d;
+  border-radius: 6px;
+  padding: 7px 12px;
+  color: #e9e9ed;
+}
+QToolButton:hover  { background: #292b31; border-color: #595d6c; }
+QToolButton:pressed{ background: #3f424d; }
+QToolButton::menu-indicator { width: 0; }
+
+/* ---- Queue cards (Queue page) ----
+   QListWidget#queue_cards + one QFrame[videoCard="true"] per file via
+   setItemWidget. Mirror selection with frame.setProperty("selected",…)
+   + unpolish/polish. Thumbnail QLabel#card_thumb 96x54: rounded pixmap
+   from `ffmpeg -ss <10% of duration> -frames:v 1` (cache beside app
+   data); audio files keep the tinted placeholder + glyph. */
+QListWidget#queue_cards { background: transparent; border: none; }
+QListWidget#queue_cards::item { background: transparent; margin: 0 0 8px 0; }
+QListWidget#queue_cards::item:selected { background: transparent; }
+QFrame[videoCard="true"] {
+  background: #1b1d2c;
+  border: 1px solid #3f424d;
+  border-radius: 8px;
+}
+QFrame[videoCard="true"]:hover { border-color: #595d6c; }
+QFrame[videoCard="true"][selected="true"] { background: #1f2130; border-color: #9184d9; }
+QLabel#card_thumb {
+  background: #2b2741;
+  border: 1px solid #423a6a;
+  border-radius: 6px;
+  min-width: 96px; max-width: 96px; min-height: 54px; max-height: 54px;
+  qproperty-alignment: AlignCenter;
+  color: #d2cefd;
+}
+QLabel#card_title { font-weight: 500; }
+QLabel#card_meta, QLabel#card_status { color: #9397ab; font-size: 12px; }
+QLabel#card_status[state="ok"]  { color: #d2cefd; }
+QLabel#card_status[state="err"] { color: #eab7b7; }
+
+/* ---- Pass-plan chips (setup bar) ----
+   QListView#pass_chips: Flow LeftToRight, dragDropMode InternalMove.
+   Each chip: QFrame[passChip] = QLabel[stepNumber] badge (18px) +
+   engine name + QToolButton[chipRemove]. Engine note under the row:
+   full group width, setWordWrap(True). */
+/* local merge: the chip strip itself is invisible chrome */
+QListWidget#pass_chips {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+QListWidget#pass_chips::item { background: transparent; }
+QListWidget#pass_chips::item:selected { background: transparent; }
+
+QFrame[passChip="true"] {
+  background: #232532;
+  border: 1px solid #3f424d;
+  border-radius: 15px;
+  padding: 3px 4px 3px 3px;
+}
+QFrame[passChip="true"]:hover { border-color: #595d6c; }
+QToolButton[chipRemove="true"] {
+  background: transparent; border: none; border-radius: 8px;
+  padding: 1px; color: #9397ab;
+}
+QToolButton[chipRemove="true"]:hover { background: rgba(205,132,132,0.15); color: #eab7b7; }
 
 /* GigaAM wizard step cards (proposed): QFrame with property step-card */
 QFrame[stepCard="true"] {

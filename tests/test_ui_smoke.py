@@ -14,13 +14,13 @@ def test_main_window_constructs_and_filters_queue(qapp, tmp_path, monkeypatch):
         f.touch()
 
     w._add_files([media, clean, text, media])  # dupes/clean/non-media dropped
-    assert w.table.rowCount() == 1
-    assert w.table.item(0, 0).text() == "a.mp4"
-    assert w.table.item(0, 2).text() == "queued"
+    assert w.queue.count() == 1
+    assert w._items()[0].display_name == "a.mp4"
+    assert w.status_text(0) == "queued"
 
-    w.table.selectRow(0)
+    w.queue.item(0).setSelected(True)
     w._remove_selected()
-    assert w.table.rowCount() == 0
+    assert w.queue.count() == 0
 
 
 def test_folder_add_expands_media(qapp, tmp_path, monkeypatch):
@@ -36,8 +36,7 @@ def test_folder_add_expands_media(qapp, tmp_path, monkeypatch):
 
     w = MainWindow()
     w._add_files([folder])
-    assert [w.table.item(r, 0).text() for r in range(w.table.rowCount())] \
-        == ["a.mkv", "b.mp4"]
+    assert [it.display_name for it in w._items()] == ["a.mkv", "b.mp4"]
 
 
 def test_settings_saved_on_close(qapp, tmp_path, monkeypatch):
@@ -107,6 +106,9 @@ def test_add_url_button_click_opens_dialog_with_empty_url(qapp, tmp_path,
     w = mw.MainWindow()
     w.add_url_button.click()
     assert opened == [""]
+
+
+def test_plan_widget_chips_add_remove_reorder(qapp):
     from wordmute_app.ui.plan_widget import PassPlanWidget
 
     p = PassPlanWidget()
@@ -114,20 +116,23 @@ def test_add_url_button_click_opens_dialog_with_empty_url(qapp, tmp_path,
     p.add_pass("gigaam")
     p.add_pass("whisper")
     assert p.engines() == ["gigaam", "gigaam", "whisper"]
-    assert p.list.item(2).text() == "3. Whisper"
+    # each chip is a real widget on its item
+    assert p.chips.itemWidget(p.chips.item(2)) is not None
 
-    p.list.setCurrentRow(2)
-    p.move_selected(-1)
+    p.move_pass(2, 1)
     assert p.engines() == ["gigaam", "whisper", "gigaam"]
-    assert p.list.item(1).text() == "2. Whisper"
-    p.move_selected(-1)
-    p.move_selected(-1)  # already at top: no-op
+    p.move_pass(1, 0)
+    assert p.engines() == ["whisper", "gigaam", "gigaam"]
+    p.move_pass(0, 5)  # out of range: no-op
     assert p.engines() == ["whisper", "gigaam", "gigaam"]
 
-    p.list.setCurrentRow(0)
-    p.remove_selected()
+    p.remove_pass(0)
     assert p.engines() == ["gigaam", "gigaam"]
-    assert p.list.item(0).text() == "1. GigaAM"
+    changed = []
+    p.changed.connect(lambda: changed.append(1))
+    p.set_engines(["whisper"])
+    assert p.engines() == ["whisper"]
+    assert changed
 
 
 def test_settings_tab_applies_immediately(qapp, tmp_path, monkeypatch):

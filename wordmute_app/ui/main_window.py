@@ -6,41 +6,38 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QStackedWidget,
-    QTableWidget,
-    QTableWidgetItem,
-    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from ..core import config, gpu
+from ..core import config, gpu, thumbs
 from ..core.jobs import (JobOptions, QueueItem, build_plan, expand_inputs,
                          scan_watch_dir)
 from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .events import format_event
 from .gigaam_wizard import GigaamWizard
-from .hover_table import HoverRowTable
 from .history_tab import HistoryTab
 from .i18n import tr
 from .models_tab import ModelsTab
 from .plan_widget import PassPlanWidget
+from .queue_card import QueueCard
 from .review_dialog import ReviewDialog
 from .settings_tab import SettingsTab
 from .sidebar import SidebarNav
@@ -49,11 +46,11 @@ from .url_dialog import AddUrlDialog
 from .wordlists_tab import WordListsTab
 from .worker import ProcessWorker
 
-COL_FILE, COL_DURATION, COL_STATUS = 0, 1, 2
-
-# data roles on the status item
-REVIEW_ROLE = Qt.UserRole          # path of the review sidecar
-OUTPUT_ROLE = Qt.UserRole + 1      # path of the produced output file
+# data roles on each queue QListWidgetItem
+ITEM_ROLE = Qt.UserRole            # the QueueItem object
+REVIEW_ROLE = Qt.UserRole + 1      # path of the review sidecar
+OUTPUT_ROLE = Qt.UserRole + 2      # path of the produced output file
+DURATION_ROLE = Qt.UserRole + 3    # media duration in seconds
 
 
 def fmt_duration(sec) -> str:
@@ -150,11 +147,6 @@ class MainWindow(QMainWindow):
         self.add_url_button.clicked.connect(lambda: self._add_url())
         self.remove_button = QPushButton(tr("Remove Selected"))
         self.remove_button.clicked.connect(self._remove_selected)
-        self.review_button = QPushButton(tr("Review"))
-        self.review_button.setToolTip(
-            tr("Open a review file (saved next to each processed output) "
-               "to listen to muted moments and un-mute false positives."))
-        self.review_button.clicked.connect(self._pick_review)
         self.remove_button.setProperty("danger", True)
         file_buttons.setSpacing(8)
         file_buttons.addWidget(self.add_button)
@@ -162,41 +154,34 @@ class MainWindow(QMainWindow):
         file_buttons.addWidget(self.add_url_button)
         file_buttons.addSpacing(16)
         file_buttons.addWidget(self.remove_button)
-        self.gigaam_setup_button = QPushButton(tr("GigaAM Setup"))
-        self.gigaam_setup_button.setToolTip(
-            tr("One-time Hugging Face setup required for GigaAM passes. "
-               "Whisper works without any of this."))
-        self.gigaam_setup_button.clicked.connect(self._open_gigaam_setup)
-        self.watch_button = QPushButton(tr("Watch Folder"))
-        self.watch_button.setToolTip(
-            tr("Automatically queue and process new media files appearing "
-               "in a chosen folder."))
-        self.watch_button.clicked.connect(self._toggle_watch)
+        # everything less-used lives in one ⋯ menu (design v3)
+        from PySide6.QtWidgets import QMenu
+        self.more_button = QToolButton()
+        self.more_button.setText("⋯ " + tr("More"))
+        self.more_button.setPopupMode(QToolButton.InstantPopup)
+        more_menu = QMenu(self.more_button)
+        more_menu.addAction(tr("GigaAM Setup"), self._open_gigaam_setup)
+        self.watch_action = more_menu.addAction(tr("Watch Folder"),
+                                                self._toggle_watch)
+        more_menu.addSeparator()
+        more_menu.addAction(tr("Open review file…"), self._pick_review)
+        self.more_button.setMenu(more_menu)
         file_buttons.addStretch()
-        file_buttons.addWidget(self.review_button)
-        file_buttons.addWidget(self.gigaam_setup_button)
-        file_buttons.addWidget(self.watch_button)
+        file_buttons.addWidget(self.more_button)
         root.addLayout(file_buttons)
 
-        self.table = HoverRowTable(0, 3)
-        self.table.setHorizontalHeaderLabels(
-            [tr("File"), tr("Duration"), tr("Status")])
-        header = self.table.horizontalHeader()
-        # fixed-ish column widths: live status text must never shift
-        # the column layout while progress updates tick in
-        header.setSectionResizeMode(COL_FILE, QHeaderView.Stretch)
-        header.setSectionResizeMode(COL_DURATION, QHeaderView.Interactive)
-        header.setSectionResizeMode(COL_STATUS, QHeaderView.Interactive)
-        self.table.setColumnWidth(COL_DURATION, 90)
-        self.table.setColumnWidth(COL_STATUS, 400)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.itemDoubleClicked.connect(self._on_row_double_clicked)
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self._table_menu)
-        self.table.verticalHeader().setDefaultSectionSize(34)
-        self.table.setAlternatingRowColors(True)
-        self.table.setShowGrid(False)
+        # queue as cards (design v3)
+        from .queue_card import QueueList
+        self.queue = QueueList()
+        self.queue.setObjectName("queue_cards")
+        self.queue.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.queue.itemDoubleClicked.connect(self._on_row_double_clicked)
+        self.queue.itemSelectionChanged.connect(self._mirror_selection)
+        self.queue.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.queue.customContextMenuRequested.connect(
+            lambda pos: self._card_menu(
+                self.queue.row(self.queue.itemAt(pos)),
+                self.queue.viewport().mapToGlobal(pos)))
 
         # empty state shown until the first item is queued
         empty = QWidget()
@@ -231,7 +216,7 @@ class MainWindow(QMainWindow):
 
         self.queue_stack = QStackedWidget()
         self.queue_stack.addWidget(empty)
-        self.queue_stack.addWidget(self.table)
+        self.queue_stack.addWidget(self.queue)
         root.addWidget(self.queue_stack, stretch=2)
 
         # --- setup: collapsed summary bar, expandable panel
@@ -393,7 +378,7 @@ class MainWindow(QMainWindow):
 
     def _update_queue_stack(self):
         self.queue_stack.setCurrentWidget(
-            self.table if self.table.rowCount() else
+            self.queue if self.queue.count() else
             self.queue_stack.widget(0))
 
     def _on_tab_changed(self, index: int):
@@ -410,7 +395,7 @@ class MainWindow(QMainWindow):
             self._watch_timer.stop()
             self._watch_dir = None
             self._watch_seen = {}
-            self.watch_button.setText(tr("Watch Folder"))
+            self.watch_action.setText(tr("Watch Folder"))
             self.status_label.setText(tr("Ready."))
             return
         d = QFileDialog.getExistingDirectory(
@@ -426,7 +411,7 @@ class MainWindow(QMainWindow):
         for state in self._watch_seen.values():
             state[1] = True
         self._watch_timer.start()
-        self.watch_button.setText(tr("Stop Watching"))
+        self.watch_action.setText(tr("Stop Watching"))
         self.status_label.setText(
             tr("Watching {} — new media files are queued and processed "
                "automatically.").format(d))
@@ -444,39 +429,70 @@ class MainWindow(QMainWindow):
             self._start(auto=True)
 
     def _queued_rows(self) -> list:
-        return [r for r in range(self.table.rowCount())
-                if self.table.item(r, COL_STATUS).text()
-                .startswith(tr("queued"))]
+        return [r for r in range(self.queue.count())
+                if self.status_text(r).startswith(tr("queued"))]
 
     def _clear_finished_rows(self):
-        for row in reversed(range(self.table.rowCount())):
-            status = self.table.item(row, COL_STATUS).text()
-            if not status.startswith(tr("queued")):
-                self.table.removeRow(row)
+        for row in reversed(range(self.queue.count())):
+            if not self.status_text(row).startswith(tr("queued")):
+                self.queue.takeItem(row)
         self._update_queue_stack()
 
     # ---------------------------------------------------------- queue
+    def _card(self, row: int):
+        item = self.queue.item(row)
+        return self.queue.itemWidget(item) if item else None
+
+    def _row_of_card(self, card) -> int:
+        for row in range(self.queue.count()):
+            if self._card(row) is card:
+                return row
+        return -1
+
+    def status_text(self, row: int) -> str:
+        card = self._card(row)
+        return card.status_text() if card else ""
+
     def _items(self):
-        return [self.table.item(r, COL_FILE).data(Qt.UserRole)
-                for r in range(self.table.rowCount())]
+        return [self.queue.item(r).data(ITEM_ROLE)
+                for r in range(self.queue.count())]
 
     def _row_duration(self, row: int):
-        return self.table.item(row, COL_DURATION).data(Qt.UserRole)
+        item = self.queue.item(row)
+        return item.data(DURATION_ROLE) if item else None
+
+    def _card_meta(self, item: QueueItem) -> str:
+        where = item.url if item.kind == "url" else str(item.path)
+        return f"{fmt_duration(item.duration)} · {where}"
 
     def _insert_row(self, item: QueueItem, status: str = None):
         if status is None:
             status = tr("queued")
-        row = self.table.rowCount()
-        self.table.insertRow(row)
-        name_item = QTableWidgetItem(item.display_name)
-        name_item.setData(Qt.UserRole, item)
-        name_item.setToolTip(item.url if item.kind == "url"
-                             else str(item.path))
-        self.table.setItem(row, COL_FILE, name_item)
-        dur_item = QTableWidgetItem(fmt_duration(item.duration))
-        dur_item.setData(Qt.UserRole, item.duration)
-        self.table.setItem(row, COL_DURATION, dur_item)
-        self.table.setItem(row, COL_STATUS, QTableWidgetItem(status))
+        glyph = "♪" if (item.kind == "file" and item.path.suffix.lower()
+                        in thumbs.AUDIO_EXTS) else "▶"
+        card = QueueCard(item.display_name, self._card_meta(item),
+                         glyph=glyph)
+        card.set_status(status)
+        card.review_clicked.connect(
+            lambda c=card: self._card_review(self._row_of_card(c)))
+        card.open_clicked.connect(
+            lambda c=card: self._card_open(self._row_of_card(c)))
+        card.retry_clicked.connect(
+            lambda c=card: self._card_retry(self._row_of_card(c)))
+        card.menu_clicked.connect(
+            lambda button, c=card: self._card_menu(
+                self._row_of_card(c),
+                button.mapToGlobal(button.rect().bottomLeft())))
+        if item.kind == "file":
+            thumb = thumbs.thumbnail_path(item.path)
+            if thumb:
+                card.set_thumb(thumb)
+        list_item = QListWidgetItem()
+        list_item.setData(ITEM_ROLE, item)
+        list_item.setData(DURATION_ROLE, item.duration)
+        self.queue.addItem(list_item)
+        self.queue.setItemWidget(list_item, card)
+        self.queue.sync_sizes()
         self._update_queue_stack()
 
     def _add_files(self, paths):
@@ -516,10 +532,18 @@ class MainWindow(QMainWindow):
     def _remove_selected(self):
         if self._worker is not None:
             return
-        for row in sorted({i.row() for i in self.table.selectedIndexes()},
+        for row in sorted({self.queue.row(i)
+                           for i in self.queue.selectedItems()},
                           reverse=True):
-            self.table.removeRow(row)
+            self.queue.takeItem(row)
         self._update_queue_stack()
+
+    def _mirror_selection(self):
+        # QSS can't style an item widget from its item's selection state
+        for row in range(self.queue.count()):
+            card = self._card(row)
+            if card:
+                card.set_selected(self.queue.item(row).isSelected())
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls() or event.mimeData().hasText():
@@ -539,13 +563,31 @@ class MainWindow(QMainWindow):
 
     # ---------------------------------------------------------- row context
     def _review_path_for_row(self, row: int):
-        return self.table.item(row, COL_STATUS).data(REVIEW_ROLE)
+        item = self.queue.item(row)
+        return item.data(REVIEW_ROLE) if item else None
 
     def _output_path_for_row(self, row: int):
-        return self.table.item(row, COL_STATUS).data(OUTPUT_ROLE)
+        item = self.queue.item(row)
+        return item.data(OUTPUT_ROLE) if item else None
 
-    def _table_menu(self, pos):
-        row = self.table.rowAt(pos.y())
+    def _card_review(self, row: int):
+        path = self._review_path_for_row(row)
+        if path and Path(path).exists():
+            self._open_review(path)
+
+    def _card_open(self, row: int):
+        out = self._output_path_for_row(row)
+        if out and Path(out).exists():
+            os.startfile(out)
+
+    def _card_retry(self, row: int):
+        card = self._card(row)
+        if card is None or self._worker is not None:
+            return
+        card.set_status(tr("queued"))
+        card.set_actions()
+
+    def _card_menu(self, row: int, global_pos):
         if row < 0:
             return
         from PySide6.QtWidgets import QMenu
@@ -559,7 +601,10 @@ class MainWindow(QMainWindow):
         rev = self._review_path_for_row(row)
         act_review = menu.addAction(tr("Review"))
         act_review.setEnabled(bool(rev and Path(rev).exists()))
-        chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
+        menu.addSeparator()
+        act_remove = menu.addAction(tr("Remove"))
+        act_remove.setEnabled(self._worker is None)
+        chosen = menu.exec(global_pos)
         if chosen is act_open:
             os.startfile(out)
         elif chosen is act_show:
@@ -567,6 +612,9 @@ class MainWindow(QMainWindow):
             subprocess.Popen(["explorer", "/select,", str(Path(out))])
         elif chosen is act_review:
             self._open_review(rev)
+        elif chosen is act_remove:
+            self.queue.takeItem(row)
+            self._update_queue_stack()
 
     def _open_review(self, path):
         # non-modal: the queue stays visible/alive while reviewing
@@ -580,7 +628,7 @@ class MainWindow(QMainWindow):
         dialog.show()
 
     def _on_row_double_clicked(self, item):
-        path = self._review_path_for_row(item.row())
+        path = self._review_path_for_row(self.queue.row(item))
         if path and Path(path).exists():
             self._open_review(path)
         else:
@@ -717,8 +765,11 @@ class MainWindow(QMainWindow):
                       if s["output_mode"] == "folder" and s["output_dir"]
                       else None)
 
-        for row in range(self.table.rowCount()):
-            self.table.item(row, COL_STATUS).setText(tr("queued"))
+        for row in range(self.queue.count()):
+            card = self._card(row)
+            if card:
+                card.set_status(tr("queued"))
+                card.set_actions()
 
         self._reset_run_state(total=len(items))
         self._pass_total = len(plan)
@@ -778,9 +829,11 @@ class MainWindow(QMainWindow):
         # progress stays visible from any tab
         self.tabs.setTabText(0, f"{tr('Queue')} · {pct}%")
 
-    def _set_row_status(self, text: str):
+    def _set_row_status(self, text: str, state=None, progress=None):
         if self._current_row is not None:
-            self.table.item(self._current_row, COL_STATUS).setText(text)
+            card = self._card(self._current_row)
+            if card:
+                card.set_status(text, state=state, progress=progress)
 
     def _pass_prefix(self) -> str:
         if self._pass_total > 1:
@@ -803,13 +856,12 @@ class MainWindow(QMainWindow):
             self._on_download_done(data["path"])
         elif event == "review_saved":
             if self._current_row is not None:
-                self.table.item(self._current_row, COL_STATUS).setData(
+                self.queue.item(self._current_row).setData(
                     REVIEW_ROLE, data["path"])
         elif event == "item_output":
             if self._current_row is not None:
-                status_item = self.table.item(self._current_row, COL_STATUS)
-                status_item.setData(OUTPUT_ROLE, data["path"])
-                status_item.setToolTip(data["path"])
+                self.queue.item(self._current_row).setData(
+                    OUTPUT_ROLE, data["path"])
         elif event == "pass_start":
             self._pass_n = data["n"]
             self._pass_engine = data["engine"]
@@ -842,8 +894,10 @@ class MainWindow(QMainWindow):
     def _on_download_progress(self, d: dict):
         downloaded, total = d.get("downloaded"), d.get("total")
         parts = []
+        pct = None
         if downloaded and total:
-            parts.append(f"{tr('downloading')} {downloaded / total:.0%}")
+            pct = downloaded / total
+            parts.append(f"{tr('downloading')} {pct:.0%}")
         elif downloaded:
             parts.append(f"{tr('downloading')} "
                          f"{downloaded / (1024 * 1024):.0f} MB")
@@ -854,21 +908,23 @@ class MainWindow(QMainWindow):
             parts.append(speed)
         if d.get("eta"):
             parts.append(fmt_eta(d["eta"]))
-        self._set_row_status(" · ".join(parts))
+        self._set_row_status(" · ".join(parts), progress=pct)
 
     def _on_download_done(self, path: str):
-        # the file is now local: show its real name and duration so
-        # transcription progress/ETA work as for any local file
+        # the file is now local: show its real name, duration and
+        # thumbnail so the card behaves like any local file's
         if self._current_row is None:
             return
         p = Path(path)
-        name_item = self.table.item(self._current_row, COL_FILE)
-        name_item.setText(p.name)
-        name_item.setToolTip(str(p))
         duration = media_duration(p)
-        dur_item = self.table.item(self._current_row, COL_DURATION)
-        dur_item.setText(fmt_duration(duration))
-        dur_item.setData(Qt.UserRole, duration)
+        self.queue.item(self._current_row).setData(DURATION_ROLE, duration)
+        card = self._card(self._current_row)
+        if card:
+            card.set_title(p.name)
+            card.set_meta(f"{fmt_duration(duration)} · {p}")
+            thumb = thumbs.thumbnail_path(p)
+            if thumb:
+                card.set_thumb(thumb)
 
     def _on_mute_progress(self, seconds: float):
         duration = (self._row_duration(self._current_row)
@@ -876,14 +932,16 @@ class MainWindow(QMainWindow):
         if duration:
             pct = min(seconds / duration, 1.0)
             text = f"{self._pass_prefix()}{tr('muting…')} {pct:.0%}"
+            self._set_row_status(text, progress=pct)
         else:
             text = f"{self._pass_prefix()}{tr('muting…')} {fmt_hms(seconds)}"
-        self._set_row_status(text)
+            self._set_row_status(text)
 
     def _on_asr_progress(self, minutes: float):
         processed = minutes * 60
         duration = (self._row_duration(self._current_row)
                     if self._current_row is not None else None)
+        pct = None
         if duration:
             pct = min(processed / duration, 1.0)
             self._pass_pct = 0.9 * pct  # transcription ~= the whole pass
@@ -896,7 +954,7 @@ class MainWindow(QMainWindow):
         else:
             text = (f"{self._pass_prefix()}{tr('transcribing')} "
                     f"{fmt_hms(processed)}")
-        self._set_row_status(text)
+        self._set_row_status(text, progress=pct)
         self.status_label.setText(
             tr("Transcribing… {} of audio processed")
             .format(fmt_hms(processed)))
@@ -914,17 +972,24 @@ class MainWindow(QMainWindow):
     def _on_file_finished(self, row: int, ok: bool, error: str):
         self._done_files += 1
         self._pass_pct = 0.0
+        card = self._card(row)
+        out = self._output_path_for_row(row)
+        has_out = bool(out and Path(out).exists())
+        has_review = bool(self._review_path_for_row(row))
         if ok:
             text = tr("done")
-            out = self._output_path_for_row(row)
             if out:
                 text += f" → {Path(out).name}"
-            if self._review_path_for_row(row):
-                text += " — " + tr("double-click to review")
+            state = "ok"
         else:
             text = (tr("cancelled") if error == "cancelled"
                     else f"error: {error}")
-        self.table.item(row, COL_STATUS).setText(text)
+            state = None if error == "cancelled" else "err"
+        if card:
+            card.set_status(text, state=state)
+            card.set_actions(review=ok and has_review,
+                             open_=ok and has_out,
+                             retry=not ok and error != "cancelled")
         if not ok and error != "cancelled":
             self._append_log(f"Error: {error}")
         self._update_overall_progress()

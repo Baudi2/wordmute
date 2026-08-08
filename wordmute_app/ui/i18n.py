@@ -59,6 +59,11 @@ RU = {
     "Cancelling…": "Отмена…",
     "Tools": "Инструменты",
     "Stop Watching": "Перестать следить",
+    "More": "Ещё",
+    "Open": "Открыть",
+    "Retry": "Повторить",
+    "Open review file…": "Открыть файл проверки…",
+    "Frequency:": "Частота:",
     "GigaAM passes need a one-time Hugging Face setup — "
     "click 'GigaAM Setup'.":
         "Проходам GigaAM нужна разовая настройка Hugging Face — "

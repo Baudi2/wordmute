@@ -156,10 +156,10 @@ def test_watch_flow_scan_and_autoclear(qapp, tmp_path, monkeypatch):
     b = tmp_path / "b.mp4"
     b.touch()
     w._add_files([a, b])
-    w.table.item(0, 2).setText("done")
+    w._card(0).set_status("done")
     w._clear_finished_rows()
-    assert w.table.rowCount() == 1
-    assert w.table.item(0, 0).text() == "b.mp4"
+    assert w.queue.count() == 1
+    assert w._items()[0].display_name == "b.mp4"
 
 
 def test_main_window_has_tabs(qapp, tmp_path, monkeypatch):

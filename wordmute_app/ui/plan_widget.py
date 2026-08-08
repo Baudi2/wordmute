@@ -1,13 +1,19 @@
-"""Pass plan builder: an ordered list of engine passes with add /
-remove / reorder controls."""
+"""Pass plan as a draggable chip row (design v3): numbered chips with a
+remove ✕, drag to reorder, + buttons to append passes. The engine note
+sits full-width below."""
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
+    QListView,
     QPushButton,
+    QToolButton,
     QVBoxLayout,
 )
 
@@ -28,80 +34,114 @@ INFO_TEXT = ("Passes run top to bottom; each pass re-checks the previous "
              "Different engines catch words the other missed.")
 
 
+class _Chip(QFrame):
+    def __init__(self, number: int, engine: str, on_remove, parent=None):
+        super().__init__(parent)
+        self.setProperty("passChip", True)
+        self.setToolTip(tr(ENGINE_TIPS[engine]))
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(3, 3, 4, 3)
+        layout.setSpacing(6)
+        badge = QLabel(str(number))
+        badge.setProperty("stepNumber", True)
+        layout.addWidget(badge)
+        layout.addWidget(QLabel(ENGINE_LABELS[engine]))
+        remove = QToolButton()
+        remove.setProperty("chipRemove", True)
+        remove.setText("✕")
+        remove.clicked.connect(on_remove)
+        layout.addWidget(remove)
+
+
 class PassPlanWidget(QGroupBox):
     changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(tr("Pass plan"), parent)
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
 
-        self.list = QListWidget()
-        self.list.setToolTip(tr(INFO_TEXT))
-        layout.addWidget(self.list, stretch=1)
-
-        buttons = QVBoxLayout()
-        self.add_whisper = QPushButton(tr("Add Whisper pass"))
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self.chips = QListWidget()
+        self.chips.setObjectName("pass_chips")
+        self.chips.setFlow(QListView.LeftToRight)
+        self.chips.setWrapping(True)
+        self.chips.setDragDropMode(QAbstractItemView.InternalMove)
+        self.chips.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.chips.setFixedHeight(46)
+        self.chips.setFrameShape(QFrame.NoFrame)
+        self.chips.setToolTip(tr(INFO_TEXT))
+        # item widgets do not survive an internal drag-move; rebuild
+        # from the items' data once the move settles
+        self.chips.model().rowsMoved.connect(
+            lambda *_: QTimer.singleShot(0, self._on_reordered))
+        row.addWidget(self.chips, stretch=1)
+        self.add_whisper = QPushButton("+ Whisper")
         self.add_whisper.setToolTip(tr(ENGINE_TIPS["whisper"]))
         self.add_whisper.clicked.connect(lambda: self.add_pass("whisper"))
-        self.add_gigaam = QPushButton(tr("Add GigaAM pass"))
+        self.add_gigaam = QPushButton("+ GigaAM")
         self.add_gigaam.setToolTip(tr(ENGINE_TIPS["gigaam"]))
         self.add_gigaam.clicked.connect(lambda: self.add_pass("gigaam"))
-        self.remove_button = QPushButton(tr("Remove"))
-        self.remove_button.clicked.connect(self.remove_selected)
-        self.up_button = QPushButton(tr("Move Up"))
-        self.up_button.clicked.connect(lambda: self.move_selected(-1))
-        self.down_button = QPushButton(tr("Move Down"))
-        self.down_button.clicked.connect(lambda: self.move_selected(1))
-        for b in (self.add_whisper, self.add_gigaam, self.remove_button,
-                  self.up_button, self.down_button):
-            buttons.addWidget(b)
-        buttons.addStretch()
-        info = QLabel(tr("GigaAM: faster, best for pure Russian.\n"
+        row.addWidget(self.add_whisper)
+        row.addWidget(self.add_gigaam)
+        layout.addLayout(row)
+
+        note = QLabel(tr("GigaAM: faster, best for pure Russian.\n"
                          "Whisper: slower, handles English/mixed speech."))
-        info.setWordWrap(True)
-        info.setToolTip(tr(ENGINE_TIPS["whisper"]) + "\n\n"
-                        + tr(ENGINE_TIPS["gigaam"]))
-        buttons.addWidget(info)
-        layout.addLayout(buttons)
+        note.setWordWrap(True)
+        note.setProperty("muted", True)
+        layout.addWidget(note)
 
     # ---------------------------------------------------------- model
     def engines(self) -> list:
-        return [self.list.item(i).data(Qt.UserRole)
-                for i in range(self.list.count())]
+        return [self.chips.item(i).data(Qt.UserRole)
+                for i in range(self.chips.count())]
 
     def set_engines(self, names) -> None:
-        self.list.clear()
+        self.chips.clear()
         for name in names:
             if name in ENGINE_LABELS:
-                self.add_pass(name)
+                self._append(name)
+        self._rebuild()
+        self.changed.emit()
 
     def add_pass(self, engine: str) -> None:
-        self.list.addItem(ENGINE_LABELS[engine])
-        item = self.list.item(self.list.count() - 1)
-        item.setData(Qt.UserRole, engine)
-        item.setToolTip(ENGINE_TIPS[engine])
-        self._renumber()
+        self._append(engine)
+        self._rebuild()
         self.changed.emit()
 
-    def remove_selected(self) -> None:
-        row = self.list.currentRow()
-        if row >= 0:
-            self.list.takeItem(row)
-            self._renumber()
+    def remove_pass(self, index: int) -> None:
+        if 0 <= index < self.chips.count():
+            self.chips.takeItem(index)
+            self._rebuild()
             self.changed.emit()
 
-    def move_selected(self, delta: int) -> None:
-        row = self.list.currentRow()
-        new = row + delta
-        if row < 0 or not (0 <= new < self.list.count()):
+    def move_pass(self, source: int, target: int) -> None:
+        count = self.chips.count()
+        if not (0 <= source < count and 0 <= target < count):
             return
-        item = self.list.takeItem(row)
-        self.list.insertItem(new, item)
-        self.list.setCurrentRow(new)
-        self._renumber()
+        item = self.chips.takeItem(source)
+        self.chips.insertItem(target, item)
+        self._rebuild()
         self.changed.emit()
 
-    def _renumber(self) -> None:
-        for i in range(self.list.count()):
-            item = self.list.item(i)
-            item.setText(f"{i + 1}. {ENGINE_LABELS[item.data(Qt.UserRole)]}")
+    # ---------------------------------------------------------- chips
+    def _append(self, engine: str):
+        item = QListWidgetItem()
+        item.setData(Qt.UserRole, engine)
+        self.chips.addItem(item)
+
+    def _on_reordered(self):
+        self._rebuild()
+        self.changed.emit()
+
+    def _rebuild(self):
+        for i in range(self.chips.count()):
+            item = self.chips.item(i)
+            engine = item.data(Qt.UserRole)
+            chip = _Chip(i + 1, engine,
+                         lambda _=False, it=item: self.remove_pass(
+                             self.chips.row(it)))
+            item.setSizeHint(chip.sizeHint() + QSize(4, 4))
+            self.chips.setItemWidget(item, chip)

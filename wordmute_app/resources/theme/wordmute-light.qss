@@ -185,15 +185,16 @@ QTableView, QTableWidget, QTreeView, QListView, QListWidget {
   gridline-color: rgba(41,43,49,0.06);
   outline: none;
 }
+/* local merge: thin vertical column separators; NO per-cell hover —
+   whole-row hover is done in code (HoverRowTable) */
 QTableView::item, QTableWidget::item {
   padding: 6px 10px;
-  border-right: 1px solid rgba(41,43,49,0.08);  /* thin column separator */
+  border-right: 1px solid rgba(41,43,49,0.08);
 }
 QTableView::item:selected, QTableWidget::item:selected,
 QListView::item:selected, QTreeView::item:selected {
   background: #e7e5fe; color: #292b31;
 }
-/* no per-cell hover — selection carries the highlight (see dark qss) */
 QHeaderView { background: transparent; }
 QHeaderView::section {
   background: #f3f5fe;
@@ -302,6 +303,65 @@ QPlainTextEdit#wordlist_editor {
   line-height: 150%;
 }
 QLabel#syntax_hint, QLabel#entries_count { color: #595d6c; }
+
+/* ---- Tool buttons ---- */
+QToolButton {
+  background: transparent;
+  border: 1px solid #cfd3e5;
+  border-radius: 6px;
+  padding: 7px 12px;
+  color: #292b31;
+}
+QToolButton:hover  { background: #e4e7f5; border-color: #b2b6ca; }
+QToolButton:pressed{ background: #cfd3e5; }
+QToolButton::menu-indicator { width: 0; }
+
+/* ---- Queue cards — same hooks as dark ---- */
+QListWidget#queue_cards { background: transparent; border: none; }
+QListWidget#queue_cards::item { background: transparent; margin: 0 0 8px 0; }
+QListWidget#queue_cards::item:selected { background: transparent; }
+QFrame[videoCard="true"] {
+  background: #edf0fa;
+  border: 1px solid #cfd3e5;
+  border-radius: 8px;
+}
+QFrame[videoCard="true"]:hover { border-color: #b2b6ca; }
+QFrame[videoCard="true"][selected="true"] { background: #e7e5fe; border-color: #9184d9; }
+QLabel#card_thumb {
+  background: #e7e5fe;
+  border: 1px solid #d2cefd;
+  border-radius: 6px;
+  min-width: 96px; max-width: 96px; min-height: 54px; max-height: 54px;
+  qproperty-alignment: AlignCenter;
+  color: #5d5294;
+}
+QLabel#card_title { font-weight: 500; }
+QLabel#card_meta, QLabel#card_status { color: #595d6c; font-size: 12px; }
+QLabel#card_status[state="ok"]  { color: #5d5294; }
+QLabel#card_status[state="err"] { color: #a04444; }
+
+/* ---- Pass-plan chips ---- */
+/* local merge: the chip strip itself is invisible chrome */
+QListWidget#pass_chips {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+QListWidget#pass_chips::item { background: transparent; }
+QListWidget#pass_chips::item:selected { background: transparent; }
+
+QFrame[passChip="true"] {
+  background: #f3f5fe;
+  border: 1px solid #cfd3e5;
+  border-radius: 15px;
+  padding: 3px 4px 3px 3px;
+}
+QFrame[passChip="true"]:hover { border-color: #b2b6ca; }
+QToolButton[chipRemove="true"] {
+  background: transparent; border: none; border-radius: 8px;
+  padding: 1px; color: #595d6c;
+}
+QToolButton[chipRemove="true"]:hover { background: rgba(176,86,86,0.12); color: #a04444; }
 
 QFrame[stepCard="true"] {
   background: #edf0fa; border: 1px solid #cfd3e5; border-radius: 8px;
