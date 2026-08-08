@@ -36,6 +36,7 @@ from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .events import format_event
 from .gigaam_wizard import GigaamWizard
+from .hover_table import HoverRowTable
 from .history_tab import HistoryTab
 from .i18n import tr
 from .models_tab import ModelsTab
@@ -177,7 +178,7 @@ class MainWindow(QMainWindow):
         file_buttons.addWidget(self.watch_button)
         root.addLayout(file_buttons)
 
-        self.table = QTableWidget(0, 3)
+        self.table = HoverRowTable(0, 3)
         self.table.setHorizontalHeaderLabels(
             [tr("File"), tr("Duration"), tr("Status")])
         header = self.table.horizontalHeader()

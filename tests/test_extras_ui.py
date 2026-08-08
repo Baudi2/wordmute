@@ -108,6 +108,29 @@ def test_history_tab_populates(qapp, tmp_path, monkeypatch):
     assert tab.table.item(0, 3).text() == "5"
 
 
+def test_hover_row_table_paints_whole_row(qapp):
+    from PySide6.QtWidgets import QTableWidgetItem
+
+    from wordmute_app.ui.hover_table import HoverRowTable
+    from wordmute_app.ui.theme import hover_color
+
+    t = HoverRowTable(2, 3)
+    for r in range(2):
+        for c in range(3):
+            t.setItem(r, c, QTableWidgetItem(f"{r}{c}"))
+
+    t._set_hover(0)
+    assert all(t.item(0, c).background().color() == hover_color()
+               for c in range(3))
+    t._set_hover(1)  # row 0 cleared, row 1 tinted
+    assert all(t.item(1, c).background().color() == hover_color()
+               for c in range(3))
+    assert t.item(0, 0).background().color() != hover_color() or \
+        t.item(0, 0).background().style() == 0  # cleared brush
+    t.setRowCount(0)
+    assert t._hover_row == -1
+
+
 def test_i18n_translates_and_falls_through():
     from wordmute_app.ui import i18n
 

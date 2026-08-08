@@ -160,7 +160,10 @@ QTableView, QTableWidget, QTreeView, QListView, QListWidget {
   gridline-color: rgba(233,233,237,0.07);
   outline: none;
 }
-QTableView::item, QTableWidget::item { padding: 6px 10px; }
+QTableView::item, QTableWidget::item {
+  padding: 6px 10px;
+  border-right: 1px solid rgba(233,233,237,0.07);  /* thin column separator */
+}
 QTableView::item:selected, QTableWidget::item:selected,
 QListView::item:selected, QTreeView::item:selected {
   background: #2b2741; color: #e9e9ed;

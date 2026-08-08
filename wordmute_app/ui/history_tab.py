@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import history
+from .hover_table import HoverRowTable
 from .i18n import tr
 
 COLUMNS = ["Time", "File", "Status", "Muted", "Plan", "Output"]
@@ -44,7 +45,7 @@ class HistoryTab(QWidget):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(12)
 
-        self.table = QTableWidget(0, len(COLUMNS))
+        self.table = HoverRowTable(0, len(COLUMNS))
         self.table.setHorizontalHeaderLabels([tr(c) for c in COLUMNS])
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents)

@@ -23,6 +23,7 @@ from ..core import review
 from ..core.probe import media_duration
 from ..engine import wordmute as engine
 from ..engine.wordmute import fmt_ts
+from .hover_table import HoverRowTable
 from .i18n import tr
 from .player import SnippetPlayer
 
@@ -87,7 +88,7 @@ class ReviewDialog(QDialog):
             warn.setWordWrap(True)
             layout.addWidget(warn)
 
-        self.table = QTableWidget(0, 6)
+        self.table = HoverRowTable(0, 6)
         self.table.setHorizontalHeaderLabels(
             [tr("Mute"), "Start", "End", tr("Pass"), tr("Engine"),
              tr("Words")])

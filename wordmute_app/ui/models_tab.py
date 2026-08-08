@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import gpu, models
+from .hover_table import HoverRowTable
 from .i18n import tr
 
 COL_MODEL, COL_STATUS, COL_SIZE, COL_ACTION = range(4)
@@ -61,7 +62,7 @@ class ModelsTab(QWidget):
         layout.addWidget(gpu_label)
 
         layout.addWidget(QLabel("<b>Whisper</b>"))
-        self.table = QTableWidget(0, 4)
+        self.table = HoverRowTable(0, 4)
         self.table.setHorizontalHeaderLabels(
             [tr("Model"), tr("Status"), tr("Size"), ""])
         self.table.horizontalHeader().setSectionResizeMode(

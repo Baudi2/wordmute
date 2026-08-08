@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from ..core import downloader
 from ..core.jobs import QueueItem
+from .hover_table import HoverRowTable
 from .i18n import tr
 
 # keep fetch threads alive if their dialog closes early; Qt drops the
@@ -86,7 +87,7 @@ class AddUrlDialog(QDialog):
             cookies_row.addStretch()
             layout.addLayout(cookies_row)
 
-        self.table = QTableWidget(0, len(self.COLUMNS))
+        self.table = HoverRowTable(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels(
             [tr(c) for c in self.COLUMNS])
         self.table.horizontalHeader().setSectionResizeMode(

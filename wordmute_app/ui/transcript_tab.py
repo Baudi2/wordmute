@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import transcript
+from .hover_table import HoverRowTable
 from ..engine.wordmute import MEDIA_EXTS, fmt_ts, norm
 from .i18n import tr
 
@@ -52,7 +53,7 @@ class TranscriptTab(QWidget):
         search_row.addWidget(self.count_label)
         layout.addLayout(search_row)
 
-        self.table = QTableWidget(0, 2)
+        self.table = HoverRowTable(0, 2)
         self.table.setHorizontalHeaderLabels([tr("Time"), tr("Text")])
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeToContents)

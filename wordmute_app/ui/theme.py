@@ -20,6 +20,8 @@ THEMES = {
 DEFAULT_THEME = "dark"
 
 _PLACEHOLDER = {"dark": "#75798c", "light": "#8b8fa3"}
+_HOVER = {"dark": "#1f2130", "light": "#e4e7f5"}
+_current_theme = DEFAULT_THEME
 
 
 def theme_dir():
@@ -52,8 +54,16 @@ def _register_fonts() -> None:
     _fonts_loaded = True
 
 
+def hover_color() -> QColor:
+    """Row-hover tint for the active theme (used by HoverRowTable —
+    whole-row hover can't be expressed in QSS)."""
+    return QColor(_HOVER[_current_theme])
+
+
 def apply_theme(app, name: str) -> None:
+    global _current_theme
     name = name if name in THEMES else DEFAULT_THEME
+    _current_theme = name
     _register_fonts()
     app.setStyle("Fusion")
     app.setStyleSheet(load_stylesheet(name))
