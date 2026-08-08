@@ -228,10 +228,9 @@ RU = {
         "Лучшее видео+аудио (рекомендуется)",
     "Best video+audio\n(recommended)":
         "Лучшее видео+аудио\n(рекомендуется)",
-    "Paste a video URL, then either fetch the format list or add "
-    "it at best quality.":
-        "Вставьте ссылку на видео, затем получите список форматов или "
-        "добавьте в лучшем качестве.",
+    "Paste a video URL — the format list loads automatically.":
+        "Вставьте ссылку на видео — список форматов загрузится "
+        "автоматически.",
     "Fetching format list…": "Получение списка форматов…",
     "Could not fetch formats: {}": "Не удалось получить форматы: {}",
     "Quality": "Качество",

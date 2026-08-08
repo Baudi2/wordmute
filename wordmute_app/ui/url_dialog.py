@@ -1,7 +1,7 @@
 """Add-URL dialog: paste a link, optionally fetch yt-dlp's format list
 and pick a specific quality, or add straight away at best quality."""
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QProgressBar,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -48,7 +49,8 @@ class FormatListWorker(QThread):
 class AddUrlDialog(QDialog):
     COLUMNS = ["Quality", "Size", "Note", "Ext", "FPS", "Type"]
 
-    def __init__(self, parent=None, url: str = "", cookies=None):
+    def __init__(self, parent=None, url: str = "", cookies=None,
+                 auto_fetch: bool = True):
         super().__init__(parent)
         self.setWindowTitle(tr("Add URL"))
         self.resize(780, 560)
@@ -56,22 +58,31 @@ class AddUrlDialog(QDialog):
         self._info = None
         self._use_best = False
         self._cookies = cookies
+        self._fetch_generation = 0
 
         layout = QVBoxLayout(self)
-        url_row = QHBoxLayout()
         self.url_edit = QLineEdit(url)
         self.url_edit.setPlaceholderText("https://…")
-        self.fetch_button = QPushButton(tr("Fetch formats"))
-        self.fetch_button.clicked.connect(self._fetch)
-        url_row.addWidget(self.url_edit, stretch=1)
-        url_row.addWidget(self.fetch_button)
-        layout.addLayout(url_row)
+        # formats load automatically: debounce typing, Enter = right now
+        self._fetch_timer = QTimer(self)
+        self._fetch_timer.setSingleShot(True)
+        self._fetch_timer.setInterval(800)
+        self._fetch_timer.timeout.connect(self._fetch)
+        self.url_edit.textChanged.connect(self._schedule_fetch)
+        self.url_edit.returnPressed.connect(self._fetch)
+        layout.addWidget(self.url_edit)
 
-        self.status = QLabel(tr("Paste a video URL, then either fetch the "
-                                "format list or add it at best quality."))
+        self.status = QLabel(tr("Paste a video URL — the format list "
+                                "loads automatically."))
         self.status.setWordWrap(True)
         self.status.setProperty("muted", True)
         layout.addWidget(self.status)
+
+        self.loading_bar = QProgressBar()
+        self.loading_bar.setRange(0, 0)  # indeterminate
+        self.loading_bar.setTextVisible(False)
+        self.loading_bar.setVisible(False)
+        layout.addWidget(self.loading_bar)
 
         if not self._cookies:
             cookies_row = QHBoxLayout()
@@ -118,6 +129,8 @@ class AddUrlDialog(QDialog):
         buttons_row.addWidget(self.buttons)
         layout.addLayout(buttons_row)
         self._update_ok()
+        if auto_fetch and self._looks_like_url(url):
+            QTimer.singleShot(0, self._fetch)
 
     def _goto_settings(self):
         parent = self.parent()
@@ -130,23 +143,50 @@ class AddUrlDialog(QDialog):
     def _url(self) -> str:
         return self.url_edit.text().strip()
 
+    @staticmethod
+    def _looks_like_url(text: str) -> bool:
+        return text.strip().startswith(("http://", "https://"))
+
+    def _schedule_fetch(self):
+        if self._looks_like_url(self._url()):
+            self._fetch_timer.start()
+        else:
+            self._fetch_timer.stop()
+
     def _fetch(self):
         url = self._url()
-        if not url:
+        if not self._looks_like_url(url):
             return
-        self.fetch_button.setEnabled(False)
+        self._fetch_timer.stop()
+        self._fetch_generation += 1
+        generation = self._fetch_generation
         self.status.setText(tr("Fetching format list…"))
+        self.loading_bar.setVisible(True)
+        self.table.setRowCount(0)
+        self._info = None
+        self._update_ok()
         worker = FormatListWorker(url, cookies=self._cookies)
-        worker.ready.connect(self._on_formats_ready)
-        worker.error.connect(self._on_fetch_error)
+        # a newer fetch (edited URL) makes this one's result stale
+        worker.ready.connect(
+            lambda info, g=generation:
+            self._on_formats_ready(info)
+            if g == self._fetch_generation else None)
+        worker.error.connect(
+            lambda message, g=generation:
+            self._on_fetch_error(message)
+            if g == self._fetch_generation else None)
         worker.start()
 
     def _on_formats_ready(self, info: dict):
         self._info = info
-        self.fetch_button.setEnabled(True)
+        self.loading_bar.setVisible(False)
         duration = info.get("duration")
-        extra = (f" · {int(duration // 60)} {tr('min')}" if duration
-                 else "")
+        if duration and duration >= 60:
+            extra = f" · {int(duration // 60)} {tr('min')}"
+        elif duration:
+            extra = f" · {int(duration)} {tr('s')}"
+        else:
+            extra = ""
         self.status.setText(f"{info['title']}{extra}")
         self.table.setRowCount(0)
         self._add_row([tr("Best video+audio\n(recommended)"),
@@ -173,7 +213,7 @@ class AddUrlDialog(QDialog):
             self.table.setItem(row, col, item)
 
     def _on_fetch_error(self, message: str):
-        self.fetch_button.setEnabled(True)
+        self.loading_bar.setVisible(False)
         self.status.setText(
             tr("Could not fetch formats: {}").format(message))
 

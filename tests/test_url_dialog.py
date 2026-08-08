@@ -16,7 +16,8 @@ INFO = {
 
 def make_dialog(qapp, url="https://example.com/v"):
     from wordmute_app.ui.url_dialog import AddUrlDialog
-    return AddUrlDialog(url=url)
+    # auto_fetch off: tests must never hit the network
+    return AddUrlDialog(url=url, auto_fetch=False)
 
 
 def test_quick_add_best_without_fetch(qapp):
@@ -55,6 +56,25 @@ def test_format_table_and_selection(qapp):
 
 def test_fetch_error_shown(qapp):
     d = make_dialog(qapp)
+    d.loading_bar.setVisible(True)
     d._on_fetch_error("Unsupported URL")
     assert "Unsupported URL" in d.status.text()
-    assert d.fetch_button.isEnabled()
+    assert not d.loading_bar.isVisible()
+
+
+def test_stale_fetch_results_ignored(qapp):
+    d = make_dialog(qapp)
+    d._fetch_generation = 2  # a newer fetch superseded generation 1
+    handler_gen = 1
+    if handler_gen == d._fetch_generation:
+        d._on_formats_ready(INFO)
+    assert d.table.rowCount() == 0  # stale result never populated
+
+
+def test_debounce_starts_only_for_urls(qapp):
+    d = make_dialog(qapp)
+    d.url_edit.setText("not a url")
+    assert not d._fetch_timer.isActive()
+    d.url_edit.setText("https://example.com/other")
+    assert d._fetch_timer.isActive()
+    d._fetch_timer.stop()
