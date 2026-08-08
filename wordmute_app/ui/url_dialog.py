@@ -45,12 +45,13 @@ class FormatListWorker(QThread):
 
 
 class AddUrlDialog(QDialog):
-    COLUMNS = ["Quality", "Ext", "FPS", "Type", "Size", "Note"]
+    COLUMNS = ["Quality", "Size", "Note", "Ext", "FPS", "Type"]
 
     def __init__(self, parent=None, url: str = "", cookies=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Add URL"))
-        self.resize(640, 480)
+        self.resize(780, 560)
+        self.setMinimumWidth(720)
         self._info = None
         self._use_best = False
         self._cookies = cookies
@@ -109,6 +110,7 @@ class AddUrlDialog(QDialog):
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.button(QDialogButtonBox.Ok).setText(tr("Add selected"))
+        self.buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         buttons_row.addWidget(self.buttons)
@@ -141,7 +143,8 @@ class AddUrlDialog(QDialog):
         self._info = info
         self.fetch_button.setEnabled(True)
         duration = info.get("duration")
-        extra = f" · {int(duration // 60)} min" if duration else ""
+        extra = (f" · {int(duration // 60)} {tr('min')}" if duration
+                 else "")
         self.status.setText(f"{info['title']}{extra}")
         self.table.setRowCount(0)
         self._add_row([tr("Best video+audio (recommended)"),
@@ -149,9 +152,9 @@ class AddUrlDialog(QDialog):
         for f in info["formats"]:
             d = downloader.describe_format(f)
             self._add_row(
-                [d["resolution"] or d["id"], d["ext"],
-                 str(int(d["fps"])) if d["fps"] else "",
-                 d["kind"], d["size"], d["note"]],
+                [d["resolution"] or d["id"], d["size"], d["note"],
+                 d["ext"], str(int(d["fps"])) if d["fps"] else "",
+                 tr(d["kind"])],
                 f)
         self.table.selectRow(0)
         self._update_ok()
@@ -163,6 +166,8 @@ class AddUrlDialog(QDialog):
             item = QTableWidgetItem(text)
             if col == 0:
                 item.setData(Qt.UserRole, fmt)
+            else:
+                item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
 
     def _on_fetch_error(self, message: str):

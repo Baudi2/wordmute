@@ -25,13 +25,11 @@ def tr(text: str) -> str:
 
 RU = {
     # main window
-    "Add Files…": "Добавить файлы…",
-    "Add Folder…": "Добавить папку…",
-    "Add URL…": "Добавить ссылку…",
+    "Add Files": "Добавить файлы",
+    "Add Folder": "Добавить папку",
     "Remove Selected": "Убрать выбранное",
-    "Review…": "Проверка…",
-    "Settings…": "Настройки…",
-    "GigaAM Setup…": "Настройка GigaAM…",
+    "GigaAM Setup": "Настройка GigaAM",
+    "Watch Folder": "Следить за папкой",
     "File": "Файл",
     "Duration": "Длительность",
     "Status": "Статус",
@@ -60,8 +58,15 @@ RU = {
     "cancelled": "отменено",
     "Cancelling…": "Отмена…",
     "Tools": "Инструменты",
-    "Watch Folder…": "Следить за папкой…",
     "Stop Watching": "Перестать следить",
+    "GigaAM passes need a one-time Hugging Face setup — "
+    "click 'GigaAM Setup'.":
+        "Проходам GigaAM нужна разовая настройка Hugging Face — "
+        "нажмите «Настройка GigaAM».",
+    "GigaAM support is not installed in this build — GigaAM "
+    "passes will fail. Use Whisper passes instead.":
+        "Поддержка GigaAM не установлена в этой сборке — проходы "
+        "GigaAM не сработают. Используйте проходы Whisper.",
     # tabs
     "Queue": "Очередь",
     "Word Lists": "Списки слов",
@@ -226,6 +231,9 @@ RU = {
     "Ext": "Формат",
     "Type": "Тип",
     "Note": "Примечание",
+    "video+audio": "видео+аудио",
+    "video only": "только видео",
+    "audio only": "только аудио",
     # review dialog
     "Review": "Проверка",
     "Source": "Источник",

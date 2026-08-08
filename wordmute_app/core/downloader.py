@@ -89,13 +89,17 @@ def fmt_size(n) -> str:
 
 def describe_format(f) -> dict:
     height = f.get("height")
-    resolution = f.get("resolution") or (f"{height}p" if height else "")
+    width = f.get("width")
+    # quality reads as "2160p"; the raw WxH moves to the note column
+    resolution = f"{height}p" if height else ""
+    raw = f.get("resolution") or (f"{width}x{height}"
+                                  if width and height else "")
     return {
         "id": str(f.get("format_id", "")),
         "ext": f.get("ext") or "",
         "resolution": resolution,
         "fps": f.get("fps"),
-        "note": f.get("format_note") or "",
+        "note": raw,
         "size": fmt_size(f.get("filesize") or f.get("filesize_approx")),
         "kind": format_kind(f),
     }

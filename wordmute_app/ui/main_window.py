@@ -140,16 +140,16 @@ class MainWindow(QMainWindow):
 
         # --- file queue
         file_buttons = QHBoxLayout()
-        self.add_button = QPushButton(tr("Add Files…"))
+        self.add_button = QPushButton(tr("Add Files"))
         self.add_button.clicked.connect(self._pick_files)
-        self.add_folder_button = QPushButton(tr("Add Folder…"))
+        self.add_folder_button = QPushButton(tr("Add Folder"))
         self.add_folder_button.clicked.connect(self._pick_folder)
         # lambda: clicked(checked) must not leak its bool into url=
-        self.add_url_button = QPushButton(tr("Add URL…"))
+        self.add_url_button = QPushButton(tr("Add URL"))
         self.add_url_button.clicked.connect(lambda: self._add_url())
         self.remove_button = QPushButton(tr("Remove Selected"))
         self.remove_button.clicked.connect(self._remove_selected)
-        self.review_button = QPushButton(tr("Review…"))
+        self.review_button = QPushButton(tr("Review"))
         self.review_button.setToolTip(
             tr("Open a review file (saved next to each processed output) "
                "to listen to muted moments and un-mute false positives."))
@@ -161,12 +161,12 @@ class MainWindow(QMainWindow):
         file_buttons.addWidget(self.add_url_button)
         file_buttons.addSpacing(16)
         file_buttons.addWidget(self.remove_button)
-        self.gigaam_setup_button = QPushButton(tr("GigaAM Setup…"))
+        self.gigaam_setup_button = QPushButton(tr("GigaAM Setup"))
         self.gigaam_setup_button.setToolTip(
             tr("One-time Hugging Face setup required for GigaAM passes. "
                "Whisper works without any of this."))
         self.gigaam_setup_button.clicked.connect(self._open_gigaam_setup)
-        self.watch_button = QPushButton(tr("Watch Folder…"))
+        self.watch_button = QPushButton(tr("Watch Folder"))
         self.watch_button.setToolTip(
             tr("Automatically queue and process new media files appearing "
                "in a chosen folder."))
@@ -215,7 +215,7 @@ class MainWindow(QMainWindow):
         empty_layout.addWidget(empty_body)
         empty_buttons = QHBoxLayout()
         empty_buttons.addStretch()
-        empty_add = QPushButton(tr("Add Files…"))
+        empty_add = QPushButton(tr("Add Files"))
         empty_add.setProperty("primary", True)
         empty_add.clicked.connect(self._pick_files)
         empty_view_lists = QPushButton(tr("View word lists"))
@@ -409,7 +409,7 @@ class MainWindow(QMainWindow):
             self._watch_timer.stop()
             self._watch_dir = None
             self._watch_seen = {}
-            self.watch_button.setText(tr("Watch Folder…"))
+            self.watch_button.setText(tr("Watch Folder"))
             self.status_label.setText(tr("Ready."))
             return
         d = QFileDialog.getExistingDirectory(
@@ -556,7 +556,7 @@ class MainWindow(QMainWindow):
         act_show = menu.addAction(tr("Show output in folder"))
         act_show.setEnabled(out_ok)
         rev = self._review_path_for_row(row)
-        act_review = menu.addAction(tr("Review…"))
+        act_review = menu.addAction(tr("Review"))
         act_review.setEnabled(bool(rev and Path(rev).exists()))
         chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
         if chosen is act_open:
@@ -623,12 +623,12 @@ class MainWindow(QMainWindow):
         warnings = gpu.plan_warnings(plan, s["device"], self._gpus)
         if "gigaam" in engines and not self._gigaam_installed():
             warnings.append(
-                "GigaAM support is not installed in this build — GigaAM "
-                "passes will fail. Use Whisper passes instead.")
+                tr("GigaAM support is not installed in this build — "
+                   "GigaAM passes will fail. Use Whisper passes instead."))
         elif "gigaam" in engines and not self._gigaam_ready():
             warnings.append(
-                "GigaAM passes need a one-time Hugging Face setup — "
-                "click 'GigaAM Setup…'.")
+                tr("GigaAM passes need a one-time Hugging Face setup — "
+                   "click 'GigaAM Setup'."))
         return warnings
 
     def _refresh_warnings(self):
