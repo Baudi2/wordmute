@@ -73,6 +73,19 @@ def test_same_value_recheck_does_not_mark_dirty(dialog):
     assert dialog._dirty is False
 
 
+def test_reverting_to_saved_state_clears_dirty(dialog):
+    # regression: uncheck then re-check the same box = no net change
+    dialog.table.item(0, 0).setCheckState(Qt.Unchecked)
+    assert dialog._dirty is True
+    dialog.table.item(0, 0).setCheckState(Qt.Checked)
+    assert dialog._dirty is False
+    # mixed case: two flips, one reverted -> still dirty
+    dialog.table.item(0, 0).setCheckState(Qt.Unchecked)
+    dialog.table.item(1, 0).setCheckState(Qt.Unchecked)
+    dialog.table.item(1, 0).setCheckState(Qt.Checked)
+    assert dialog._dirty is True
+
+
 def test_selection_plays_snippet(dialog):
     dialog.table.selectRow(1)
     assert dialog._player.played

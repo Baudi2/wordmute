@@ -67,6 +67,7 @@ class ReviewDialog(QDialog):
         self._player = SnippetPlayer()
         self._worker = None
         self._dirty = False
+        self._saved_muted = self._muted_snapshot()
         self._filling = False
         self._source_ok = Path(self._data["source"]).exists()
 
@@ -159,18 +160,22 @@ class ReviewDialog(QDialog):
             self.table.setItem(row, COL_TEXT, QTableWidgetItem(iv["text"]))
         self._filling = False
 
+    def _muted_snapshot(self) -> list:
+        return [iv.get("muted", True) for iv in self._data["intervals"]]
+
     def _on_item_changed(self, item):
         if self._filling or item.column() != COL_MUTE:
             return
         # itemChanged also fires for cosmetic changes (the row-hover
         # highlight sets cell backgrounds) — only a real checkbox flip
-        # may mark the review dirty
+        # counts, and dirty means "differs from the last-saved state",
+        # so flipping a box back restores a clean dialog
         iv = self._data["intervals"][item.row()]
         muted = item.checkState() == Qt.Checked
         if iv.get("muted", True) == muted:
             return
         iv["muted"] = muted
-        self._dirty = True
+        self._dirty = self._muted_snapshot() != self._saved_muted
         self._update_counts()
 
     def _set_all(self, muted: bool):
@@ -221,6 +226,7 @@ class ReviewDialog(QDialog):
     def _on_rerender_ok(self):
         self._worker = None
         self._dirty = False
+        self._saved_muted = self._muted_snapshot()  # new baseline
         self.rerender_button.setEnabled(True)
         muted = sum(1 for iv in self._data["intervals"]
                     if iv.get("muted", True))
