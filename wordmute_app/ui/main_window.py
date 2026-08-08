@@ -46,11 +46,18 @@ from .url_dialog import AddUrlDialog
 from .wordlists_tab import WordListsTab
 from .worker import ProcessWorker
 
-# data roles on each queue QListWidgetItem
+# data roles on each queue QListWidgetItem. Cards are rebuilt from
+# these after drag-reorders (Qt destroys item widgets on internal
+# moves), so everything a card shows must live here.
 ITEM_ROLE = Qt.UserRole            # the QueueItem object
 REVIEW_ROLE = Qt.UserRole + 1      # path of the review sidecar
 OUTPUT_ROLE = Qt.UserRole + 2      # path of the produced output file
 DURATION_ROLE = Qt.UserRole + 3    # media duration in seconds
+STATUS_ROLE = Qt.UserRole + 4      # current status text
+STATE_ROLE = Qt.UserRole + 5       # status color state (ok/err/None)
+THUMB_ROLE = Qt.UserRole + 6       # cached thumbnail path ("" = none)
+TITLE_ROLE = Qt.UserRole + 7       # card title (changes after download)
+META_ROLE = Qt.UserRole + 8        # card meta line
 
 
 def fmt_duration(sec) -> str:
@@ -176,6 +183,11 @@ class MainWindow(QMainWindow):
         self.queue = QueueList()
         self.queue.setObjectName("queue_cards")
         self.queue.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.queue.setDragDropMode(QAbstractItemView.InternalMove)
+        # a drag-move destroys the moved rows' card widgets; rebuild
+        # them from the item roles once the move settles
+        self.queue.model().rowsMoved.connect(
+            lambda *_: QTimer.singleShot(0, self._restore_cards))
         self.queue.itemDoubleClicked.connect(self._on_row_double_clicked)
         self.queue.itemSelectionChanged.connect(self._mirror_selection)
         self.queue.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -476,14 +488,26 @@ class MainWindow(QMainWindow):
         where = item.url if item.kind == "url" else str(item.path)
         return f"{fmt_duration(item.duration)} · {where}"
 
-    def _insert_row(self, item: QueueItem, status: str = None):
-        if status is None:
-            status = tr("queued")
+    def _build_card(self, list_item) -> QueueCard:
+        """Create a card entirely from the item's data roles (used on
+        insert and to resurrect cards after drag-reorders)."""
+        item = list_item.data(ITEM_ROLE)
         glyph = "♪" if (item.kind == "file" and item.path.suffix.lower()
                         in thumbs.AUDIO_EXTS) else "▶"
-        card = QueueCard(item.display_name, self._card_meta(item),
-                         glyph=glyph)
-        card.set_status(status)
+        card = QueueCard(list_item.data(TITLE_ROLE) or item.display_name,
+                         list_item.data(META_ROLE) or "", glyph=glyph)
+        status = list_item.data(STATUS_ROLE) or tr("queued")
+        card.set_status(status, state=list_item.data(STATE_ROLE))
+        thumb = list_item.data(THUMB_ROLE)
+        if thumb and Path(thumb).exists():
+            card.set_thumb(thumb)
+        review = list_item.data(REVIEW_ROLE)
+        out = list_item.data(OUTPUT_ROLE)
+        done = status.startswith(tr("done"))
+        card.set_actions(
+            review=done and bool(review and Path(review).exists()),
+            open_=done and bool(out and Path(out).exists()),
+            retry=status.startswith("error"))
         card.review_clicked.connect(
             lambda c=card: self._card_review(self._row_of_card(c)))
         card.open_clicked.connect(
@@ -494,15 +518,32 @@ class MainWindow(QMainWindow):
             lambda button, c=card: self._card_menu(
                 self._row_of_card(c),
                 button.mapToGlobal(button.rect().bottomLeft())))
+        return card
+
+    def _restore_cards(self):
+        for row in range(self.queue.count()):
+            list_item = self.queue.item(row)
+            if self.queue.itemWidget(list_item) is None:
+                self.queue.setItemWidget(list_item,
+                                         self._build_card(list_item))
+        self.queue.sync_sizes()
+        self._mirror_selection()
+
+    def _insert_row(self, item: QueueItem, status: str = None):
+        if status is None:
+            status = tr("queued")
+        thumb = None
         if item.kind == "file":
             thumb = thumbs.thumbnail_path(item.path)
-            if thumb:
-                card.set_thumb(thumb)
         list_item = QListWidgetItem()
         list_item.setData(ITEM_ROLE, item)
         list_item.setData(DURATION_ROLE, item.duration)
+        list_item.setData(TITLE_ROLE, item.display_name)
+        list_item.setData(META_ROLE, self._card_meta(item))
+        list_item.setData(THUMB_ROLE, str(thumb) if thumb else "")
+        list_item.setData(STATUS_ROLE, status)
         self.queue.addItem(list_item)
-        self.queue.setItemWidget(list_item, card)
+        self.queue.setItemWidget(list_item, self._build_card(list_item))
         self.queue.sync_sizes()
         self._update_queue_stack()
 
@@ -595,7 +636,7 @@ class MainWindow(QMainWindow):
         card = self._card(row)
         if card is None or self._worker is not None:
             return
-        card.set_status(tr("queued"))
+        self._apply_status(row, tr("queued"))
         card.set_actions()
 
     def _card_menu(self, row: int, global_pos):
@@ -796,9 +837,9 @@ class MainWindow(QMainWindow):
                       else None)
 
         for row in pending:
+            self._apply_status(row, tr("queued"))
             card = self._card(row)
             if card:
-                card.set_status(tr("queued"))
                 card.set_actions()
 
         self._active_rows = pending
@@ -832,6 +873,10 @@ class MainWindow(QMainWindow):
         self.add_folder_button.setEnabled(not running)
         self.add_url_button.setEnabled(not running)
         self.remove_button.setEnabled(not running)
+        # reordering mid-run would desync the worker's row mapping
+        self.queue.setDragDropMode(
+            QAbstractItemView.NoDragDrop if running
+            else QAbstractItemView.InternalMove)
         # settings tab stays enabled: options are captured at Start, so
         # edits only affect the next run
         for w in (self.russian_check, self.english_check, self.plan,
@@ -862,9 +907,18 @@ class MainWindow(QMainWindow):
 
     def _set_row_status(self, text: str, state=None, progress=None):
         if self._current_row is not None:
-            card = self._card(self._current_row)
-            if card:
-                card.set_status(text, state=state, progress=progress)
+            self._apply_status(self._current_row, text, state=state,
+                               progress=progress)
+
+    def _apply_status(self, row: int, text: str, state=None,
+                      progress=None):
+        card = self._card(row)
+        if card:
+            card.set_status(text, state=state, progress=progress)
+        list_item = self.queue.item(row)
+        if list_item:  # keep roles in sync for drag-rebuilds
+            list_item.setData(STATUS_ROLE, text)
+            list_item.setData(STATE_ROLE, state)
 
     def _pass_prefix(self) -> str:
         if self._pass_total > 1:
@@ -948,12 +1002,17 @@ class MainWindow(QMainWindow):
             return
         p = Path(path)
         duration = media_duration(p)
-        self.queue.item(self._current_row).setData(DURATION_ROLE, duration)
+        list_item = self.queue.item(self._current_row)
+        meta = f"{fmt_duration(duration)} · {p}"
+        thumb = thumbs.thumbnail_path(p)
+        list_item.setData(DURATION_ROLE, duration)
+        list_item.setData(TITLE_ROLE, p.name)
+        list_item.setData(META_ROLE, meta)
+        list_item.setData(THUMB_ROLE, str(thumb) if thumb else "")
         card = self._card(self._current_row)
         if card:
             card.set_title(p.name)
-            card.set_meta(f"{fmt_duration(duration)} · {p}")
-            thumb = thumbs.thumbnail_path(p)
+            card.set_meta(meta)
             if thumb:
                 card.set_thumb(thumb)
 
@@ -1025,8 +1084,8 @@ class MainWindow(QMainWindow):
             text = (tr("cancelled") if error == "cancelled"
                     else f"error: {error}")
             state = None if error == "cancelled" else "err"
+        self._apply_status(row, text, state=state)
         if card:
-            card.set_status(text, state=state)
             card.set_actions(review=ok and has_review,
                              open_=ok and has_out,
                              retry=not ok and error != "cancelled")

@@ -162,6 +162,34 @@ def test_watch_flow_scan_and_autoclear(qapp, tmp_path, monkeypatch):
     assert w._items()[0].display_name == "b.mp4"
 
 
+def test_queue_reorder_rebuilds_cards_with_state(qapp, tmp_path,
+                                                 monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import gpu
+    monkeypatch.setattr(gpu, "detect_gpus", lambda: [])
+    from wordmute_app.ui.main_window import MainWindow
+
+    w = MainWindow()
+    a = tmp_path / "a.mp4"
+    a.touch()
+    b = tmp_path / "b.mp4"
+    b.touch()
+    w._add_files([a, b])
+    w._apply_status(0, "done → a.clean.mp4", state="ok")
+
+    # takeItem/insertItem destroys the card widget, exactly like a
+    # real drag-move does
+    moved = w.queue.takeItem(0)
+    w.queue.insertItem(1, moved)
+    assert w.queue.itemWidget(moved) is None
+    w._restore_cards()
+
+    assert [it.display_name for it in w._items()] == ["b.mp4", "a.mp4"]
+    assert w.status_text(0) == "queued"
+    assert w.status_text(1) == "done → a.clean.mp4"
+    assert w._card(1).status_label.property("state") == "ok"
+
+
 def test_start_skips_already_done_rows(qapp, tmp_path, monkeypatch):
     # regression: Start used to reprocess the whole queue, re-running
     # files that had already completed in a previous run
