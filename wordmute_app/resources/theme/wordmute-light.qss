@@ -190,7 +190,7 @@ QTableView::item:selected, QTableWidget::item:selected,
 QListView::item:selected, QTreeView::item:selected {
   background: #e7e5fe; color: #292b31;
 }
-QTableView::item:hover, QTableWidget::item:hover { background: #e4e7f5; }
+/* no per-cell hover — selection carries the highlight (see dark qss) */
 QHeaderView { background: transparent; }
 QHeaderView::section {
   background: #f3f5fe;

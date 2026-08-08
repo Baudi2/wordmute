@@ -165,7 +165,8 @@ QTableView::item:selected, QTableWidget::item:selected,
 QListView::item:selected, QTreeView::item:selected {
   background: #2b2741; color: #e9e9ed;
 }
-QTableView::item:hover, QTableWidget::item:hover { background: #1f2130; }
+/* no per-cell hover: Qt can't hover whole rows via QSS, and a single
+   highlighted cell reads as broken — selection carries the highlight */
 QHeaderView { background: transparent; }
 QHeaderView::section {
   background: #161826;
