@@ -226,6 +226,10 @@ class MainWindow(QMainWindow):
         setup_bar_layout.setContentsMargins(12, 6, 12, 6)
         self.setup_summary = QLabel("")
         self.setup_summary.setObjectName("setup_summary")
+        # never force window width; long plans clip with a tooltip
+        from PySide6.QtWidgets import QSizePolicy
+        self.setup_summary.setSizePolicy(QSizePolicy.Ignored,
+                                         QSizePolicy.Preferred)
         setup_bar_layout.addWidget(self.setup_summary, stretch=1)
         self.setup_toggle = QPushButton(tr("Change…"))
         self.setup_toggle.clicked.connect(self._toggle_setup_panel)
@@ -358,18 +362,24 @@ class MainWindow(QMainWindow):
         self.setup_toggle.setText(tr("Hide") if show else tr("Change…"))
 
     def _update_setup_summary(self):
+        from itertools import groupby
         lists = []
         if self.russian_check.isChecked():
             lists.append(tr("Russian"))
         if self.english_check.isChecked():
             lists.append(tr("English"))
         engines = self.plan.engines()
-        plan_text = " → ".join(
-            "GigaAM" if e == "gigaam" else "Whisper" for e in engines) \
-            or tr("empty")
-        self.setup_summary.setText(
-            f"{tr('Word lists')}: {', '.join(lists) or tr('none')} · "
-            f"{tr('Pass plan')}: {plan_text}")
+        # compact: consecutive repeats collapse to "GigaAM ×2"
+        parts = []
+        for engine, run in groupby(engines):
+            count = len(list(run))
+            name = "GigaAM" if engine == "gigaam" else "Whisper"
+            parts.append(name if count == 1 else f"{name} ×{count}")
+        plan_text = " → ".join(parts) or tr("empty")
+        text = (f"{tr('Word lists')}: {', '.join(lists) or tr('none')} · "
+                f"{tr('Pass plan')}: {plan_text}")
+        self.setup_summary.setText(text)
+        self.setup_summary.setToolTip(text)
 
     def _toggle_log(self, checked: bool):
         self.log.setVisible(checked)
