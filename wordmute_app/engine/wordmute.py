@@ -413,6 +413,22 @@ def _beep_filtergraph(intervals, beep_hz: int) -> str:
             f"dropout_transition=0,volume=2[aout]")
 
 
+# the muted audio must be re-encoded in a codec its container accepts —
+# WebM refuses AAC outright (only Opus/Vorbis), lossless stays lossless
+_AUDIO_CODEC_FOR = {
+    ".webm": ["-c:a", "libopus", "-b:a", "160k"],
+    ".opus": ["-c:a", "libopus", "-b:a", "160k"],
+    ".ogg": ["-c:a", "libvorbis", "-q:a", "6"],
+    ".flac": ["-c:a", "flac"],
+    ".wav": ["-c:a", "pcm_s16le"],
+}
+_AUDIO_CODEC_DEFAULT = ["-c:a", "aac", "-b:a", "192k"]
+
+
+def _audio_codec_args(out: Path) -> list:
+    return _AUDIO_CODEC_FOR.get(out.suffix.lower(), _AUDIO_CODEC_DEFAULT)
+
+
 def mute(media: Path, intervals, out: Path, beep_hz=None):
     filters = (_beep_filtergraph(intervals, beep_hz) if beep_hz
                else _silence_filters(intervals))
@@ -421,6 +437,7 @@ def mute(media: Path, intervals, out: Path, beep_hz=None):
                                      encoding="utf-8") as f:
         f.write(filters)
         script = f.name
+    audio_args = _audio_codec_args(out)
     if beep_hz:
         # a filter_complex graph needs explicit maps; secondary audio
         # tracks are not carried over in beep mode
@@ -428,13 +445,13 @@ def mute(media: Path, intervals, out: Path, beep_hz=None):
             "-filter_complex_script", script,
             "-map", "0:v?", "-map", "[aout]", "-map", "0:s?",
             "-c:v", "copy", "-c:s", "copy",
-            "-c:a", "aac", "-b:a", "192k",
+            *audio_args,
         ]
     else:
         io_args = [
             "-map", "0",
             "-c", "copy",
-            "-c:a", "aac", "-b:a", "192k",
+            *audio_args,
             "-filter_script:a", script,
         ]
     cmd = [

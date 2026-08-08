@@ -104,6 +104,25 @@ def test_ffmpeg_failure_raises_with_code(monkeypatch):
         wm._run_ffmpeg_with_progress(["ffmpeg"])
 
 
+def test_audio_codec_follows_container():
+    assert wm._audio_codec_args(Path("v.webm"))[:2] == ["-c:a", "libopus"]
+    assert wm._audio_codec_args(Path("v.opus"))[:2] == ["-c:a", "libopus"]
+    assert wm._audio_codec_args(Path("v.ogg"))[:2] == ["-c:a", "libvorbis"]
+    assert wm._audio_codec_args(Path("v.flac")) == ["-c:a", "flac"]
+    assert wm._audio_codec_args(Path("v.wav")) == ["-c:a", "pcm_s16le"]
+    assert wm._audio_codec_args(Path("v.mp4"))[:2] == ["-c:a", "aac"]
+    assert wm._audio_codec_args(Path("v.MKV"))[:2] == ["-c:a", "aac"]
+
+
+def test_mute_webm_uses_opus(tmp_path, monkeypatch):
+    FakePopen.captured = {}
+    monkeypatch.setattr(wm.subprocess, "Popen", FakePopen)
+    wm.mute(tmp_path / "v.webm", INTERVALS, tmp_path / "out.webm")
+    cmd = FakePopen.captured["cmd"]
+    assert "libopus" in cmd
+    assert "aac" not in cmd
+
+
 def test_process_file_passes_beep_option(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
