@@ -221,6 +221,8 @@ RU = {
     "Add selected": "Добавить выбранное",
     "Best video+audio (recommended)":
         "Лучшее видео+аудио (рекомендуется)",
+    "Best video+audio\n(recommended)":
+        "Лучшее видео+аудио\n(рекомендуется)",
     "Paste a video URL, then either fetch the format list or add "
     "it at best quality.":
         "Вставьте ссылку на видео, затем получите список форматов или "

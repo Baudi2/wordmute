@@ -147,8 +147,9 @@ class AddUrlDialog(QDialog):
                  else "")
         self.status.setText(f"{info['title']}{extra}")
         self.table.setRowCount(0)
-        self._add_row([tr("Best video+audio (recommended)"),
+        self._add_row([tr("Best video+audio\n(recommended)"),
                        "", "", "", "", ""], None)
+        self.table.setRowHeight(0, 56)
         for f in info["formats"]:
             d = downloader.describe_format(f)
             self._add_row(
@@ -166,8 +167,7 @@ class AddUrlDialog(QDialog):
             item = QTableWidgetItem(text)
             if col == 0:
                 item.setData(Qt.UserRole, fmt)
-            else:
-                item.setTextAlignment(Qt.AlignCenter)
+            item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
 
     def _on_fetch_error(self, message: str):
