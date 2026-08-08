@@ -46,12 +46,12 @@ class _Chip(QFrame):
         badge.setProperty("stepNumber", True)
         layout.addWidget(badge)
         layout.addWidget(QLabel(ENGINE_LABELS[engine]))
-        layout.addStretch()  # full-row chip: ✕ sits at the right edge
         remove = QToolButton()
         remove.setProperty("chipRemove", True)
         remove.setText("✕")
         remove.clicked.connect(on_remove)
         layout.addWidget(remove)
+        self.setFixedSize(self.sizeHint())  # compact: content width only
 
 
 class _ChipsList(QListWidget):
@@ -89,6 +89,10 @@ class PassPlanWidget(QGroupBox):
         self.chips.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.chips.setFrameShape(QFrame.NoFrame)
         self.chips.setToolTip(tr(INFO_TEXT))
+        # never force the window wider (e.g. when the scrollbar appears)
+        from PySide6.QtWidgets import QSizePolicy
+        self.chips.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.chips.setMinimumWidth(180)
         # item widgets do not survive an internal drag-move; rebuild
         # from the items' data once the move settles
         self.chips.model().rowsMoved.connect(
@@ -166,8 +170,9 @@ class PassPlanWidget(QGroupBox):
             chip = _Chip(i + 1, engine,
                          lambda _=False, it=item: self.remove_pass(
                              self.chips.row(it)))
-            # width comes from the list; only the height matters here
-            item.setSizeHint(QSize(24, chip.sizeHint().height() + 4))
+            # the chip is fixed-size, so the list can't stretch it: it
+            # stays compact and left-aligned within the full-width row
+            item.setSizeHint(QSize(24, chip.height() + 6))
             self.chips.setItemWidget(item, chip)
         self._update_height()
 
