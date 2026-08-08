@@ -121,10 +121,16 @@ class ModelsTab(QWidget):
                 lambda _=False, m=model, d=st["downloaded"]:
                 self._delete(m) if d else self._download(m))
             self.table.setCellWidget(row, COL_ACTION, button)
-        # natural height: this table lists 4 models, not a data grid
-        header_h = self.table.horizontalHeader().height() or 32
-        self.table.setFixedHeight(
-            header_h + len(status) * 38 + 2 * self.table.frameWidth())
+        # natural height from the REAL row heights (the in-row buttons
+        # make rows taller than any fixed guess), capped with an inner
+        # scrollbar beyond that
+        self.table.resizeRowsToContents()
+        header = self.table.horizontalHeader()
+        total = (max(header.height(), header.sizeHint().height())
+                 + 2 * self.table.frameWidth() + 4
+                 + sum(self.table.rowHeight(r)
+                       for r in range(self.table.rowCount())))
+        self.table.setFixedHeight(min(total, 420))
 
         caches = models.gigaam_cache_dirs()
         if caches:

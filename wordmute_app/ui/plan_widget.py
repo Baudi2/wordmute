@@ -53,45 +53,67 @@ class _Chip(QFrame):
         layout.addWidget(remove)
 
 
+class _ChipsList(QListWidget):
+    """Notifies its owner on resize so the wrapped-chip height can be
+    recomputed for the new width."""
+
+    def __init__(self, on_resize, parent=None):
+        self._on_resize = on_resize  # before super(): resize can fire early
+        super().__init__(parent)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._on_resize()
+
+
 class PassPlanWidget(QGroupBox):
     changed = Signal()
+    MAX_CHIP_ROWS = 3  # taller plans scroll vertically
 
     def __init__(self, parent=None):
         super().__init__(tr("Pass plan"), parent)
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
 
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        self.chips = QListWidget()
+        # chips take the full group width and wrap onto more lines;
+        # the + buttons sit on their own row below (design feedback)
+        self.chips = _ChipsList(self._update_height)
         self.chips.setObjectName("pass_chips")
         self.chips.setFlow(QListView.LeftToRight)
         self.chips.setWrapping(True)
+        self.chips.setResizeMode(QListView.Adjust)
+        self.chips.setSpacing(3)
         self.chips.setDragDropMode(QAbstractItemView.InternalMove)
         self.chips.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.chips.setFixedHeight(46)
+        self.chips.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.chips.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.chips.setFrameShape(QFrame.NoFrame)
         self.chips.setToolTip(tr(INFO_TEXT))
         # item widgets do not survive an internal drag-move; rebuild
         # from the items' data once the move settles
         self.chips.model().rowsMoved.connect(
             lambda *_: QTimer.singleShot(0, self._on_reordered))
-        row.addWidget(self.chips, stretch=1)
+        layout.addWidget(self.chips)
+
+        buttons_row = QHBoxLayout()
+        buttons_row.setSpacing(8)
         self.add_whisper = QPushButton("+ Whisper")
         self.add_whisper.setToolTip(tr(ENGINE_TIPS["whisper"]))
         self.add_whisper.clicked.connect(lambda: self.add_pass("whisper"))
         self.add_gigaam = QPushButton("+ GigaAM")
         self.add_gigaam.setToolTip(tr(ENGINE_TIPS["gigaam"]))
         self.add_gigaam.clicked.connect(lambda: self.add_pass("gigaam"))
-        row.addWidget(self.add_whisper)
-        row.addWidget(self.add_gigaam)
-        layout.addLayout(row)
+        buttons_row.addWidget(self.add_whisper)
+        buttons_row.addWidget(self.add_gigaam)
+        buttons_row.addStretch()
+        layout.addLayout(buttons_row)
 
         note = QLabel(tr("GigaAM: faster, best for pure Russian.\n"
                          "Whisper: slower, handles English/mixed speech."))
         note.setWordWrap(True)
         note.setProperty("muted", True)
         layout.addWidget(note)
+        self._update_height()
 
     # ---------------------------------------------------------- model
     def engines(self) -> list:
@@ -145,3 +167,22 @@ class PassPlanWidget(QGroupBox):
                              self.chips.row(it)))
             item.setSizeHint(chip.sizeHint() + QSize(4, 4))
             self.chips.setItemWidget(item, chip)
+        self._update_height()
+
+    def _update_height(self):
+        """Grow with wrapped chip rows, scroll beyond MAX_CHIP_ROWS."""
+        spacing = self.chips.spacing()
+        width = max(self.chips.viewport().width(), 120)
+        row_height = 40
+        x = 0
+        rows = 1
+        for i in range(self.chips.count()):
+            hint = self.chips.item(i).sizeHint()
+            row_height = max(row_height, hint.height() + spacing)
+            w = hint.width() + spacing
+            if x and x + w > width:
+                rows += 1
+                x = 0
+            x += w
+        visible = min(rows, self.MAX_CHIP_ROWS)
+        self.chips.setFixedHeight(visible * row_height + 2 * spacing + 2)
