@@ -162,6 +162,49 @@ def test_watch_flow_scan_and_autoclear(qapp, tmp_path, monkeypatch):
     assert w._items()[0].display_name == "b.mp4"
 
 
+def test_start_skips_already_done_rows(qapp, tmp_path, monkeypatch):
+    # regression: Start used to reprocess the whole queue, re-running
+    # files that had already completed in a previous run
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import gpu
+    monkeypatch.setattr(gpu, "detect_gpus", lambda: [])
+    from wordmute_app.ui import main_window as mw
+
+    captured = {}
+
+    class DummySignal:
+        def connect(self, *a, **k):
+            pass
+
+    class FakeWorker:
+        def __init__(self, items, *args, **kwargs):
+            captured["items"] = list(items)
+            self.engine_event = DummySignal()
+            self.file_started = DummySignal()
+            self.file_finished = DummySignal()
+            self.all_finished = DummySignal()
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(mw, "ProcessWorker", FakeWorker)
+    w = mw.MainWindow()
+    a = tmp_path / "a.mp4"
+    a.touch()
+    b = tmp_path / "b.mp4"
+    b.touch()
+    w._add_files([a, b])
+    w._card(0).set_status("done → a.clean.mp4", state="ok")
+
+    w._start()
+    assert [it.display_name for it in captured["items"]] == ["b.mp4"]
+    assert w._active_rows == [1]
+    assert w._map_row(0) == 1  # worker index 0 -> queue row 1
+    # the finished card was left alone
+    assert w.status_text(0).startswith("done")
+    w._worker = None  # fake worker: nothing to wait for on close
+
+
 def test_main_window_has_tabs(qapp, tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     from wordmute_app.core import gpu

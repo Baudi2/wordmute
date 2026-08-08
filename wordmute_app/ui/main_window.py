@@ -93,6 +93,7 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
 
         self._worker = None
+        self._active_rows = []  # queue rows of the current run, in order
         self._review_windows = []
         self._wordlist_paths = config.ensure_user_wordlists()
         self._settings = config.load_settings()
@@ -722,17 +723,36 @@ class MainWindow(QMainWindow):
         self._pass_pct = 0.0
         self._asr_wall_start = None
 
+    def _pending_rows(self) -> list:
+        """Rows Start should process: still queued, or cancelled from an
+        interrupted batch. Done/error rows stay untouched (Retry
+        re-queues an error explicitly)."""
+        rows = []
+        for r in range(self.queue.count()):
+            status = self.status_text(r)
+            if status.startswith(tr("queued")) or status == tr("cancelled"):
+                rows.append(r)
+        return rows
+
     def _start(self, auto: bool = False):
         if auto:
             # watch-folder runs: keep only still-queued rows so earlier
             # results are never reprocessed
             self._clear_finished_rows()
-        items = self._items()
-        if not items:
+        if not self.queue.count():
             if not auto:
                 QMessageBox.information(self, "WordMute",
                                         tr("Add some files first."))
             return
+        pending = self._pending_rows()
+        if not pending:
+            if not auto:
+                QMessageBox.information(
+                    self, "WordMute",
+                    tr("Everything in the queue is already processed — "
+                       "add new files or use Retry on a failed one."))
+            return
+        items = [self.queue.item(r).data(ITEM_ROLE) for r in pending]
         lists = self._selected_wordlists()
         if not lists:
             if not auto:
@@ -775,12 +795,13 @@ class MainWindow(QMainWindow):
                       if s["output_mode"] == "folder" and s["output_dir"]
                       else None)
 
-        for row in range(self.queue.count()):
+        for row in pending:
             card = self._card(row)
             if card:
                 card.set_status(tr("queued"))
                 card.set_actions()
 
+        self._active_rows = pending
         self._reset_run_state(total=len(items))
         self._pass_total = len(plan)
         self._worker = ProcessWorker(items, wordlist, plan, options,
@@ -970,7 +991,15 @@ class MainWindow(QMainWindow):
             .format(fmt_hms(processed)))
         self._update_overall_progress()
 
+    def _map_row(self, index: int) -> int:
+        """Worker indexes count only the items of this run; map them to
+        actual queue rows (done rows are skipped by Start)."""
+        if 0 <= index < len(self._active_rows):
+            return self._active_rows[index]
+        return index
+
     def _on_file_started(self, row: int, name: str):
+        row = self._map_row(row)
         self._current_row = row
         self._pass_n = 1
         self._pass_pct = 0.0
@@ -980,6 +1009,7 @@ class MainWindow(QMainWindow):
         self._append_log(f"\n=== {name} ===")
 
     def _on_file_finished(self, row: int, ok: bool, error: str):
+        row = self._map_row(row)
         self._done_files += 1
         self._pass_pct = 0.0
         card = self._card(row)

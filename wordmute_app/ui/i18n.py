@@ -200,6 +200,10 @@ RU = {
         "автоматически.",
     # message boxes
     "Add some files first.": "Сначала добавьте файлы.",
+    "Everything in the queue is already processed — add new files "
+    "or use Retry on a failed one.":
+        "Все в очереди уже обработано — добавьте новые файлы или "
+        "нажмите «Повторить» на неудавшемся.",
     "Select at least one word list.":
         "Выберите хотя бы один список слов.",
     "Add at least one pass to the plan.":
