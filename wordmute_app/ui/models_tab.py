@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import gpu, models
+from ..core import gpu, models, updates
 from .hover_table import HoverRowTable
 from .i18n import tr
 
@@ -39,6 +39,41 @@ class DownloadWorker(QThread):
             self.failed.emit(self._model, str(exc))
         else:
             self.succeeded.emit(self._model)
+
+
+class CheckUpdatesWorker(QThread):
+    result = Signal(dict)
+
+    def run(self):
+        self.result.emit({
+            "packages": updates.check_packages(),
+            "models": updates.check_whisper_models(),
+        })
+
+
+class UpgradeWorker(QThread):
+    finished_ok = Signal(bool, str)
+
+    def __init__(self, package_names, model_names, parent=None):
+        super().__init__(parent)
+        self._packages = list(package_names)
+        self._models = list(model_names)
+
+    def run(self):
+        messages = []
+        ok = True
+        if self._packages:
+            pip_ok, tail = updates.pip_upgrade(self._packages)
+            ok = ok and pip_ok
+            messages.append(tail if not pip_ok
+                            else ", ".join(self._packages))
+        for model in self._models:
+            try:  # snapshot_download fetches the new revision
+                models.download_whisper_model(model)
+            except Exception as exc:
+                ok = False
+                messages.append(f"{model}: {exc}")
+        self.finished_ok.emit(ok, "\n".join(messages))
 
 
 class ModelsTab(QWidget):
@@ -93,6 +128,30 @@ class ModelsTab(QWidget):
         self.status_label.setProperty("muted", True)
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
+
+        # ---- updates
+        layout.addWidget(QLabel("<b>" + tr("Updates") + "</b>"))
+        updates_row = QHBoxLayout()
+        updates_row.setSpacing(8)
+        self.check_updates_button = QPushButton(tr("Check for updates"))
+        self.check_updates_button.clicked.connect(self._check_updates)
+        self.update_all_button = QPushButton(tr("Update all"))
+        self.update_all_button.setProperty("primary", True)
+        self.update_all_button.setVisible(False)
+        self.update_all_button.clicked.connect(self._update_all)
+        updates_row.addWidget(self.check_updates_button)
+        updates_row.addWidget(self.update_all_button)
+        updates_row.addStretch()
+        layout.addLayout(updates_row)
+        self.updates_label = QLabel("")
+        self.updates_label.setProperty("muted", True)
+        self.updates_label.setWordWrap(True)
+        layout.addWidget(self.updates_label)
+        self._updates_worker = None
+        self._upgrade_worker = None
+        self._outdated_packages = []
+        self._outdated_models = []
+
         layout.addStretch()
         self.refresh()
 
@@ -197,6 +256,78 @@ class ModelsTab(QWidget):
     def _open_cache(self):
         subprocess.Popen(["explorer", str(models.hf_hub_cache())])
 
+    # ---------------------------------------------------------- updates
+    def _check_updates(self):
+        if self._updates_worker is not None:
+            return
+        self.check_updates_button.setEnabled(False)
+        self.update_all_button.setVisible(False)
+        self.updates_label.setText(tr("Checking for updates…"))
+        self._updates_worker = CheckUpdatesWorker()
+        self._updates_worker.result.connect(self._on_updates_result)
+        self._updates_worker.start()
+
+    def _on_updates_result(self, result: dict):
+        self._updates_worker = None
+        self.check_updates_button.setEnabled(True)
+        lines = []
+        self._outdated_packages = []
+        self._outdated_models = []
+        for pkg in result["packages"]:
+            if pkg["installed"] is None:
+                lines.append(f"{pkg['name']}: {tr('not installed')}")
+            elif pkg["latest"] is None:
+                lines.append(f"{pkg['name']}: {pkg['installed']} — "
+                             + tr("could not check"))
+            elif pkg["update"]:
+                lines.append(f"{pkg['name']}: {pkg['installed']} → "
+                             f"{pkg['latest']}")
+                self._outdated_packages.append(pkg["name"])
+            else:
+                lines.append(f"{pkg['name']}: {pkg['installed']} ✓")
+        for m in result["models"]:
+            if m["update"]:
+                lines.append(
+                    tr("whisper {}: new model revision available")
+                    .format(m["model"]))
+                self._outdated_models.append(m["model"])
+            else:
+                lines.append(f"whisper {m['model']} ✓")
+        lines.append(tr("GigaAM weights update together with the "
+                        "gigaam package."))
+        self.updates_label.setText("\n".join(lines))
+        self.update_all_button.setVisible(
+            bool(self._outdated_packages or self._outdated_models))
+
+    def _update_all(self):
+        if self._upgrade_worker is not None:
+            return
+        self.update_all_button.setEnabled(False)
+        self.check_updates_button.setEnabled(False)
+        self.updates_label.setText(tr("Updating…"))
+        self._upgrade_worker = UpgradeWorker(self._outdated_packages,
+                                             self._outdated_models)
+        self._upgrade_worker.finished_ok.connect(self._on_upgrade_done)
+        self._upgrade_worker.start()
+
+    def _on_upgrade_done(self, ok: bool, message: str):
+        had_packages = bool(self._outdated_packages)
+        self._upgrade_worker = None
+        self.update_all_button.setEnabled(True)
+        self.update_all_button.setVisible(not ok)
+        self.check_updates_button.setEnabled(True)
+        if ok:
+            text = tr("Updates installed.")
+            if had_packages:
+                text += " " + tr("Restart the app to use them.")
+            self.updates_label.setText(text)
+        else:
+            self.updates_label.setText(
+                tr("Update failed: {}").format(message))
+        self.refresh()
+
     def shutdown(self):
-        if self._worker is not None:
-            self._worker.wait(30000)
+        for worker in (self._worker, self._updates_worker,
+                       self._upgrade_worker):
+            if worker is not None:
+                worker.wait(30000)

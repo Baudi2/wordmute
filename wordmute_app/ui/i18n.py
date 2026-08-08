@@ -295,6 +295,22 @@ RU = {
     "on the next GigaAM pass.":
         "Удалить все кэши моделей GigaAM? Они будут скачаны заново при "
         "следующем проходе GigaAM.",
+    # updates
+    "Updates": "Обновления",
+    "Check for updates": "Проверить обновления",
+    "Update all": "Обновить все",
+    "Checking for updates…": "Проверка обновлений…",
+    "Updating…": "Обновление…",
+    "not installed": "не установлен",
+    "could not check": "не удалось проверить",
+    "whisper {}: new model revision available":
+        "whisper {}: доступна новая версия модели",
+    "GigaAM weights update together with the gigaam package.":
+        "Веса GigaAM обновляются вместе с пакетом gigaam.",
+    "Updates installed.": "Обновления установлены.",
+    "Restart the app to use them.":
+        "Перезапустите приложение, чтобы они заработали.",
+    "Update failed: {}": "Обновление не удалось: {}",
     # history tab
     "Time": "Время",
     "Muted": "Заглушено",
