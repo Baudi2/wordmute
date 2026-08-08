@@ -59,6 +59,20 @@ def test_uncheck_marks_unmuted_and_dirty(dialog):
     assert "1 will be un-muted" in dialog.counts_label.text()
 
 
+def test_hover_does_not_mark_dirty(dialog):
+    # regression: row-hover sets cell backgrounds, which fires
+    # itemChanged; that must never count as a user edit
+    dialog.table._set_hover(0)
+    dialog.table._set_hover(1)
+    dialog.table._set_hover(-1)
+    assert dialog._dirty is False
+
+
+def test_same_value_recheck_does_not_mark_dirty(dialog):
+    dialog.table.item(0, 0).setCheckState(Qt.Checked)  # already checked
+    assert dialog._dirty is False
+
+
 def test_selection_plays_snippet(dialog):
     dialog.table.selectRow(1)
     assert dialog._player.played

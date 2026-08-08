@@ -162,8 +162,14 @@ class ReviewDialog(QDialog):
     def _on_item_changed(self, item):
         if self._filling or item.column() != COL_MUTE:
             return
+        # itemChanged also fires for cosmetic changes (the row-hover
+        # highlight sets cell backgrounds) — only a real checkbox flip
+        # may mark the review dirty
         iv = self._data["intervals"][item.row()]
-        iv["muted"] = item.checkState() == Qt.Checked
+        muted = item.checkState() == Qt.Checked
+        if iv.get("muted", True) == muted:
+            return
+        iv["muted"] = muted
         self._dirty = True
         self._update_counts()
 
