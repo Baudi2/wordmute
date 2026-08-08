@@ -87,20 +87,29 @@ def fmt_size(n) -> str:
     return f"{mb / 1024:.2f} GB" if mb >= 1024 else f"{mb:.1f} MB"
 
 
-def describe_format(f) -> dict:
+def describe_format(f, duration=None) -> dict:
     height = f.get("height")
     width = f.get("width")
     # quality reads as "2160p"; the raw WxH moves to the note column
     resolution = f"{height}p" if height else ""
     raw = f.get("resolution") or (f"{width}x{height}"
                                   if width and height else "")
+    size_bytes = f.get("filesize") or f.get("filesize_approx")
+    if size_bytes:
+        size = fmt_size(size_bytes)
+    elif duration and f.get("tbr"):
+        # sites don't always report sizes (HLS/some DASH); estimate
+        # from bitrate x duration, marked as approximate
+        size = "~" + fmt_size(int(f["tbr"] * 1000 / 8 * duration))
+    else:
+        size = ""
     return {
         "id": str(f.get("format_id", "")),
         "ext": f.get("ext") or "",
         "resolution": resolution,
         "fps": f.get("fps"),
         "note": raw,
-        "size": fmt_size(f.get("filesize") or f.get("filesize_approx")),
+        "size": size,
         "kind": format_kind(f),
     }
 

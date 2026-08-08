@@ -193,7 +193,7 @@ class AddUrlDialog(QDialog):
                        "", "", "", "", ""], None)
         self.table.setRowHeight(0, 56)
         for f in info["formats"]:
-            d = downloader.describe_format(f)
+            d = downloader.describe_format(f, duration=duration)
             self._add_row(
                 [d["resolution"] or d["id"], d["size"], d["note"],
                  d["ext"], str(int(d["fps"])) if d["fps"] else "",

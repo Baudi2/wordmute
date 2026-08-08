@@ -75,6 +75,16 @@ def test_spec_for_format():
     assert downloader.spec_for_format(audio) == "140"
 
 
+def test_size_estimated_from_bitrate_when_missing():
+    f = {"format_id": "hls-1080", "ext": "mp4", "vcodec": "avc1",
+         "acodec": "mp4a", "height": 1080, "tbr": 4000}
+    # no duration -> no estimate possible
+    assert downloader.describe_format(f)["size"] == ""
+    # tbr 4000 kbit/s * 600 s / 8 = 300 MB, marked approximate
+    d = downloader.describe_format(f, duration=600)
+    assert d["size"] == "~286.1 MB"
+
+
 def test_describe_and_label():
     d = downloader.describe_format(FORMATS[2])
     assert d["resolution"] == "1080p"
