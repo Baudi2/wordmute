@@ -102,10 +102,23 @@ def test_history_tab_populates(qapp, tmp_path, monkeypatch):
 
     history.append_history({"name": "v.mp4", "status": "ok", "muted": 5,
                             "plan": "whisper(small)", "output": "v.clean.mp4"})
+    history.append_history({"name": "b.mp4", "status": "error",
+                            "error": "boom", "muted": 0,
+                            "plan": "gigaam(v3) -> gigaam(v3) -> whisper(s)"})
     tab = HistoryTab()
-    assert tab.table.rowCount() == 1
-    assert tab.table.item(0, 1).text() == "v.mp4"
-    assert tab.table.item(0, 3).text() == "5"
+    assert tab.table.rowCount() == 2
+    # most recent first; status is a ✓/✗ glyph, plan is compacted
+    assert tab.table.item(0, 1).text() == "b.mp4"
+    assert tab.table.item(0, 2).text() == "✕"
+    assert tab.table.item(0, 2).toolTip() == "boom"
+    assert tab.table.item(0, 4).text() == "GigaAM ×2 → Whisper"
+    assert tab.table.item(1, 2).text() == "✓"
+    assert tab.table.item(1, 3).text() == "5"
+    assert tab.table.item(1, 4).text() == "Whisper"
+    # width diet: no row-number gutter, File stretches, no Output column
+    assert not tab.table.verticalHeader().isVisible()
+    assert tab.table.columnCount() == 5
+    assert tab.folder_button.text()
 
 
 def test_hover_row_table_paints_whole_row(qapp):

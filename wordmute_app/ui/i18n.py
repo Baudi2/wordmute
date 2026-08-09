@@ -361,6 +361,9 @@ RU = {
     "{} record(s)": "Записей: {}",
     "Clear the whole processing history?":
         "Очистить всю историю обработки?",
+    "Open results folder": "Открыть папку результатов",
+    "Done": "Готово",
+    "Error": "Ошибка",
     # transcript tab
     "Text": "Текст",
     "{} words": "Слов: {}",
