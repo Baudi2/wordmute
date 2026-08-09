@@ -141,6 +141,12 @@ class ModelsTab(QWidget):
         self.update_all_button.clicked.connect(self._update_all)
         updates_row.addWidget(self.check_updates_button)
         updates_row.addWidget(self.update_all_button)
+        self.components_button = QPushButton(tr("Components…"))
+        self.components_button.setToolTip(
+            tr("Install, repair or add engine components (the slim "
+               "installer downloads them on demand)."))
+        self.components_button.clicked.connect(self._open_components)
+        updates_row.addWidget(self.components_button)
         updates_row.addStretch()
         layout.addLayout(updates_row)
         self.updates_label = QLabel("")
@@ -255,6 +261,11 @@ class ModelsTab(QWidget):
 
     def _open_cache(self):
         subprocess.Popen(["explorer", str(models.hf_hub_cache())])
+
+    def _open_components(self):
+        from .setup_dialog import SetupDialog
+        SetupDialog(self, first_run=False).exec()
+        self.refresh()
 
     # ---------------------------------------------------------- updates
     def _check_updates(self):

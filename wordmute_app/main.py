@@ -27,6 +27,16 @@ def main():
         sys.stderr = open(os.devnull, "w", encoding="utf-8")
     _use_bundled_ffmpeg()
 
+    # slim installer: engine packages + ffmpeg live in an app-managed
+    # runtime downloaded on first run
+    from .core import runtime_env
+    runtime_env.activate()
+
+    report = os.environ.get("WORDMUTE_RUNTIME_REPORT")
+    if report:  # diagnostics/support mode: write status json and exit
+        runtime_env.write_report(report)
+        return 0
+
     # libraries (GigaAM/pyannote, yt-dlp) spawn their own ffmpeg/ffprobe;
     # without this each one flashes a console window under pythonw
     from .core.proc import install_global_no_window
@@ -41,12 +51,21 @@ def main():
     settings = config.load_settings()
     set_language(settings.get("ui_language", "en"))
 
-    from .ui.main_window import MainWindow
-
     app = QApplication(sys.argv)
     app.setApplicationName("WordMute")
     apply_theme(app, settings.get("theme", "dark"))
     app.setWindowIcon(app_icon())
+
+    if (getattr(sys, "frozen", False) and runtime_env.missing_required()
+            and not os.environ.get("WORDMUTE_SMOKE")):
+        from .ui.setup_dialog import SetupDialog
+        setup = SetupDialog(first_run=True)
+        if not setup.exec():
+            return 0  # can't run without the required components
+        runtime_env.activate()
+
+    from .ui.main_window import MainWindow
+
     window = MainWindow()
     window.show()
     if os.environ.get("WORDMUTE_SMOKE"):  # automated startup check

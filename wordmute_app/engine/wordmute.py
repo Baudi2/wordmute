@@ -124,6 +124,11 @@ def add_cuda_dll_dirs():
         import site
         roots.extend(map(Path, site.getsitepackages()
                          + [site.getusersitepackages()]))
+    # app-managed runtime environment (slim installer) — the GUI sets
+    # this seam so the engine stays standalone
+    runtime_site = os.environ.get("WORDMUTE_RUNTIME_SITE")
+    if runtime_site:
+        roots.append(Path(runtime_site))
     candidates = []
     for root in roots:
         for sub in (r"nvidia\cublas\bin", r"nvidia\cudnn\bin"):

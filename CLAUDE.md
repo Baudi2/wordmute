@@ -49,7 +49,9 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
 - core/ — Qt-free: config (settings.json in %APPDATA%\WordMute,
   hf_token.txt separate), downloader (yt-dlp API + cookies_file for
   Boosty etc.), review sidecars (<out>.wordmute.json), thumbs, gpu,
-  hf_setup, history, models, transcript, probe, jobs.
+  hf_setup, history, models, transcript, probe, jobs, updates (PyPI/HF
+  version checks), runtime_env (slim-installer managed runtime, see
+  below).
 - ui/ — sidebar nav (SidebarNav mimics QTabWidget API; pages: Queue /
   Word Lists / Transcript / Models / History / Settings), queue = card
   list (QueueCard/QueueList), plan = vertical chip column, theme.py
@@ -69,12 +71,31 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
 - Screenshots for design round-trips: `python scripts/render_screenshots.py`
   (writes docs/design/*.png with staged fake data)
 - Package: `powershell -File packaging\build.ps1` → dist\WordMute
-  (whisper-only, ~3 GB) + Inno installer. GigaAM is NOT in the frozen
-  build (v2 plan in docs/LICENSING.md); dev shortcut has it.
+  (~450 MB) + Inno installer (~160 MB, packaging\Output). SLIM build:
+  engine packages (whisper stack, yt-dlp, GigaAM) and ffmpeg are NOT
+  frozen — first run shows SetupDialog which downloads them into
+  %LOCALAPPDATA%\WordMute\runtime (core/runtime_env.py). The spec
+  bundles the COMPLETE stdlib (a partially bundled stdlib package
+  shadows the runtime fallback — yt-dlp broke on html.parser without
+  this) and excludes all engine packages. Frozen diagnostics:
+  `$env:WORDMUTE_RUNTIME_REPORT="r.json"; WordMute.exe` writes status
+  + import probes; `WORDMUTE_SMOKE=1` = start-and-exit smoke test.
+  docs/INSTALL_GUIDE.md ships in the installer — bilingual: RU user
+  steps + EN "For the AI assistant" support brief (hosts, pitfalls,
+  clean-retry = delete runtime dir). Keep it in sync with
+  runtime_env.py changes.
 
 ## State / open items
-- v1 installer built & verified to launch; a real frozen transcription
-  run is still untested by the user.
+- v0.3.0 SLIM installer built and machine-verified: real bootstrap of
+  the managed runtime succeeded and the frozen exe imports
+  faster_whisper + yt_dlp from it (report mode) and passes the smoke
+  test. Still untested by a real user: full transcription run from the
+  frozen build, and the first-run SetupDialog flow on a clean PC.
+- Landing page for GitHub Pages is being built in a separate web chat
+  (user round-trips our review notes + RU screenshots; INSTALL_GUIDE
+  gets embedded into the page with a copy-for-AI button).
+- Fat 0.2.0 installer still in packaging\Output as fallback.
 - Open TODOs: clamp initial window size to screen, background
   thumbnailing for bulk folder adds, playlist support in Add URL,
-  Inter fonts only partially referenced by QSS weights.
+  Inter fonts only partially referenced by QSS weights, GigaAM in
+  frozen build unverified (torch import from runtime).

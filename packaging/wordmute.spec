@@ -1,15 +1,17 @@
-# PyInstaller spec for the distributable WordMute build.
+# PyInstaller spec for the SLIM WordMute build.
 #
-# Included: GUI, engine, yt-dlp, faster-whisper stack (ctranslate2,
-# onnxruntime for VAD, PyAV) and the pip-installed NVIDIA cuBLAS/cuDNN
-# DLLs so GPU whisper works on end-user machines with an NVIDIA driver.
-# Deliberately EXCLUDED (v1): torch / GigaAM / pyannote — freezing that
-# stack multiplies the size several-fold; GigaAM stays a developer-
-# environment feature until the installer learns to set it up (v2).
+# The freeze contains only the app: GUI, engine code, themes/fonts,
+# word lists, and huggingface_hub (model manager / GigaAM wizard).
+# Engine packages (faster-whisper stack, yt-dlp, GigaAM) and ffmpeg
+# are downloaded on first run into the app-managed runtime
+# (%LOCALAPPDATA%\WordMute\runtime) — see core/runtime_env.py. The
+# engine imports those packages lazily, so they must be EXCLUDED here
+# or PyInstaller would happily freeze the dev machine's copies.
 
+import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 ROOT = Path(SPECPATH).parent
 
@@ -17,21 +19,26 @@ datas = [(str(ROOT / "wordmute_app" / "resources"), "wordmute_app/resources")]
 binaries = []
 hiddenimports = ["winsound"]
 
-for pkg in ("faster_whisper", "ctranslate2", "av", "tokenizers",
-            "onnxruntime", "huggingface_hub", "yt_dlp"):
+# Bundle the COMPLETE stdlib, not just what the app imports: runtime
+# packages (yt-dlp especially) need stdlib modules the app never
+# touches, and a partially bundled stdlib package (html without
+# html.parser) shadows any runtime fallback path — the import system
+# never consults sys.path for submodules of a bundled package.
+_SKIP = {"antigravity", "this", "idlelib", "turtledemo", "turtle",
+         "tkinter", "test", "lib2to3"}
+for _mod in sorted(sys.stdlib_module_names):
+    if _mod in _SKIP or _mod.startswith("_"):
+        continue
+    try:
+        hiddenimports += collect_submodules(_mod)
+    except Exception:
+        hiddenimports.append(_mod)
+
+for pkg in ("huggingface_hub",):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
     hiddenimports += h
-
-# pip-installed CUDA runtime DLLs (namespace package, no hooks)
-import site
-for sp in site.getsitepackages():
-    for sub in ("cublas", "cudnn"):
-        bin_dir = Path(sp) / "nvidia" / sub / "bin"
-        if bin_dir.is_dir():
-            for dll in bin_dir.glob("*.dll"):
-                binaries.append((str(dll), f"nvidia/{sub}/bin"))
 
 a = Analysis(
     [str(Path(SPECPATH) / "launch.py")],
@@ -40,6 +47,9 @@ a = Analysis(
     binaries=binaries,
     hiddenimports=hiddenimports,
     excludes=[
+        # runtime-environment packages — never freeze these
+        "faster_whisper", "ctranslate2", "av", "tokenizers",
+        "onnxruntime", "yt_dlp", "numpy",
         "torch", "torchaudio", "torchcodec", "gigaam", "pyannote",
         "lightning", "pytorch_lightning", "matplotlib", "tkinter",
         "IPython", "pytest",

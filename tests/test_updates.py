@@ -57,12 +57,25 @@ def test_check_whisper_models_only_downloaded(tmp_path, monkeypatch):
     assert result[0]["update"] is True
 
 
-def test_pip_upgrade_refuses_in_frozen_build(monkeypatch):
+def test_pip_upgrade_frozen_without_runtime_refuses(monkeypatch,
+                                                    tmp_path):
     import sys
     monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))  # no runtime env
     ok, message = updates.pip_upgrade(["yt-dlp"])
     assert ok is False
-    assert "packaged build" in message
+    assert "component setup" in message
+
+
+def test_pip_upgrade_frozen_targets_runtime_python(monkeypatch,
+                                                   tmp_path):
+    import sys
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    from wordmute_app.core import runtime_env
+    runtime_env.python_dir().mkdir(parents=True)
+    runtime_env.python_exe().touch()
+    assert updates._pip_python() == str(runtime_env.python_exe())
 
 
 def test_models_tab_renders_update_results(qapp, tmp_path, monkeypatch):

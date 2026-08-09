@@ -2,7 +2,7 @@
 ; Build dist\WordMute first (packaging\build.ps1), then: iscc packaging\installer.iss
 
 #define MyAppName "WordMute"
-#define MyAppVersion "0.2.0"
+#define MyAppVersion "0.3.0"
 #define MyAppExeName "WordMute.exe"
 
 [Setup]
@@ -33,6 +33,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; \
 [Files]
 Source: "..\dist\WordMute\*"; DestDir: "{app}"; \
     Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\docs\INSTALL_GUIDE.md"; DestDir: "{app}"; \
+    Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

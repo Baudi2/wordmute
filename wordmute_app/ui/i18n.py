@@ -295,6 +295,48 @@ RU = {
     "on the next GigaAM pass.":
         "Удалить все кэши моделей GigaAM? Они будут скачаны заново при "
         "следующем проходе GigaAM.",
+    # component setup (slim installer)
+    "WordMute components": "Компоненты WordMute",
+    "WordMute needs a few components that are downloaded once "
+    "(they are not inside the installer to keep it small). "
+    "Requirements: a stable internet connection and enough free "
+    "disk space. In Russia, python.org / PyPI / Hugging Face may "
+    "be blocked or throttled — a VPN may be required.":
+        "WordMute нужно несколько компонентов, которые скачиваются один "
+        "раз (они не входят в установщик, чтобы он был маленьким). "
+        "Потребуются: стабильный интернет и свободное место на диске. "
+        "В России python.org / PyPI / Hugging Face могут быть "
+        "заблокированы или замедлены — может понадобиться VPN.",
+    "Whisper speech recognition (required)":
+        "Распознавание речи Whisper (обязательно)",
+    "GPU (NVIDIA) — fast, ~1.6 GB download":
+        "GPU (NVIDIA) — быстро, загрузка ~1.6 ГБ",
+    "CPU only — slower, ~0.3 GB download":
+        "Только CPU — медленнее, загрузка ~0.3 ГБ",
+    "Video downloads (yt-dlp) — ~10 MB":
+        "Загрузка видео (yt-dlp) — ~10 МБ",
+    "ffmpeg (audio/video processing) — ~80 MB":
+        "ffmpeg (обработка аудио/видео) — ~80 МБ",
+    "GigaAM — better Russian recognition (experimental, "
+    "~3.5 GB download)":
+        "GigaAM — лучше распознает русскую речь (экспериментально, "
+        "загрузка ~3.5 ГБ)",
+    "Everything is installed under your user "
+    "folder; nothing needs administrator rights.":
+        "Все ставится в вашу пользовательскую папку; права "
+        "администратора не нужны.",
+    "Install": "Установить",
+    "Continue": "Продолжить",
+    "Installing: {}": "Установка: {}",
+    "Python runtime": "Среда Python",
+    "Packages": "Пакеты",
+    "Done — components installed.": "Готово — компоненты установлены.",
+    "Setup failed: {}": "Установка не удалась: {}",
+    "Components…": "Компоненты…",
+    "Install, repair or add engine components (the slim "
+    "installer downloads them on demand).":
+        "Установить, починить или добавить компоненты движков (тонкий "
+        "установщик скачивает их по мере надобности).",
     # updates
     "Updates": "Обновления",
     "Check for updates": "Проверить обновления",

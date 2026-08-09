@@ -93,12 +93,24 @@ def check_whisper_models() -> list:
     return results
 
 
+def _pip_python():
+    """Which python owns the engine packages: the app-managed runtime
+    when frozen, the interpreter itself in a dev checkout."""
+    if getattr(sys, "frozen", False):
+        from . import runtime_env
+        if runtime_env.python_exe().exists():
+            return str(runtime_env.python_exe())
+        return None
+    return sys.executable
+
+
 def pip_upgrade(names) -> tuple:
     """Upgrade packages in-place. Returns (ok, output tail)."""
-    if getattr(sys, "frozen", False):
-        return False, ("packaged build: updates are delivered with app "
-                       "releases, not via pip")
-    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", *names]
+    python = _pip_python()
+    if python is None:
+        return False, ("runtime environment not installed — run the "
+                       "component setup first")
+    cmd = [python, "-m", "pip", "install", "--upgrade", *names]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True,
                            timeout=900, creationflags=creationflags())

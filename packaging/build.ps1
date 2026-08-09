@@ -15,19 +15,8 @@ if (-not (Test-Path "packaging\wordmute.ico")) {
 python -m PyInstaller packaging\wordmute.spec --noconfirm --distpath dist --workpath build
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 
-# 3. bundle ffmpeg (static build) from this machine so end users need
-#    no separate install. GPL build — see docs/LICENSING.md.
-$ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
-if ($ffmpeg) {
-    $dest = "dist\WordMute\ffmpeg"
-    New-Item -ItemType Directory -Force $dest | Out-Null
-    Copy-Item $ffmpeg $dest
-    $ffprobe = Join-Path (Split-Path $ffmpeg) "ffprobe.exe"
-    if (Test-Path $ffprobe) { Copy-Item $ffprobe $dest }
-    Write-Host "Bundled ffmpeg from $ffmpeg"
-} else {
-    Write-Warning "ffmpeg not found on PATH - dist will need a system ffmpeg"
-}
+# 3. slim build: ffmpeg is NOT bundled — the app downloads it into the
+#    managed runtime on first run (also sidesteps GPL redistribution).
 
 # 4. installer (optional - needs Inno Setup 6)
 $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
