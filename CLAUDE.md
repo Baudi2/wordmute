@@ -6,7 +6,9 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
 (badic) is Russian-speaking; the app ships EN/RU and RU matters most.
 
 ## Read first
-- README.md — milestones (all 8 done), engine rules, layout
+- README.md is the PUBLIC repo front page (RU-first) — keep it
+  user-facing; docs/DEVELOPMENT.md holds engine rules, layout,
+  milestone history (all 8 done)
 - docs/design_brief.md — screens, states, constraints
 - docs/LICENSING.md — pre-release redistribution checklist
 - git log — every step has a detailed commit message

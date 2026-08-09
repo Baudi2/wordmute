@@ -1,77 +1,94 @@
-# WordMute App
+# WordMute
 
-Windows desktop app for muting unwanted words/phrases in video and audio.
-Transcribes locally (faster-whisper or GigaAM), matches against a
-user-editable word list, and mutes the matched moments with ffmpeg —
-video stream copied untouched. Runs fully offline once models are
-downloaded.
+**Находит нежелательные слова в аудиодорожке видео и точечно заглушает
+их. Полностью на вашем компьютере — файлы никуда не отправляются.**
 
-Built around the proven `wordmute` CLI engine, which lives vendored in
-`wordmute_app/engine/` — its matching, muting, and caching logic is the
-source of truth and must not be re-implemented in app layers.
+🌐 **Сайт и скачивание: [baudi2.github.io/wordmute](https://baudi2.github.io/wordmute/)**
+· [Последний релиз](https://github.com/Baudi2/wordmute/releases/latest)
+· [Инструкция по установке](docs/INSTALL_GUIDE.md)
 
-## Layout
+![Очередь обработки WordMute](docs/screenshots/queue.png)
+
+## Как это работает
+
+1. **Распознавание** — faster-whisper (опционально GigaAM для русской
+   речи) расшифровывает аудиодорожку с точной временной меткой каждого
+   слова.
+2. **Поиск** — расшифровка сверяется с вашим списком слов: точные
+   слова, основы (`корень*`), вхождения (`*корень*`) и целые фразы.
+   Готовые словари для русского и английского уже включают словоформы.
+3. **Заглушение** — ffmpeg глушит найденные сегменты в звуке, не трогая
+   видеоряд. На выходе тот же файл без нежелательных слов.
+
+## Возможности
+
+- **Экран проверки** — каждое заглушенное слово можно прослушать в один
+  клик и снять заглушку с ложных срабатываний; пересборка занимает
+  секунды, без повторного распознавания.
+- **Загрузка по ссылке** — YouTube, VK Видео и другие площадки, выбор
+  качества; закрытые видео по подписке (Boosty) — через файл cookies.
+- **Свои списки слов** — редактируйте словари под себя прямо в
+  приложении, с проверкой «почему это слово заглушится».
+- **Ускорение на GPU** — с видеокартой NVIDIA распознавание в разы
+  быстрее; без неё тоже работает.
+- Пищание вместо тишины, экспорт транскрипта в SRT, история обработок,
+  тёмная и светлая темы, интерфейс на русском и английском.
+
+![Экран проверки](docs/screenshots/review.png)
+
+## Установка
+
+Скачайте установщик с [сайта](https://baudi2.github.io/wordmute/) или
+из [релизов](https://github.com/Baudi2/wordmute/releases/latest) и
+запустите. Установщик лёгкий (~160 МБ); при первом запуске приложение
+само скачает нужные компоненты (0,4–2,5 ГБ), а при первой обработке —
+модель распознавания (~3 ГБ).
+
+Перед установкой:
+
+- **~6–8 ГБ** свободного места на диске;
+- стабильный интернет; в России на время установки может понадобиться
+  **VPN** (python.org, pypi.org и huggingface.co бывают заблокированы);
+- предупреждение Windows SmartScreen при запуске — это нормально для
+  новых программ без платной подписи: «Подробнее» → «Выполнить в любом
+  случае».
+
+**Проблемы с установкой?** Скопируйте содержимое
+[docs/INSTALL_GUIDE.md](docs/INSTALL_GUIDE.md) в любой ИИ-ассистент
+(ChatGPT, Claude и др.) и опишите проблему — он проведёт вас по шагам.
+На [сайте](https://baudi2.github.io/wordmute/) есть кнопка, которая
+копирует инструкцию одним нажатием.
+
+## Запуск из исходников
 
 ```
-wordmute_app/
-  engine/       vendored engine (wordmute.py + wordlist tidy logic)
-  core/         Qt-free app logic: queue, yt-dlp, config, GPU/HF setup
-  ui/           PySide6 GUI (QThread workers, i18n)
-  resources/    word-list templates shipped with the app (RU + EN);
-                copied to the user's data dir on first run — users edit
-                their copies, never these
-packaging/      PyInstaller spec + Inno Setup script
-tests/          engine parity + regression tests (python -m pytest tests)
+git clone https://github.com/Baudi2/wordmute.git
+cd wordmute
+pip install PySide6 faster-whisper yt-dlp
+python -m wordmute_app
 ```
 
-## Engine changes vs. the original CLI
+Нужен ffmpeg в PATH. Тесты: `python -m pytest tests`. Подробности
+архитектуры — в [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-Three portability changes only — behavior is otherwise identical and
-covered by parity tests (`tests/test_parity_with_cli.py`):
+---
 
-1. FFmpeg shared-build DLL directory is discovered dynamically
-   (winget locations, then PATH) instead of a hardcoded path;
-   `configure_ffmpeg_shared_dir()` lets the app/installer override.
-2. Console output goes through a swappable reporter
-   (`set_reporter(fn)`) emitting structured events, so the GUI can show
-   progress; the default reporter reproduces the original CLI output.
-3. `HF_HUB_DISABLE_XET=1` is set automatically before GigaAM loads
-   (Windows lock-file path bug, WinError 123).
+## English
 
-## Word lists
+WordMute is a Windows desktop app that finds unwanted words in a
+video's audio track using local speech recognition (faster-whisper /
+GigaAM) and precisely mutes them with ffmpeg — the video stream is
+copied untouched, and nothing leaves your computer. Word lists support
+exact words, stems, substrings and phrases; ready-made Russian and
+English dictionaries are included and freely editable. After
+processing, a review screen lets you audition every muted interval and
+un-mute false positives with a seconds-fast re-render. The interface is
+available in English and Russian.
 
-The shipped lists are a curated starting template (extensive
-religious/mystical/occult vocabulary). Entry types are deliberate:
-
-```
-слово          exact match (case-insensitive, ё=е)
-корень*        stem — word starts with this
-*корень*       substring — root anywhere in the word
-слово слово    phrase — consecutive words
-# comment
-```
-
-Exact enumerations exist where a stem would collide with innocent words
-(крест→крестьянин, культ→культура, *монстр*→демонстрация…). Never
-auto-"optimize" or collapse entries. Some common-word collisions are
-by design (обожаю, чудом, верю…). The editor runs tidy
-(lowercase, ё→е, dedupe, sort) on every save.
-
-## Milestones
-
-1. ✅ Engine vendoring + refactor
-2. ✅ Minimal GUI: local files, list selection, whisper run with progress
-   (`python -m wordmute_app` from the repo root)
-3. ✅ Queue + pass-plan builder + settings
-4. ✅ yt-dlp URL flow (format picker → download → pipeline)
-5. ✅ Review screen (interval sidecar, snippet playback, un-mute, re-render)
-6. ✅ GigaAM onboarding wizard (HF token) + GPU detection/warnings
-7. ✅ Extras: word tester, transcript/SRT, beep mode, watch folder,
-   model manager, history, RU/EN UI (Tools menu)
-8. ✅ Packaging (PyInstaller + Inno Setup) + licensing checklist
-   — build with `powershell -File packaging\build.ps1` (produces
-   `dist\WordMute\WordMute.exe`, bundles ffmpeg, compiles the
-   installer when Inno Setup is present). v1 ships the whisper stack
-   incl. CUDA DLLs (~3 GB); GigaAM remains a developer-environment
-   feature — see [docs/LICENSING.md](docs/LICENSING.md) for the
-   redistribution checklist and the GigaAM-in-installer plan.
+Download from the [website](https://baudi2.github.io/wordmute/) or
+[releases](https://github.com/Baudi2/wordmute/releases/latest). The
+installer is small (~160 MB) and downloads its components (0.4–2.5 GB
+plus a ~3 GB speech model) on first run. If anything goes wrong, paste
+[docs/INSTALL_GUIDE.md](docs/INSTALL_GUIDE.md) into any AI assistant —
+it is written to walk you through the installation. Developer notes:
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
