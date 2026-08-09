@@ -29,10 +29,17 @@ if ($ffmpeg) {
     Write-Warning "ffmpeg not found on PATH - dist will need a system ffmpeg"
 }
 
-# 4. installer (optional - needs Inno Setup 6 on PATH as iscc)
+# 4. installer (optional - needs Inno Setup 6)
 $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+if (-not $iscc) {
+    foreach ($candidate in @(
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+        "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe")) {
+        if (Test-Path $candidate) { $iscc = $candidate; break }
+    }
+}
 if ($iscc) {
-    iscc packaging\installer.iss
+    & $iscc packaging\installer.iss
 } else {
     Write-Host "Inno Setup (iscc) not found - skipped installer compile."
     Write-Host "Install it (winget install JRSoftware.InnoSetup), then:"

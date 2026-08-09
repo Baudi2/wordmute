@@ -2,7 +2,7 @@
 ; Build dist\WordMute first (packaging\build.ps1), then: iscc packaging\installer.iss
 
 #define MyAppName "WordMute"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppExeName "WordMute.exe"
 
 [Setup]
