@@ -91,9 +91,13 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   faster_whisper + yt_dlp from it (report mode) and passes the smoke
   test. Still untested by a real user: full transcription run from the
   frozen build, and the first-run SetupDialog flow on a clean PC.
-- Landing page for GitHub Pages is being built in a separate web chat
-  (user round-trips our review notes + RU screenshots; INSTALL_GUIDE
-  gets embedded into the page with a copy-for-AI button).
+- SHIPPED 2026-08-09: public repo github.com/Baudi2/wordmute (branch
+  master), release v0.3.0 with the installer asset, landing page live
+  at https://baudi2.github.io/wordmute/ (Pages from master:/docs).
+  docs/index.html embeds INSTALL_GUIDE (copy-for-AI button) — keep
+  both in sync; the download button auto-resolves the latest
+  release's .exe via the GitHub API, so new releases need no site
+  edits, just tag + upload.
 - Fat 0.2.0 installer still in packaging\Output as fallback.
 - Open TODOs: clamp initial window size to screen, background
   thumbnailing for bulk folder adds, playlist support in Add URL,
