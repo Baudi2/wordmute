@@ -140,10 +140,10 @@
   .legend-dot.ok { background: var(--amber); }
   .legend-dot.muted { background: var(--mute); }
 
-  #wave { display: flex; align-items: center; gap: 3px; height: 96px; }
+  #wave { display: flex; align-items: center; gap: 3px; height: 96px; overflow: hidden; }
   .bar {
     flex: 1; border-radius: 2px; background: var(--amber);
-    opacity: 0.85; min-width: 3px;
+    opacity: 0.85; min-width: 0;
     transition: height 0.5s ease, background 0.5s ease, opacity 0.5s ease;
   }
   .bar.muted { background: var(--mute); height: 4px !important; opacity: 0.7; }
@@ -268,6 +268,9 @@
     .nav-links { display: none; }
     .hero { padding: 56px 0 40px; }
     section { padding: 52px 0; }
+    .cta-row { flex-direction: column; align-items: stretch; }
+    .cta-row .btn { justify-content: center; }
+    #wave { gap: 2px; }
   }
 </style>
 </head>
@@ -738,36 +741,62 @@ everywhere except possibly `gigaam` = healthy install.
     });
 
   // ---------- Волна с заглушенными сегментами ----------
+  // Количество столбиков подстраивается под ширину контейнера, чтобы волна
+  // не переполняла карточку на узких экранах. Заглушенные сегменты заданы
+  // долями длины и пересчитываются под любое количество столбиков.
   const wave = document.getElementById("wave");
-  const BARS = 72;
-  const MUTED_RANGES = [[22, 27], [51, 55]]; // сегменты, которые "заглушаются"
-  const bars = [];
+  const MUTED_FRACTIONS = [[0.30, 0.38], [0.70, 0.77]];
+  let bars = [];
+  let mutedIdx = [];
+  let muteShown = false;
 
-  for (let i = 0; i < BARS; i++) {
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    // псевдослучайная, но детерминированная высота — форма речевой волны
-    const h = 14 + Math.abs(Math.sin(i * 0.9) * 46 + Math.sin(i * 0.23) * 24);
-    bar.style.height = `${Math.round(h)}px`;
-    wave.appendChild(bar);
-    bars.push(bar);
+  function applyMute() {
+    muteShown = true;
+    mutedIdx.forEach(i => bars[i] && bars[i].classList.add("muted"));
   }
+  function clearMute() {
+    muteShown = false;
+    bars.forEach(b => b.classList.remove("muted"));
+  }
+
+  function buildWave() {
+    const count = Math.max(36, Math.min(72, Math.floor((wave.clientWidth || 640) / 9)));
+    wave.innerHTML = "";
+    bars = [];
+    for (let i = 0; i < count; i++) {
+      const bar = document.createElement("div");
+      bar.className = "bar";
+      // псевдослучайная, но детерминированная высота — форма речевой волны
+      const h = 14 + Math.abs(Math.sin(i * 0.9) * 46 + Math.sin(i * 0.23) * 24);
+      bar.style.height = `${Math.round(h)}px`;
+      wave.appendChild(bar);
+      bars.push(bar);
+    }
+    mutedIdx = [];
+    MUTED_FRACTIONS.forEach(([a, b]) => {
+      const from = Math.round(a * (count - 1));
+      const to = Math.round(b * (count - 1));
+      for (let i = from; i <= to; i++) mutedIdx.push(i);
+    });
+    if (muteShown) applyMute();
+  }
+
+  buildWave();
+  let waveResizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(waveResizeTimer);
+    waveResizeTimer = setTimeout(buildWave, 200);
+  });
 
   // Анимация: волна "проигрывается", и сегменты заглушаются по очереди
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const applyMute = () => {
-    MUTED_RANGES.forEach(([from, to]) => {
-      for (let i = from; i <= to; i++) bars[i].classList.add("muted");
-    });
-  };
-
   if (reduceMotion) {
     applyMute();
   } else {
     setTimeout(applyMute, 900);
     // периодически "переобрабатываем" волну для живости
     setInterval(() => {
-      bars.forEach(b => b.classList.remove("muted"));
+      clearMute();
       setTimeout(applyMute, 700);
     }, 6000);
   }
