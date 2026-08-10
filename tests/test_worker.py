@@ -196,6 +196,59 @@ def test_url_item_downloads_then_processes(qapp, tmp_path, monkeypatch):
     assert (tmp_path / "dl" / "video.clean.mp4").read_bytes() == b"muted"
 
 
+def test_second_url_downloads_while_first_processes(qapp, tmp_path,
+                                                    monkeypatch):
+    """Pipelining: once item 1 is downloaded and processing begins,
+    item 2's download starts — it must not wait for item 1 to finish."""
+    import threading
+    from wordmute_app.core import downloader
+
+    downloads = []
+    second_started = threading.Event()
+
+    def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
+                      cookies=None):
+        downloads.append(url)
+        if url == "u2":
+            second_started.set()
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        p = dest / f"{url}.mp4"
+        p.write_bytes(b"x")
+        return p
+
+    monkeypatch.setattr(downloader, "download", fake_download)
+    worker, log = make_worker(
+        [QueueItem(kind="url", url="u1", title="One"),
+         QueueItem(kind="url", url="u2", title="Two")], monkeypatch)
+
+    stub_transcribe = engine.transcribe  # installed by make_worker
+
+    def transcribe_blocking(media, *a, **k):
+        if media.name == "u1.mp4":
+            assert second_started.wait(5), \
+                "second download did not start during first processing"
+        return stub_transcribe(media, *a, **k)
+
+    monkeypatch.setattr(engine, "transcribe", transcribe_blocking)
+
+    rows = []
+    worker.engine_event.connect(
+        lambda e, d: rows.append((e, d.get("row")))
+        if e.startswith("download_") else None)
+    worker._download_dir = tmp_path / "dl"
+    worker.run()
+    # the prefetch thread's signals are queued cross-thread; deliver them
+    qapp.processEvents()
+
+    assert log["files"] == [(0, True, ""), (1, True, "")]
+    assert downloads == ["u1", "u2"]
+    # every download event carries its item index for row routing
+    assert ("download_start", 0) in rows and ("download_start", 1) in rows
+    assert ("download_done", 0) in rows and ("download_done", 1) in rows
+    assert all(row is not None for _, row in rows)
+
+
 def test_url_download_failure_isolated(qapp, tmp_path, monkeypatch):
     from wordmute_app.core import downloader
 

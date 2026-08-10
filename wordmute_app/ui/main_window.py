@@ -969,14 +969,18 @@ class MainWindow(QMainWindow):
 
     def _on_engine_event(self, event: str, data: dict):
         if event == "download_start":
-            self._set_row_status(tr("downloading") + "…")
-            self.status_label.setText(
-                tr("Downloading {}…").format(data["url"]))
+            row = self._map_row(data.get("row", 0))
+            self._apply_status(row, tr("downloading") + "…")
+            # a prefetch download must not hijack the global status line
+            if row == self._current_row:
+                self.status_label.setText(
+                    tr("Downloading {}…").format(data["url"]))
         elif event == "download_progress":
             self._on_download_progress(data)
             return
         elif event == "download_done":
-            self._on_download_done(data["path"])
+            self._on_download_done(data["path"],
+                                   self._map_row(data.get("row", 0)))
         elif event == "review_saved":
             if self._current_row is not None:
                 self.queue.item(self._current_row).setData(
@@ -1031,28 +1035,31 @@ class MainWindow(QMainWindow):
             parts.append(speed)
         if d.get("eta"):
             parts.append(fmt_eta(d["eta"]))
-        self._set_row_status(" · ".join(parts), progress=pct)
+        self._apply_status(self._map_row(d.get("row", 0)),
+                           " · ".join(parts), progress=pct)
 
-    def _on_download_done(self, path: str):
+    def _on_download_done(self, path: str, row: int):
         # the file is now local: show its real name, duration and
         # thumbnail so the card behaves like any local file's
-        if self._current_row is None:
+        list_item = self.queue.item(row)
+        if list_item is None:
             return
         p = Path(path)
         duration = media_duration(p)
-        list_item = self.queue.item(self._current_row)
         meta = f"{fmt_duration(duration)} · {p}"
         thumb = thumbs.thumbnail_path(p)
         list_item.setData(DURATION_ROLE, duration)
         list_item.setData(TITLE_ROLE, p.name)
         list_item.setData(META_ROLE, meta)
         list_item.setData(THUMB_ROLE, str(thumb) if thumb else "")
-        card = self._card(self._current_row)
+        card = self._card(row)
         if card:
             card.set_title(p.name)
             card.set_meta(meta)
             if thumb:
                 card.set_thumb(thumb)
+        if row != self._current_row:  # prefetched: waiting for its turn
+            self._apply_status(row, tr("downloaded · waiting"))
 
     def _on_mute_progress(self, seconds: float):
         duration = (self._row_duration(self._current_row)

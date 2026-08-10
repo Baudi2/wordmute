@@ -2,8 +2,12 @@
 
 Runs the engine over a list of queue items (local files and/or URLs),
 forwarding reporter and download events as Qt signals. URL items are
-downloaded first, then processed like local files. Only one worker runs
-at a time (the engine's reporter is module-global)."""
+downloaded first, then processed like local files; while one item is
+being processed, the NEXT URL item's download already runs (network
+and CPU/GPU legs overlap — at most one download at a time). Only one
+worker runs at a time (the engine's reporter is module-global)."""
+
+import threading
 
 from PySide6.QtCore import QThread, Signal
 
@@ -13,6 +17,26 @@ from ..engine import wordmute as engine
 
 class JobCancelled(Exception):
     pass
+
+
+class _Prefetch(threading.Thread):
+    """One-ahead download of a later URL item. Any exception is kept
+    and re-raised when that item's turn comes, so error/cancel handling
+    stays identical to an inline download."""
+
+    def __init__(self, worker, index, item):
+        super().__init__(daemon=True)
+        self.index = index
+        self.path = None
+        self.error = None
+        self._worker = worker
+        self._item = item
+
+    def run(self):
+        try:
+            self.path = self._worker._download(self._item, self.index)
+        except BaseException as exc:
+            self.error = exc
 
 
 class ProcessWorker(QThread):
@@ -67,9 +91,12 @@ class ProcessWorker(QThread):
                 "muted": True,
             })
 
-    def _download(self, item):
+    def _download(self, item, index: int):
+        # "row" = worker item index; the UI maps it to the queue row, so
+        # a prefetch download paints ITS card, not the active one
         self.engine_event.emit("download_start",
-                               {"url": item.url, "label": item.format_label})
+                               {"url": item.url, "label": item.format_label,
+                                "row": index})
         path = downloader.download(
             item.url, item.format_spec, self._download_dir,
             cookies=self._cookies,
@@ -80,10 +107,12 @@ class ProcessWorker(QThread):
                           or d.get("total_bytes_estimate")),
                 "speed": d.get("speed"),
                 "eta": d.get("eta"),
+                "row": index,
             }),
             cancelled=lambda: self._cancelled,
         )
-        self.engine_event.emit("download_done", {"path": str(path)})
+        self.engine_event.emit("download_done",
+                               {"path": str(path), "row": index})
         return path
 
     def _log_history(self, item, status: str, error: str, output=None,
@@ -109,6 +138,18 @@ class ProcessWorker(QThread):
         engine.set_reporter(self._report)
         done = 0
         total = len(self._items)
+        prefetch = None
+
+        def start_prefetch(after: int):
+            nonlocal prefetch
+            if prefetch is not None or self._cancelled:
+                return
+            for j in range(after, total):
+                if self._items[j].kind == "url":
+                    prefetch = _Prefetch(self, j, self._items[j])
+                    prefetch.start()
+                    return
+
         # output_for treats an out path as a file unless it's an existing
         # directory, so a configured output folder must exist up front
         if self._output_dir is not None:
@@ -124,7 +165,17 @@ class ProcessWorker(QThread):
                 try:
                     path = item.path
                     if item.kind == "url":
-                        path = self._download(item)
+                        if prefetch is not None and prefetch.index == i:
+                            prefetch.join()
+                            error, path = prefetch.error, prefetch.path
+                            prefetch = None
+                            if error is not None:
+                                raise error
+                        else:
+                            path = self._download(item, i)
+                    # this item is local now — overlap the next URL
+                    # item's download with the processing below
+                    start_prefetch(i + 1)
                     out = engine.output_for(path, self._output_dir,
                                             multi=total > 1)
                     engine.process_file(path, out, self._wordlist,
@@ -150,5 +201,7 @@ class ProcessWorker(QThread):
                                       source=path)
                     self.file_finished.emit(i, True, "")
         finally:
+            if prefetch is not None:  # cancel mid-run: let it wind down
+                prefetch.join()
             engine.set_reporter(None)
             self.all_finished.emit(done, total)
