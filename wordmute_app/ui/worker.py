@@ -86,11 +86,16 @@ class ProcessWorker(QThread):
         self.engine_event.emit("download_done", {"path": str(path)})
         return path
 
-    def _log_history(self, item, status: str, error: str, output=None):
+    def _log_history(self, item, status: str, error: str, output=None,
+                     source=None):
         try:
             history.append_history({
                 "name": item.display_name,
-                "source": item.url if item.kind == "url" else str(item.path),
+                # prefer the local media path (post-download for URLs) —
+                # the history cleanup actions need a real file
+                "source": (str(source) if source
+                           else item.url if item.kind == "url"
+                           else str(item.path)),
                 "output": str(output) if output else "",
                 "status": status,
                 "error": error,
@@ -125,10 +130,10 @@ class ProcessWorker(QThread):
                     engine.process_file(path, out, self._wordlist,
                                         self._options, self._plan)
                 except (JobCancelled, downloader.DownloadCancelled):
-                    self._log_history(item, "cancelled", "")
+                    self._log_history(item, "cancelled", "", source=path)
                     self.file_finished.emit(i, False, "cancelled")
                 except Exception as exc:
-                    self._log_history(item, "error", str(exc))
+                    self._log_history(item, "error", str(exc), source=path)
                     self.file_finished.emit(i, False, str(exc))
                 else:
                     done += 1
@@ -141,7 +146,8 @@ class ProcessWorker(QThread):
                                                 beep_hz=self._options.beep_hz)
                         self.engine_event.emit("review_saved",
                                                {"path": str(rp)})
-                    self._log_history(item, "ok", "", output=out)
+                    self._log_history(item, "ok", "", output=out,
+                                      source=path)
                     self.file_finished.emit(i, True, "")
         finally:
             engine.set_reporter(None)

@@ -654,8 +654,17 @@ class MainWindow(QMainWindow):
         act_review = menu.addAction(tr("Review"))
         act_review.setEnabled(bool(rev and Path(rev).exists()))
         menu.addSeparator()
+        deletable = self._worker is None
+        act_del_src = menu.addAction(tr("Delete source video and JSONs"))
+        act_del_src.setEnabled(
+            deletable and bool(self._files_for_row(row, False)))
+        act_del_all = menu.addAction(
+            tr("Delete all files (source, clean, JSONs)"))
+        act_del_all.setEnabled(
+            deletable and bool(self._files_for_row(row, True)))
+        menu.addSeparator()
         act_remove = menu.addAction(tr("Remove"))
-        act_remove.setEnabled(self._worker is None)
+        act_remove.setEnabled(deletable)
         chosen = menu.exec(global_pos)
         if chosen is act_open:
             os.startfile(out)
@@ -664,9 +673,38 @@ class MainWindow(QMainWindow):
             subprocess.Popen(["explorer", "/select,", str(Path(out))])
         elif chosen is act_review:
             self._open_review(rev)
+        elif chosen is act_del_src:
+            self._delete_row_files(row, include_output=False)
+        elif chosen is act_del_all:
+            self._delete_row_files(row, include_output=True)
         elif chosen is act_remove:
             self.queue.takeItem(row)
             self._update_queue_stack()
+
+    def _files_for_row(self, row: int, include_output: bool) -> list:
+        from ..core import cleanup
+        item = self.queue.item(row)
+        queue_item = item.data(ITEM_ROLE) if item else None
+        out = self._output_path_for_row(row)
+        fallback = (queue_item.path if queue_item
+                    and queue_item.kind == "file" else None)
+        source = cleanup.resolve_source(output=out, fallback=fallback)
+        return cleanup.related_files(source=source, output=out,
+                                     include_output=include_output)
+
+    def _delete_row_files(self, row: int, include_output: bool):
+        from .file_delete import confirm_and_recycle
+        if confirm_and_recycle(self, self._files_for_row(row,
+                                                         include_output)):
+            if include_output:  # output gone -> review/open are dead ends
+                item = self.queue.item(row)
+                if item:
+                    item.setData(OUTPUT_ROLE, None)
+                    item.setData(REVIEW_ROLE, None)
+                    card = self._card(row)
+                    if card:
+                        card.set_actions()
+                    self._apply_status(row, tr("files deleted"))
 
     def _open_review(self, path):
         # non-modal: the queue stays visible/alive while reviewing

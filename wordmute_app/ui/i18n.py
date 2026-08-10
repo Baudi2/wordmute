@@ -364,6 +364,15 @@ RU = {
     "Open results folder": "Открыть папку результатов",
     "Done": "Готово",
     "Error": "Ошибка",
+    # file cleanup (queue ⋮ menu + history right-click)
+    "Delete source video and JSONs":
+        "Удалить исходник и JSON-файлы",
+    "Delete all files (source, clean, JSONs)":
+        "Удалить все файлы (исходник, результат, JSON)",
+    "Move {} file(s) to the Recycle Bin?":
+        "Переместить в Корзину файлов: {}?",
+    "Delete failed: {}": "Не удалось удалить: {}",
+    "files deleted": "файлы удалены",
     # transcript tab
     "Text": "Текст",
     "{} words": "Слов: {}",

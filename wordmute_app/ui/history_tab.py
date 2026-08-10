@@ -21,7 +21,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import config, history
+from ..core import cleanup, config, history
+from .file_delete import confirm_and_recycle
 from .hover_table import HoverRowTable
 from .i18n import tr
 
@@ -151,6 +152,12 @@ class HistoryTab(QWidget):
         act_show.setEnabled(out_ok)
         act_copy = menu.addAction(tr("Copy error"))
         act_copy.setEnabled(bool(r.get("error")))
+        menu.addSeparator()
+        act_del_src = menu.addAction(tr("Delete source video and JSONs"))
+        act_del_src.setEnabled(bool(self._files_for_row(row, False)))
+        act_del_all = menu.addAction(
+            tr("Delete all files (source, clean, JSONs)"))
+        act_del_all.setEnabled(bool(self._files_for_row(row, True)))
         chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
         if chosen is act_open:
             os.startfile(out)
@@ -158,6 +165,25 @@ class HistoryTab(QWidget):
             subprocess.Popen(["explorer", "/select,", str(Path(out))])
         elif chosen is act_copy:
             QGuiApplication.clipboard().setText(r.get("error", ""))
+        elif chosen is act_del_src:
+            self._delete_row_files(row, include_output=False)
+        elif chosen is act_del_all:
+            self._delete_row_files(row, include_output=True)
+
+    def _files_for_row(self, row: int, include_output: bool) -> list:
+        r = self._record_for_row(row)
+        if r is None:
+            return []
+        out = r.get("output", "") or None
+        source = cleanup.resolve_source(output=out,
+                                        fallback=r.get("source") or None)
+        return cleanup.related_files(source=source, output=out,
+                                     include_output=include_output)
+
+    def _delete_row_files(self, row: int, include_output: bool):
+        if confirm_and_recycle(self, self._files_for_row(row,
+                                                         include_output)):
+            self.refresh()
 
     def _open_results_folder(self):
         """Configured output folder; in beside-the-source mode, the
