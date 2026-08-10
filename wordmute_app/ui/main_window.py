@@ -85,6 +85,17 @@ def fmt_eta(sec: float) -> str:
     return tr("~{} left").format(fmt_hms(max(sec, 1)))
 
 
+def _initial_size(avail_w: int, avail_h: int) -> tuple:
+    """Preferred 960x720, shrunk to fit the available desktop (with a
+    small margin for window chrome); 0/negative = unknown screen."""
+    width, height = 960, 720
+    if avail_w > 0:
+        width = max(480, min(width, avail_w - 24))
+    if avail_h > 0:
+        height = max(360, min(height, avail_h - 48))
+    return width, height
+
+
 def fmt_speed(bps) -> str:
     if not bps:
         return ""
@@ -96,12 +107,28 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("WordMute")
-        self.resize(960, 720)
+        # clamp the preferred size to the available screen: small
+        # laptops (and Windows text-only scaling) must not get a window
+        # larger than the desktop
+        from PySide6.QtGui import QGuiApplication
+        screen = QGuiApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen else None
+        self.resize(*_initial_size(avail.width() if avail else 0,
+                                   avail.height() if avail else 0))
         self.setAcceptDrops(True)
 
         self._worker = None
         self._active_rows = []  # queue rows of the current run, in order
         self._review_windows = []
+        # tray icon: click raises the window; used for the
+        # queue-finished notification when the app is in the background
+        from PySide6.QtWidgets import QSystemTrayIcon
+        self._tray = None
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self._tray = QSystemTrayIcon(self.windowIcon(), self)
+            self._tray.setToolTip("WordMute")
+            self._tray.activated.connect(self._on_tray_activated)
+            self._tray.show()
         self._wordlist_paths = config.ensure_user_wordlists()
         self._settings = config.load_settings()
         self._gpus = gpu.detect_gpus()
@@ -940,6 +967,9 @@ class MainWindow(QMainWindow):
             self.cancel_button.setEnabled(False)
 
     def _set_running(self, running: bool):
+        # long batches must survive the Windows sleep timer
+        from ..core import power
+        power.keep_awake(running)
         self.start_button.setEnabled(not running)
         self.cancel_button.setEnabled(running)
         self.add_button.setEnabled(not running)
@@ -1177,6 +1207,25 @@ class MainWindow(QMainWindow):
         summary = tr("Finished: {}/{} file(s) ok.").format(done, total)
         self.status_label.setText(summary)
         self._append_log("\n" + summary)
+        self._notify_finished(summary)
+
+    def _on_tray_activated(self, reason):
+        from PySide6.QtWidgets import QSystemTrayIcon
+        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+
+    def _notify_finished(self, summary: str):
+        """Long runs end while the user is elsewhere — flash the
+        taskbar and show a tray balloon unless the window is active."""
+        if self.isActiveWindow():
+            return
+        from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+        QApplication.alert(self)
+        if self._tray is not None:
+            self._tray.showMessage("WordMute", summary,
+                                   QSystemTrayIcon.Information, 8000)
 
     # ---------------------------------------------------------- lifecycle
     def closeEvent(self, event):
