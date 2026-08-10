@@ -2,11 +2,9 @@
 per-state action buttons (per design v3)."""
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import (QColor, QCursor, QDrag, QPainter, QPainterPath,
-                           QPen, QPixmap)
+from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
-    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -17,8 +15,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-ACCENT = QColor("#9184d9")  # drop-indicator color, works on both themes
-
 from .i18n import tr
 
 THUMB_W, THUMB_H = 96, 54
@@ -28,15 +24,12 @@ CARD_HEIGHT = 80
 class QueueList(QListWidget):
     """Card container: item size hints track the viewport width so each
     card spans the full row (item widgets are laid out inside the
-    item's rect, not the list's). Drags show the real card as a ghost,
-    dim the source slot, and paint an accent insertion line."""
+    item's rect, not the list's). Reordering is pick-up-and-drop via
+    AnimatedReorder (attached by the owner) — no native QDrag."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSpacing(4)
-        self.setDropIndicatorShown(False)  # we paint our own
-        self.setAutoScroll(True)
-        self._drop_row = -1
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -46,94 +39,6 @@ class QueueList(QListWidget):
         width = self.viewport().width() - 2 * self.spacing()
         for i in range(self.count()):
             self.item(i).setSizeHint(QSize(width, CARD_HEIGHT))
-
-    # ------------------------------------------------ drag presentation
-    def startDrag(self, supported_actions):
-        item = self.currentItem()
-        widget = self.itemWidget(item) if item else None
-        if widget is None:
-            return super().startDrag(supported_actions)
-
-        # ghost = the real card, slightly translucent, grabbed where
-        # the cursor actually is
-        snapshot = widget.grab()
-        ghost = QPixmap(snapshot.size())
-        ghost.fill(Qt.transparent)
-        painter = QPainter(ghost)
-        painter.setOpacity(0.85)
-        painter.drawPixmap(0, 0, snapshot)
-        painter.end()
-
-        drag = QDrag(self)
-        drag.setMimeData(self.model().mimeData(self.selectedIndexes()))
-        drag.setPixmap(ghost)
-        drag.setHotSpot(self.viewport().mapFromGlobal(QCursor.pos())
-                        - self.visualItemRect(item).topLeft())
-
-        # dim the slot the card is leaving
-        dimmed = []
-        for i in self.selectedItems():
-            w = self.itemWidget(i)
-            if w is not None:
-                effect = QGraphicsOpacityEffect(w)
-                effect.setOpacity(0.35)
-                w.setGraphicsEffect(effect)
-                dimmed.append(i)
-        try:
-            drag.exec(Qt.MoveAction)
-        finally:
-            self._drop_row = -1
-            for i in dimmed:
-                w = self.itemWidget(i)  # rebuilt/dead after a real move
-                if w is not None:
-                    w.setGraphicsEffect(None)
-            self.viewport().update()
-
-    def _row_for_drop(self, pos) -> int:
-        item = self.itemAt(pos)
-        if item is None:
-            return self.count()
-        rect = self.visualItemRect(item)
-        row = self.row(item)
-        return row + 1 if pos.y() > rect.center().y() else row
-
-    def dragMoveEvent(self, event):
-        super().dragMoveEvent(event)
-        self._drop_row = self._row_for_drop(event.position().toPoint())
-        self.viewport().update()
-
-    def dragLeaveEvent(self, event):
-        self._drop_row = -1
-        self.viewport().update()
-        super().dragLeaveEvent(event)
-
-    def dropEvent(self, event):
-        self._drop_row = -1
-        super().dropEvent(event)
-        self.viewport().update()
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        if self._drop_row < 0 or not self.count():
-            return
-        if self._drop_row < self.count():
-            y = self.visualItemRect(
-                self.item(self._drop_row)).top() - self.spacing() // 2 - 1
-        else:
-            y = self.visualItemRect(
-                self.item(self.count() - 1)).bottom() + self.spacing() // 2
-        painter = QPainter(self.viewport())
-        painter.setRenderHint(QPainter.Antialiasing)
-        pen = QPen(ACCENT, 2, Qt.SolidLine, Qt.RoundCap)
-        painter.setPen(pen)
-        margin = 8
-        painter.drawLine(margin + 5, y,
-                         self.viewport().width() - margin - 5, y)
-        painter.setBrush(ACCENT)
-        painter.drawEllipse(margin, y - 3, 6, 6)
-        painter.drawEllipse(self.viewport().width() - margin - 6,
-                            y - 3, 6, 6)
-        painter.end()
 
 
 def rounded_pixmap(source: QPixmap, w: int = THUMB_W, h: int = THUMB_H,

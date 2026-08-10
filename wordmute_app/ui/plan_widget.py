@@ -2,7 +2,7 @@
 remove ✕, drag to reorder, + buttons to append passes. The engine note
 sits full-width below."""
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -83,7 +83,6 @@ class PassPlanWidget(QGroupBox):
         self.chips = _ChipsList(self._update_height)
         self.chips.setObjectName("pass_chips")
         self.chips.setSpacing(2)
-        self.chips.setDragDropMode(QAbstractItemView.InternalMove)
         self.chips.setSelectionMode(QAbstractItemView.SingleSelection)
         self.chips.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.chips.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -93,10 +92,11 @@ class PassPlanWidget(QGroupBox):
         from PySide6.QtWidgets import QSizePolicy
         self.chips.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.chips.setMinimumWidth(180)
-        # item widgets do not survive an internal drag-move; rebuild
-        # from the items' data once the move settles
-        self.chips.model().rowsMoved.connect(
-            lambda *_: QTimer.singleShot(0, self._on_reordered))
+        # pick-up-and-drop reorder, same feel as the queue cards
+        from .animated_reorder import AnimatedReorder
+        self._reorder = AnimatedReorder(
+            self.chips, self.move_pass,
+            lift_radius=15)  # QFrame[passChip] border-radius
         row.addWidget(self.chips, stretch=1)
 
         buttons_col = QVBoxLayout()
@@ -158,10 +158,6 @@ class PassPlanWidget(QGroupBox):
         item = QListWidgetItem()
         item.setData(Qt.UserRole, engine)
         self.chips.addItem(item)
-
-    def _on_reordered(self):
-        self._rebuild()
-        self.changed.emit()
 
     def _rebuild(self):
         for i in range(self.chips.count()):

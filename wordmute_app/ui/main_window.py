@@ -183,11 +183,12 @@ class MainWindow(QMainWindow):
         self.queue = QueueList()
         self.queue.setObjectName("queue_cards")
         self.queue.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.queue.setDragDropMode(QAbstractItemView.InternalMove)
-        # a drag-move destroys the moved rows' card widgets; rebuild
-        # them from the item roles once the move settles
-        self.queue.model().rowsMoved.connect(
-            lambda *_: QTimer.singleShot(0, self._restore_cards))
+        # pick-up-and-drop reorder (no native QDrag: it would destroy
+        # the card widgets mid-move and can't animate the others aside)
+        from .animated_reorder import AnimatedReorder
+        self._queue_reorder = AnimatedReorder(
+            self.queue, self._move_queue_row,
+            lift_radius=8)  # QFrame[videoCard] border-radius
         self.queue.itemDoubleClicked.connect(self._on_row_double_clicked)
         self.queue.itemSelectionChanged.connect(self._mirror_selection)
         self.queue.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -529,6 +530,36 @@ class MainWindow(QMainWindow):
         self.queue.sync_sizes()
         self._mirror_selection()
 
+    def _move_queue_row(self, src: int, dst: int):
+        """Drop handler for the animated reorder: move the grabbed card
+        — or the whole selected block when it is part of a
+        multi-selection (parity with the old native drag) — then
+        rebuild (takeItem destroys the moved items' card widgets)."""
+        count = self.queue.count()
+        if not (0 <= src < count and 0 <= dst < count) or src == dst:
+            return
+        rows = sorted(self.queue.row(i) for i in self.queue.selectedItems())
+        if src not in rows:
+            rows = [src]
+        # dst counts positions among all items minus the dragged one;
+        # discount the other moving rows that sat above the landing slot
+        insert_at = dst - sum(
+            1 for r in rows
+            if r != src and (r if r < src else r - 1) < dst)
+        taken = [self.queue.takeItem(r) for r in reversed(rows)]
+        taken.reverse()     # original relative order
+        insert_at = max(0, min(insert_at, self.queue.count()))
+        for offset, it in enumerate(taken):
+            self.queue.insertItem(insert_at + offset, it)
+        self._restore_cards()
+        for it in taken:
+            it.setSelected(True)
+        from PySide6.QtCore import QItemSelectionModel
+        self.queue.setCurrentItem(
+            self.queue.item(insert_at + rows.index(src)),
+            QItemSelectionModel.NoUpdate)
+        self._mirror_selection()
+
     def _insert_row(self, item: QueueItem, status: str = None):
         if status is None:
             status = tr("queued")
@@ -814,6 +845,10 @@ class MainWindow(QMainWindow):
         return rows
 
     def _start(self, auto: bool = False):
+        # a drag in flight (possible when the watch timer auto-starts)
+        # must finish before rows are cleared/captured, or the worker's
+        # row mapping desyncs from the queue
+        self._queue_reorder.abort()
         if auto:
             # watch-folder runs: keep only still-queued rows so earlier
             # results are never reprocessed
@@ -912,9 +947,7 @@ class MainWindow(QMainWindow):
         self.add_url_button.setEnabled(not running)
         self.remove_button.setEnabled(not running)
         # reordering mid-run would desync the worker's row mapping
-        self.queue.setDragDropMode(
-            QAbstractItemView.NoDragDrop if running
-            else QAbstractItemView.InternalMove)
+        self.queue.setProperty("reorder_enabled", not running)
         # settings tab stays enabled: options are captured at Start, so
         # edits only affect the next run
         for w in (self.russian_check, self.english_check, self.plan,
