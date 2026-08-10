@@ -116,8 +116,9 @@ def test_history_tab_populates(qapp, tmp_path, monkeypatch):
     assert tab.table.item(1, 3).text() == "5"
     assert tab.table.item(1, 4).text() == "Whisper"
     # width diet: no row-number gutter, File stretches, no Output column
+    # (5 data columns + the 28px files-on-disk glyph)
     assert not tab.table.verticalHeader().isVisible()
-    assert tab.table.columnCount() == 5
+    assert tab.table.columnCount() == 6
     assert tab.folder_button.text()
 
 

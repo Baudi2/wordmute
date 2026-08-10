@@ -26,11 +26,13 @@ from .file_delete import confirm_and_recycle
 from .hover_table import HoverRowTable
 from .i18n import tr
 
-COLUMNS = ["Time", "File", "", "Muted", "Plan"]
+COLUMNS = ["Time", "File", "", "Muted", "Plan", ""]
 FILE_COL = 1     # the single stretch column
 STATUS_COL = 2   # 28px ✓/✗ glyph
+FILES_COL = 5    # 28px ●/◐/○ files-on-disk glyph
 OK_COLOR = QColor("#d2cefd")     # accent-300
 ERR_COLOR = QColor("#eab7b7")    # error text
+DIM_COLOR = QColor("#9096a0")    # muted text
 
 
 def _short_time(iso: str) -> str:
@@ -38,6 +40,28 @@ def _short_time(iso: str) -> str:
         return datetime.fromisoformat(iso).strftime("%d %b %H:%M")
     except ValueError:
         return iso
+
+
+def _files_glyph(record: dict):
+    """(glyph, tooltip_key) for the files-on-disk column: ● all tracked
+    files present, ◐ some deleted, ○ all deleted. Only local paths
+    count — old records stored the URL as source."""
+    tracked = []
+    src = record.get("source", "")
+    if src and Path(src).is_absolute():
+        tracked.append(("source", Path(src).exists()))
+    out = record.get("output", "")
+    if out:
+        tracked.append(("output", Path(out).exists()))
+    if not tracked:
+        return "", ""
+    present = [name for name, exists in tracked if exists]
+    if len(present) == len(tracked):
+        return "●", "Files on disk"
+    if not present:
+        return "○", "Files deleted"
+    return "◐", ("Source deleted" if present == ["output"]
+                 else "Output deleted")
 
 
 def _compact_plan(plan: str) -> str:
@@ -72,6 +96,8 @@ class HistoryTab(QWidget):
         header.setSectionResizeMode(FILE_COL, QHeaderView.Stretch)
         header.setSectionResizeMode(STATUS_COL, QHeaderView.Fixed)
         self.table.setColumnWidth(STATUS_COL, 28)
+        header.setSectionResizeMode(FILES_COL, QHeaderView.Fixed)
+        self.table.setColumnWidth(FILES_COL, 28)
         self.table.verticalHeader().setVisible(False)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -121,8 +147,16 @@ class HistoryTab(QWidget):
                 file_item.setToolTip(output)
             plan_item = QTableWidgetItem(_compact_plan(r.get("plan", "")))
             plan_item.setToolTip(r.get("plan", ""))
+            glyph, tip = _files_glyph(r)
+            files_item = QTableWidgetItem(glyph)
+            files_item.setTextAlignment(Qt.AlignCenter)
+            files_item.setForeground(OK_COLOR if glyph == "●"
+                                     else DIM_COLOR)
+            if tip:
+                files_item.setToolTip(tr(tip))
             values = [time_item, file_item, status_item,
-                      QTableWidgetItem(str(r.get("muted", ""))), plan_item]
+                      QTableWidgetItem(str(r.get("muted", ""))), plan_item,
+                      files_item]
             for col, item in enumerate(values):
                 self.table.setItem(row, col, item)
         self.count_label.setText(

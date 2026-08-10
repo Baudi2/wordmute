@@ -90,6 +90,42 @@ def test_history_tab_delete_actions(qapp, tmp_path, monkeypatch, processed):
     assert "v.clean.mp4" not in {f.name for f in recycled}
 
 
+def test_files_glyph_states(tmp_path):
+    from wordmute_app.ui.history_tab import _files_glyph
+
+    src = tmp_path / "v.mp4"
+    out = tmp_path / "v.clean.mp4"
+    src.write_bytes(b"s")
+    out.write_bytes(b"o")
+    rec = {"source": str(src), "output": str(out)}
+    assert _files_glyph(rec) == ("●", "Files on disk")
+    src.unlink()
+    assert _files_glyph(rec) == ("◐", "Source deleted")
+    out.unlink()
+    assert _files_glyph(rec) == ("○", "Files deleted")
+    src.write_bytes(b"s")
+    assert _files_glyph(rec) == ("◐", "Output deleted")
+    # old records: URL source, no output -> nothing tracked, no glyph
+    assert _files_glyph({"source": "https://x/v", "output": ""}) == ("", "")
+
+
+def test_history_tab_shows_files_glyph(qapp, tmp_path, monkeypatch,
+                                       processed):
+    src, out = processed
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    from wordmute_app.core import history
+    from wordmute_app.ui.history_tab import FILES_COL, HistoryTab
+
+    history.append_history({"name": "v.mp4", "status": "ok", "muted": 1,
+                            "plan": "whisper(small)", "source": str(src),
+                            "output": str(out)})
+    tab = HistoryTab()
+    assert tab.table.item(0, FILES_COL).text() == "●"
+    src.unlink()
+    tab.refresh()
+    assert tab.table.item(0, FILES_COL).text() == "◐"
+
+
 def test_confirm_declined_deletes_nothing(qapp, monkeypatch, processed):
     src, out = processed
     from wordmute_app.ui import file_delete

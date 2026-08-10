@@ -373,6 +373,10 @@ RU = {
         "Переместить в Корзину файлов: {}?",
     "Delete failed: {}": "Не удалось удалить: {}",
     "files deleted": "файлы удалены",
+    "Files on disk": "Файлы на диске",
+    "Files deleted": "Файлы удалены",
+    "Source deleted": "Исходник удалён",
+    "Output deleted": "Результат удалён",
     # transcript tab
     "Text": "Текст",
     "{} words": "Слов: {}",
