@@ -3,6 +3,7 @@ Click a row to hear the original audio; uncheck false positives;
 re-render rebuilds the output from the source in one ffmpeg pass using
 the recorded intervals — never re-transcribes."""
 
+import threading
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
@@ -30,6 +31,21 @@ from .player import SnippetPlayer
 COL_MUTE, COL_START, COL_END, COL_PASS, COL_ENGINE, COL_TEXT = range(6)
 
 
+def _scoped_reporter(prev, thread_id, on_progress):
+    """The engine reporter is process-global; while the queue is running
+    it belongs to the queue worker (which paints statuses onto the
+    active card). Route by thread identity: events raised by the
+    re-render thread stay private to the dialog, events from any other
+    thread keep flowing to the previous reporter untouched."""
+    def reporter(event, data):
+        if threading.get_ident() == thread_id:
+            if event == "mute_progress":
+                on_progress(data["seconds"])
+        else:
+            prev(event, data)
+    return reporter
+
+
 class ReRenderWorker(QThread):
     succeeded = Signal()
     failed = Signal(str)
@@ -40,15 +56,9 @@ class ReRenderWorker(QThread):
         self._data = data
 
     def run(self):
-        # forward render progress to the dialog while passing every
-        # other event through to whatever reporter was active
         prev = engine._reporter
-
-        def reporter(event, data):
-            if event == "mute_progress":
-                self.progressed.emit(data["seconds"])
-            prev(event, data)
-
+        reporter = _scoped_reporter(prev, threading.get_ident(),
+                                    self.progressed.emit)
         engine.set_reporter(reporter)
         try:
             review.apply_review(self._data)
@@ -57,7 +67,10 @@ class ReRenderWorker(QThread):
         else:
             self.succeeded.emit()
         finally:
-            engine.set_reporter(prev)
+            # the queue worker may have finished meanwhile and reset the
+            # reporter — only restore if ours is still installed
+            if engine._reporter is reporter:
+                engine.set_reporter(prev)
 
 
 class ReviewDialog(QDialog):

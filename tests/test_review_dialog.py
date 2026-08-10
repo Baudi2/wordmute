@@ -108,6 +108,36 @@ def test_unmute_all_then_rerender(dialog, monkeypatch):
     assert applied[0] is dialog._data
 
 
+def test_scoped_reporter_isolates_rerender_from_queue():
+    """Regression: a re-render running while the queue processes another
+    item must not leak its engine events into the queue's reporter (the
+    downloading card's status was flickering to re-render text), and
+    queue events must not drive the dialog's progress."""
+    import threading
+    from wordmute_app.ui.review_dialog import _scoped_reporter
+
+    queue_events = []
+    progress = []
+    me = threading.get_ident()
+
+    # events from the re-render thread stay private to the dialog
+    rep = _scoped_reporter(lambda e, d: queue_events.append(e), me,
+                           progress.append)
+    rep("mute_start", {"n": 3})
+    rep("mute_progress", {"seconds": 1.5})
+    assert queue_events == []
+    assert progress == [1.5]
+
+    # events from any OTHER thread pass through to the queue reporter
+    # untouched and never touch the dialog progress
+    rep = _scoped_reporter(lambda e, d: queue_events.append(e), me - 1,
+                           progress.append)
+    rep("mute_progress", {"seconds": 9.0})
+    rep("transcribe_progress", {"seconds": 2.0})
+    assert queue_events == ["mute_progress", "transcribe_progress"]
+    assert progress == [1.5]
+
+
 def test_missing_source_disables_rerender(qapp, review_file, monkeypatch,
                                           tmp_path):
     from wordmute_app.ui import review_dialog
