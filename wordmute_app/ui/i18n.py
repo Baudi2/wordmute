@@ -337,6 +337,27 @@ RU = {
     "installer downloads them on demand).":
         "Установить, починить или добавить компоненты движков (тонкий "
         "установщик скачивает их по мере надобности).",
+    "Repair components": "Починить компоненты",
+    "Deletes the downloaded components and runs the setup "
+    "again — the standard clean retry when something is "
+    "broken. Word lists, settings and models are kept.":
+        "Удаляет скачанные компоненты и запускает установку заново — "
+        "стандартный способ починки, когда что-то сломалось. Списки "
+        "слов, настройки и модели сохраняются.",
+    "Delete the downloaded components and install them "
+    "again? Word lists, settings and models are not "
+    "affected. Best done right after starting the app, "
+    "before any processing.":
+        "Удалить скачанные компоненты и установить их заново? Списки "
+        "слов, настройки и модели не затрагиваются. Лучше делать сразу "
+        "после запуска приложения, до первой обработки.",
+    "Restart the app to use the reinstalled components.":
+        "Перезапустите приложение, чтобы использовать переустановленные "
+        "компоненты.",
+    "Disk usage: components {} · Whisper models {} · "
+    "GigaAM {} · total {}":
+        "Занято на диске: компоненты {} · модели Whisper {} · "
+        "GigaAM {} · всего {}",
     # updates
     "Updates": "Обновления",
     "Check for updates": "Проверить обновления",

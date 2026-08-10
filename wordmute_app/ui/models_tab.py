@@ -41,6 +41,14 @@ class DownloadWorker(QThread):
             self.succeeded.emit(self._model)
 
 
+class DiskUsageWorker(QThread):
+    result = Signal(object)  # runtime size in bytes
+
+    def run(self):
+        from ..core import runtime_env
+        self.result.emit(runtime_env.disk_usage())
+
+
 class CheckUpdatesWorker(QThread):
     result = Signal(dict)
 
@@ -124,6 +132,16 @@ class ModelsTab(QWidget):
         gigaam_row.addWidget(self.gigaam_delete_button)
         layout.addLayout(gigaam_row)
 
+        # total disk footprint (the app's heaviest cost on user PCs)
+        self.disk_label = QLabel("")
+        self.disk_label.setProperty("muted", True)
+        self.disk_label.setWordWrap(True)
+        layout.addWidget(self.disk_label)
+        self._disk_worker = None
+        self._runtime_bytes = None   # unknown until the walk finishes
+        self._whisper_bytes = 0
+        self._gigaam_bytes = 0
+
         self.status_label = QLabel("")
         self.status_label.setProperty("muted", True)
         self.status_label.setWordWrap(True)
@@ -147,6 +165,14 @@ class ModelsTab(QWidget):
                "installer downloads them on demand)."))
         self.components_button.clicked.connect(self._open_components)
         updates_row.addWidget(self.components_button)
+        self.repair_button = QPushButton(tr("Repair components"))
+        self.repair_button.setProperty("danger", True)
+        self.repair_button.setToolTip(
+            tr("Deletes the downloaded components and runs the setup "
+               "again — the standard clean retry when something is "
+               "broken. Word lists, settings and models are kept."))
+        self.repair_button.clicked.connect(self._repair_components)
+        updates_row.addWidget(self.repair_button)
         updates_row.addStretch()
         layout.addLayout(updates_row)
         self.updates_label = QLabel("")
@@ -160,6 +186,12 @@ class ModelsTab(QWidget):
 
         layout.addStretch()
         self.refresh()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # the runtime walk is deferred until the tab is actually opened
+        if self._runtime_bytes is None:
+            self._refresh_disk()
 
     # ---------------------------------------------------------- data
     def refresh(self):
@@ -208,11 +240,41 @@ class ModelsTab(QWidget):
                      "first use).").format(models.fmt_size(total)))
             self.gigaam_delete_button.setEnabled(True)
         else:
+            total = 0
             self.gigaam_label.setText(
                 "<b>GigaAM</b>: "
                 + tr("nothing cached yet — models download automatically "
                      "on first use."))
             self.gigaam_delete_button.setEnabled(False)
+
+        self._whisper_bytes = sum(st["size_bytes"] or 0
+                                  for st in status if st["downloaded"])
+        self._gigaam_bytes = total
+        self._update_disk_label()
+
+    def _update_disk_label(self):
+        runtime = (models.fmt_size(self._runtime_bytes)
+                   if self._runtime_bytes is not None else "…")
+        known = ((self._runtime_bytes or 0) + self._whisper_bytes
+                 + self._gigaam_bytes)
+        self.disk_label.setText(
+            tr("Disk usage: components {} · Whisper models {} · "
+               "GigaAM {} · total {}").format(
+                runtime, models.fmt_size(self._whisper_bytes),
+                models.fmt_size(self._gigaam_bytes),
+                models.fmt_size(known)))
+
+    def _refresh_disk(self):
+        if self._disk_worker is not None:
+            return
+        self._disk_worker = DiskUsageWorker()
+        self._disk_worker.result.connect(self._on_disk_result)
+        self._disk_worker.start()
+
+    def _on_disk_result(self, size):
+        self._disk_worker = None
+        self._runtime_bytes = size
+        self._update_disk_label()
 
     # ---------------------------------------------------------- actions
     def _download(self, model: str):
@@ -266,6 +328,26 @@ class ModelsTab(QWidget):
         from .setup_dialog import SetupDialog
         SetupDialog(self, first_run=False).exec()
         self.refresh()
+        self._refresh_disk()
+
+    def _repair_components(self):
+        """The standard clean retry from INSTALL_GUIDE, as a button:
+        delete the managed runtime, then run the component setup."""
+        if QMessageBox.question(
+                self, "WordMute",
+                tr("Delete the downloaded components and install them "
+                   "again? Word lists, settings and models are not "
+                   "affected. Best done right after starting the app, "
+                   "before any processing.")) \
+                != QMessageBox.StandardButton.Yes:
+            return
+        import shutil
+        from ..core import runtime_env
+        shutil.rmtree(runtime_env.runtime_dir(), ignore_errors=True)
+        self._open_components()
+        QMessageBox.information(
+            self, "WordMute",
+            tr("Restart the app to use the reinstalled components."))
 
     # ---------------------------------------------------------- updates
     def _check_updates(self):
@@ -339,6 +421,6 @@ class ModelsTab(QWidget):
 
     def shutdown(self):
         for worker in (self._worker, self._updates_worker,
-                       self._upgrade_worker):
+                       self._upgrade_worker, self._disk_worker):
             if worker is not None:
                 worker.wait(30000)

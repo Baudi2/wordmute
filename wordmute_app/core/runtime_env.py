@@ -245,6 +245,21 @@ def _run_streaming(cmd, log=None, cancelled=None) -> None:
                            f"{' '.join(cmd[:3])}…")
 
 
+def disk_usage() -> int:
+    """Total bytes of the managed runtime (components). Walks the
+    tree — call from a worker thread, not the GUI thread."""
+    total = 0
+    root = runtime_dir()
+    if root.is_dir():
+        for path in root.rglob("*"):
+            try:
+                if path.is_file():
+                    total += path.stat().st_size
+            except OSError:
+                continue
+    return total
+
+
 def write_report(dest) -> None:
     """Diagnostics for support: WORDMUTE_RUNTIME_REPORT=<file>.
     Import probes prove the frozen app can actually use the runtime's

@@ -73,6 +73,78 @@ def test_finish_without_tray_does_not_crash(window, monkeypatch):
     window._on_all_finished(1, 1)  # QApplication.alert path only
 
 
+# --------------------------------------------------- models tab: disk/repair
+@pytest.fixture
+def models_tab(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    from wordmute_app.core import gpu, models
+    monkeypatch.setattr(gpu, "detect_gpus", lambda: [])
+    monkeypatch.setattr(models, "whisper_model_status", lambda: [
+        {"model": "large-v3", "downloaded": True,
+         "size_bytes": 3_000_000_000},
+        {"model": "small", "downloaded": False, "size_bytes": None}])
+    monkeypatch.setattr(models, "gigaam_cache_dirs",
+                        lambda: [("x", 500_000_000)])
+    from wordmute_app.ui.models_tab import ModelsTab
+    tab = ModelsTab()
+    yield tab
+    tab.shutdown()
+
+
+def test_runtime_disk_usage_walks_files(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    from wordmute_app.core import runtime_env
+
+    assert runtime_env.disk_usage() == 0   # nothing installed
+    sub = runtime_env.runtime_dir() / "python" / "Lib"
+    sub.mkdir(parents=True)
+    (sub / "a.py").write_bytes(b"x" * 100)
+    (runtime_env.runtime_dir() / "b.bin").write_bytes(b"y" * 23)
+    assert runtime_env.disk_usage() == 123
+
+
+def test_disk_label_combines_components(models_tab):
+    from wordmute_app.core.models import fmt_size
+
+    models_tab._on_disk_result(2_000_000_000)
+    text = models_tab.disk_label.text()
+    assert fmt_size(2_000_000_000) in text                    # runtime
+    assert fmt_size(3_000_000_000) in text                    # whisper
+    assert fmt_size(500_000_000) in text                      # gigaam
+    assert fmt_size(5_500_000_000) in text                    # total
+
+
+def test_repair_deletes_runtime_and_reopens_setup(models_tab, monkeypatch,
+                                                  tmp_path):
+    from wordmute_app.core import runtime_env
+    from PySide6.QtWidgets import QMessageBox
+
+    marker = runtime_env.runtime_dir() / "python" / "python.exe"
+    marker.parent.mkdir(parents=True)
+    marker.touch()
+    opened = []
+    monkeypatch.setattr(models_tab, "_open_components",
+                        lambda: opened.append(True))
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    models_tab._repair_components()
+    assert not runtime_env.runtime_dir().exists()
+    assert opened == [True]
+
+
+def test_repair_declined_keeps_runtime(models_tab, monkeypatch):
+    from wordmute_app.core import runtime_env
+    from PySide6.QtWidgets import QMessageBox
+
+    runtime_env.runtime_dir().mkdir(parents=True)
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: QMessageBox.StandardButton.No)
+    models_tab._repair_components()
+    assert runtime_env.runtime_dir().exists()
+
+
 # ------------------------------------------------------------ size clamp
 def test_initial_size_clamps_to_small_screens():
     from wordmute_app.ui.main_window import _initial_size
