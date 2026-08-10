@@ -101,7 +101,19 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   release's .exe via the GitHub API, so new releases need no site
   edits, just tag + upload.
 - Fat 0.2.0 installer still in packaging\Output as fallback.
-- Open TODOs: clamp initial window size to screen, background
-  thumbnailing for bulk folder adds, playlist support in Add URL,
-  Inter fonts only partially referenced by QSS weights, GigaAM in
-  frozen build unverified (torch import from runtime).
+- v0.4.0 roadmap (user approved doing ALL before the next installer;
+  no tester found yet, no hurry). DONE: keep-awake, finish
+  notification, window clamp (batch 1); repair-components button,
+  disk-usage line in Models (batch 2). REMAINING, in order: traffic
+  stat in History (record download bytes in history records + footer
+  «скачано за месяц»), app self-update check (GitHub releases API —
+  reuse core/updates.py machinery), model-size choice in SetupDialog
+  (large/medium/small before first transcription), background
+  thumbnailing for bulk folder adds, multi-URL paste in Add URL
+  (downloader currently REJECTS playlists at core/downloader.py:57).
+  A dedicated memory/traffic TAB was considered and rejected — fold
+  stats into existing tabs instead.
+- Other open items: LICENSE file decision (repo is public with no
+  license = all-rights-reserved; user undecided), GigaAM in frozen
+  build unverified (torch import from runtime), Inter fonts only
+  partially referenced by QSS weights.
