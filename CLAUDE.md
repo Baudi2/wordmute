@@ -110,9 +110,13 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   choice in SetupDialog, background thumbnailing for bulk adds
   (WORDMUTE_SYNC_PROBE forces sync in tests), multi-URL paste in Add
   URL (batch mode = best quality each; playlists still rejected).
-  NEXT: build the 0.4.0 installer (build.ps1), tag v0.4.0, upload the
-  .exe to GitHub releases — the site and the in-app update check pick
-  it up automatically.
+  SHIPPED 2026-08-11: release v0.4.0 published with the installer
+  asset (157.7 MB), machine-verified (frozen runtime imports + smoke
+  + live download link); site/README/INSTALL_GUIDE refreshed for
+  0.4.0 incl. the page-embedded guide copy. Caveat learned: anonymous
+  GitHub API = 60 req/h per IP — never poll it in tight loops from
+  the dev machine; the app's check_app_update degrades silently by
+  design when rate-limited.
 - Other open items: LICENSE file decision (repo is public with no
   license = all-rights-reserved; user undecided), GigaAM in frozen
   build unverified (torch import from runtime), Inter fonts only
