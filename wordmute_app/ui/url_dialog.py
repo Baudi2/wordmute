@@ -1,5 +1,9 @@
 """Add-URL dialog: paste a link, optionally fetch yt-dlp's format list
-and pick a specific quality, or add straight away at best quality."""
+and pick a specific quality, or add straight away at best quality.
+Pasting SEVERAL links at once switches to batch mode: all of them are
+added at best quality in one go."""
+
+import re
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -25,6 +29,19 @@ from .i18n import tr
 # keep fetch threads alive if their dialog closes early; Qt drops the
 # signal connections with the dialog, so late emits are harmless
 _live_workers = set()
+
+# a URL runs until whitespace/comma/semicolon OR the next http(s)://
+# — QLineEdit may join pasted lines with nothing in between
+_URL_RE = re.compile(r"https?://(?:(?!https?://)[^\s,;])+")
+
+
+def extract_urls(text: str) -> list:
+    """Every distinct http(s) link in the text, in order."""
+    seen = []
+    for url in _URL_RE.findall(text or ""):
+        if url not in seen:
+            seen.append(url)
+    return seen
 
 
 class FormatListWorker(QThread):
@@ -59,6 +76,7 @@ class AddUrlDialog(QDialog):
         self._use_best = False
         self._cookies = cookies
         self._fetch_generation = 0
+        self._multi_urls = []
 
         layout = QVBoxLayout(self)
         self.url_edit = QLineEdit(url)
@@ -149,12 +167,40 @@ class AddUrlDialog(QDialog):
         return text.strip().startswith(("http://", "https://"))
 
     def _schedule_fetch(self):
+        urls = extract_urls(self.url_edit.text())
+        if len(urls) >= 2:
+            self._enter_multi_mode(urls)
+            return
+        if self._multi_urls:
+            self._leave_multi_mode()
         if self._looks_like_url(self._url()):
             self._fetch_timer.start()
         else:
             self._fetch_timer.stop()
 
+    def _enter_multi_mode(self, urls):
+        """Several links pasted: no per-link format picking — everything
+        is added at best quality in one click."""
+        self._fetch_timer.stop()
+        self._multi_urls = urls
+        self.loading_bar.setVisible(False)
+        self.table.setRowCount(0)
+        self._info = None
+        self.status.setText(
+            tr("{} links — each will be added at best quality.")
+            .format(len(urls)))
+        self.best_button.setText(tr("Add {} links").format(len(urls)))
+        self._update_ok()
+
+    def _leave_multi_mode(self):
+        self._multi_urls = []
+        self.best_button.setText(tr("Add (best quality)"))
+        self.status.setText(tr("Paste a video URL — the format list "
+                               "loads automatically."))
+
     def _fetch(self):
+        if self._multi_urls:
+            return
         url = self._url()
         if not self._looks_like_url(url):
             return
@@ -225,7 +271,7 @@ class AddUrlDialog(QDialog):
 
     # ---------------------------------------------------------- result
     def _accept_best(self):
-        if not self._url():
+        if not self._url() and not self._multi_urls:
             return
         self._use_best = True
         self.accept()
@@ -253,3 +299,13 @@ class AddUrlDialog(QDialog):
             title=info.get("title", ""),
             duration=info.get("duration"),
         )
+
+    def result_items(self) -> list:
+        """Batch mode: one best-quality item per pasted link; otherwise
+        the single (possibly format-picked) item."""
+        if self._multi_urls:
+            return [QueueItem(kind="url", url=u,
+                              format_spec=downloader.BEST_SPEC,
+                              format_label=downloader.BEST_LABEL)
+                    for u in self._multi_urls]
+        return [self.result_item()]

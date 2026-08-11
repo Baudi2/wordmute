@@ -708,7 +708,8 @@ class MainWindow(QMainWindow):
                               cookies=self._settings.get("cookies_file")
                               or None)
         if dialog.exec():
-            self._add_url_row(dialog.result_item())
+            for item in dialog.result_items():
+                self._add_url_row(item)
 
     def _pick_files(self):
         from ..engine.wordmute import MEDIA_EXTS
@@ -748,10 +749,18 @@ class MainWindow(QMainWindow):
                         if u.isLocalFile())
         web = [u.toString() for u in mime.urls()
                if u.scheme() in ("http", "https")]
-        if not web and mime.hasText() \
-                and mime.text().strip().startswith(("http://", "https://")):
-            web = [mime.text().strip()]
-        if web:
+        if not web and mime.hasText():
+            from .url_dialog import extract_urls
+            web = extract_urls(mime.text())
+        if len(web) > 1:
+            # several links dropped: queue them all at best quality
+            from ..core import downloader
+            for u in web:
+                self._add_url_row(QueueItem(
+                    kind="url", url=u,
+                    format_spec=downloader.BEST_SPEC,
+                    format_label=downloader.BEST_LABEL))
+        elif web:
             self._add_url(web[0])
 
     # ---------------------------------------------------------- row context

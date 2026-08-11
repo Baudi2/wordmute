@@ -366,6 +366,46 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# ------------------------------------------------------- multi-URL add
+def test_extract_urls_handles_paste_shapes():
+    from wordmute_app.ui.url_dialog import extract_urls
+
+    # newlines, commas, spaces — and QLineEdit's no-separator join
+    assert extract_urls("https://a.com/1\nhttps://b.com/2") == \
+        ["https://a.com/1", "https://b.com/2"]
+    assert extract_urls("https://a.com/1, https://b.com/2") == \
+        ["https://a.com/1", "https://b.com/2"]
+    assert extract_urls("https://a.com/1https://b.com/2") == \
+        ["https://a.com/1", "https://b.com/2"]
+    # dedupe, order kept, junk around ignored
+    assert extract_urls("see https://a.com/1 and https://a.com/1 !") == \
+        ["https://a.com/1"]
+    assert extract_urls("no links here") == []
+
+
+def test_url_dialog_multi_mode(qapp):
+    from wordmute_app.core import downloader
+    from wordmute_app.ui.url_dialog import AddUrlDialog
+
+    d = AddUrlDialog(auto_fetch=False)
+    d.url_edit.setText("https://a.com/1 https://b.com/2 https://c.com/3")
+    assert d._multi_urls == ["https://a.com/1", "https://b.com/2",
+                             "https://c.com/3"]
+    assert "3" in d.best_button.text()
+    items = (d._accept_best(), d.result_items())[1]
+    assert [i.url for i in items] == ["https://a.com/1",
+                                      "https://b.com/2", "https://c.com/3"]
+    assert all(i.format_spec == downloader.BEST_SPEC for i in items)
+
+    # back to a single link: normal mode, single result
+    d2 = AddUrlDialog(auto_fetch=False)
+    d2.url_edit.setText("https://a.com/1 https://b.com/2")
+    d2.url_edit.setText("https://only.com/1")
+    assert d2._multi_urls == []
+    d2._use_best = True
+    assert [i.url for i in d2.result_items()] == ["https://only.com/1"]
+
+
 # ------------------------------------------------------------ size clamp
 def test_initial_size_clamps_to_small_screens():
     from wordmute_app.ui.main_window import _initial_size

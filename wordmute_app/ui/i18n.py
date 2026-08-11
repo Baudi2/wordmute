@@ -372,6 +372,10 @@ RU = {
         "Веса GigaAM обновляются вместе с пакетом gigaam.",
     "WordMute {} → {} — download: {}":
         "WordMute {} → {} — скачать: {}",
+    # add-url batch mode
+    "{} links — each will be added at best quality.":
+        "Ссылок: {} — каждая будет добавлена в лучшем качестве.",
+    "Add {} links": "Добавить ссылок: {}",
     # setup dialog: model-size choice
     "Recognition model (downloads on first use; "
     "changeable later in Settings):":
