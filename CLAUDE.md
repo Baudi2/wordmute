@@ -129,13 +129,18 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   selector, CLI default torch / app auto-prefers onnx; component =
   onnx-asr[cpu,hub] ~60 МБ + ~850 МБ model on first use; no HF
   token — wizard gates only the legacy torch path; verified with
-  real inference end-to-end incl. matching). REMAINING: Package Г UI
-  polish (pyqttoast/QtAwesome/waveform in review/skeletons), Package
-  Д features (fade-edged mutes, SRT export, strictness presets,
-  subtitle import). Also pending: A/B of «быстрый режим» on a real
-  RU video (user), and the next installer build should be
-  report-checked for onnx_asr import from the frozen exe (probe
-  added to WORDMUTE_RUNTIME_REPORT).
+  real inference end-to-end incl. matching). Package Г DONE:
+  pyqttoast toasts (Nocturne-styled, ui/toasts.py; new frozen deps
+  pyqt-toast-notification + QtPy, both MIT), review waveform strip
+  (ui/waveform.py — ffmpeg peaks, no numpy), skeleton shimmer on
+  bulk-add cards; QtAwesome deliberately skipped (icon consistency).
+  REMAINING: Package Д features (fade-edged mutes — engine mute()
+  change, CLI FIRST; SRT export of muted words; strictness presets;
+  subtitle import as ASR bypass). Then per the user's plan: refresh
+  the webpage for the new state and RELEASE 0.5.0. Also pending: A/B
+  of «быстрый режим» on a real RU video (user), and the next
+  installer build must be report-checked for onnx_asr import from
+  the frozen exe (probe added to WORDMUTE_RUNTIME_REPORT).
 - Other open items: LICENSE file decision (repo is public with no
   license = all-rights-reserved; user undecided), GigaAM frozen-build
   end-to-end still untested (install channel now fixed; torch is
