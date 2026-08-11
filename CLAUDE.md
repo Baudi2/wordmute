@@ -141,11 +141,12 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   import are DELIBERATELY parked pending user decisions (presets
   need the user to curate severity categories in THEIR lists;
   subtitle import conflicts with word-precision muting — phrase-
-  level cues would mute whole sentences). NEXT per the user's plan:
-  refresh the webpage for the new state and RELEASE 0.5.0. Also
-  pending: A/B of «быстрый режим» on a real RU video (user), and
-  the 0.5.0 build must be report-checked for onnx_asr import from
-  the frozen exe (probe added to WORDMUTE_RUNTIME_REPORT).
+  level cues would mute whole sentences). SHIPPED 2026-08-12:
+  release v0.5.0 published (installer 160 MB; frozen report probes
+  all green incl. onnx_asr; smoke ok; site refreshed; download link
+  verified). The in-app update check was confirmed LIVE: a simulated
+  0.4.0 detects 0.5.0 with the correct release URL. Still pending:
+  A/B of «быстрый режим» on a real RU video (user).
 - Other open items: LICENSE file decision (repo is public with no
   license = all-rights-reserved; user undecided), GigaAM frozen-build
   end-to-end still untested (install channel now fixed; torch is
