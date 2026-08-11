@@ -78,6 +78,7 @@ class QueueCard(QFrame):
         self.thumb.setObjectName("card_thumb")
         self.thumb.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.thumb)
+        self._pulse = None
 
         middle = QVBoxLayout()
         middle.setSpacing(2)
@@ -138,9 +139,32 @@ class QueueCard(QFrame):
         self.style().unpolish(self)
         self.style().polish(self)
 
+    def set_loading(self, on: bool):
+        """Skeleton shimmer: pulse the thumbnail while the duration/
+        thumbnail probe runs in the background (bulk adds)."""
+        if on and self._pulse is None:
+            from PySide6.QtCore import QPropertyAnimation
+            from PySide6.QtWidgets import QGraphicsOpacityEffect
+            effect = QGraphicsOpacityEffect(self.thumb)
+            self.thumb.setGraphicsEffect(effect)
+            anim = QPropertyAnimation(effect, b"opacity", self)
+            anim.setDuration(900)
+            anim.setStartValue(0.35)
+            anim.setKeyValueAt(0.5, 0.9)
+            anim.setEndValue(0.35)
+            anim.setLoopCount(-1)
+            anim.start()
+            self._pulse = anim
+        elif not on and self._pulse is not None:
+            self._pulse.stop()
+            self._pulse.deleteLater()
+            self._pulse = None
+            self.thumb.setGraphicsEffect(None)
+
     def set_thumb(self, path):
         pixmap = QPixmap(str(path))
         if not pixmap.isNull():
+            self.set_loading(False)
             self.thumb.setPixmap(rounded_pixmap(pixmap))
             self.thumb.setText("")
 

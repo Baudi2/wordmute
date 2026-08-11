@@ -366,6 +366,68 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# ----------------------------------------------------- UI polish (Г)
+def test_toast_helper_smokes(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from PySide6.QtWidgets import QWidget
+    from wordmute_app.ui.toasts import show_toast
+
+    host = QWidget()
+    host.show()
+    show_toast(host, "Готово", "Лекция_01.clean.mp4")
+    qapp.processEvents()
+    host.hide()
+
+
+def test_card_skeleton_pulse(qapp):
+    from wordmute_app.ui.queue_card import QueueCard
+
+    card = QueueCard("t", "m")
+    assert card._pulse is None
+    card.set_loading(True)
+    assert card._pulse is not None
+    card.set_loading(True)          # idempotent
+    card.set_loading(False)
+    assert card._pulse is None
+    card.set_loading(False)         # idempotent again
+
+
+def test_waveform_worker_extracts_peaks(qapp, tmp_path):
+    import subprocess
+    from wordmute_app.ui.waveform import BARS, WaveformWorker
+
+    wav = tmp_path / "tone.wav"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+                    "-i", "sine=frequency=440:duration=6",
+                    "-ar", "8000", str(wav)], check=True)
+    got = []
+    worker = WaveformWorker(wav, row=3, start=2.5, end=3.0)
+    worker.ready.connect(lambda *a: got.append(a))
+    worker.run()                    # synchronous: logic, not threading
+    assert got, "no peaks emitted"
+    row, peaks, f0, f1 = got[0]
+    assert row == 3
+    assert 0 < len(peaks) <= BARS
+    assert all(0.0 <= p <= 1.0 for p in peaks)
+    assert max(peaks) > 0.1         # lavfi sine amplitude is 1/8
+    # the muted span sits in the middle of the ±2s window
+    assert 0.3 < f0 < f1 < 0.8
+
+
+def test_waveform_strip_paints(qapp):
+    from wordmute_app.ui.waveform import WaveformStrip
+
+    strip = WaveformStrip()
+    strip.resize(400, 56)
+    strip.set_peaks([0.1, 0.9, 0.5] * 20, 0.4, 0.6)
+    strip.show()
+    qapp.processEvents()
+    pixmap = strip.grab()
+    assert not pixmap.isNull()
+    strip.clear()
+    strip.hide()
+
+
 # ---------------------------------------------- gigaam onnx backend
 def test_chars_to_words_conversion():
     from wordmute_app.engine.wordmute import _chars_to_words

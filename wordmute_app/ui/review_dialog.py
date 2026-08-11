@@ -27,6 +27,7 @@ from ..engine.wordmute import fmt_ts
 from .hover_table import HoverRowTable
 from .i18n import tr
 from .player import SnippetPlayer
+from .waveform import WaveformStrip, WaveformWorker
 
 COL_MUTE, COL_START, COL_END, COL_PASS, COL_ENGINE, COL_TEXT = range(6)
 
@@ -117,6 +118,14 @@ class ReviewDialog(QDialog):
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table, stretch=1)
+
+        # waveform of the audio around the selected interval — shows
+        # WHERE the word sits before the user even presses play
+        self._wave = WaveformStrip()
+        self._wave_worker = None
+        self._wave_pending = None
+        self._wave_cache = {}
+        layout.addWidget(self._wave)
         self._fill_table()
 
         self.counts_label = QLabel()
@@ -212,12 +221,44 @@ class ReviewDialog(QDialog):
         rows = self.table.selectionModel().selectedRows()
         if not rows:
             return
-        iv = self._data["intervals"][rows[0].row()]
+        row = rows[0].row()
+        iv = self._data["intervals"][row]
+        self._show_waveform(row, iv)
         try:
             self._player.play(self._data["source"], iv["s"], iv["e"])
         except Exception as exc:
             self.status_label.setText(
                 tr("Playback failed: {}").format(exc))
+
+    def _show_waveform(self, row: int, iv: dict):
+        cached = self._wave_cache.get(row)
+        if cached:
+            self._wave.set_peaks(*cached)
+            return
+        self._wave.clear()
+        if self._wave_worker is not None:
+            self._wave_pending = (row, iv)   # latest wins when free
+            return
+        worker = WaveformWorker(self._data["source"], row,
+                                iv["s"], iv["e"], self)
+        worker.ready.connect(self._on_waveform_ready)
+        worker.finished.connect(self._on_waveform_worker_done)
+        self._wave_worker = worker
+        worker.start()
+
+    def _on_waveform_worker_done(self):
+        self._wave_worker = None
+        if self._wave_pending is not None:
+            row, iv = self._wave_pending
+            self._wave_pending = None
+            if row not in self._wave_cache:
+                self._show_waveform(row, iv)
+
+    def _on_waveform_ready(self, row, peaks, f0, f1):
+        self._wave_cache[row] = (peaks, f0, f1)
+        rows = self.table.selectionModel().selectedRows()
+        if rows and rows[0].row() == row:
+            self._wave.set_peaks(peaks, f0, f1)
 
     # ---------------------------------------------------------- re-render
     def _rerender(self):
@@ -245,6 +286,11 @@ class ReviewDialog(QDialog):
                     if iv.get("muted", True))
         self.status_label.setText(
             tr("Output updated: {} interval(s) muted.").format(muted))
+        window = self.parent()
+        if window is not None:  # toast on the MAIN window, never here
+            from .toasts import show_toast
+            show_toast(window, tr("Re-render finished"),
+                       Path(self._data["output"]).name)
 
     def _on_rerender_failed(self, message: str):
         self._worker = None
@@ -256,6 +302,8 @@ class ReviewDialog(QDialog):
     def closeEvent(self, event):
         if self._worker is not None:
             self._worker.wait()
+        if self._wave_worker is not None:
+            self._wave_worker.wait(5000)
         if self._dirty:
             if QMessageBox.question(
                     self, "WordMute",

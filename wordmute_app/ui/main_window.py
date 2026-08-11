@@ -661,6 +661,9 @@ class MainWindow(QMainWindow):
                              duration=None if bulk else media_duration(p))
             self._insert_row(item, defer_media=bulk)
             if bulk:
+                card = self._card(self.queue.count() - 1)
+                if card:
+                    card.set_loading(True)
                 self._probe_in_background(item)
 
     def _probe_in_background(self, item: QueueItem):
@@ -693,6 +696,7 @@ class MainWindow(QMainWindow):
             list_item.setData(THUMB_ROLE, thumb)
         card = self._card(row)
         if card:
+            card.set_loading(False)
             card.set_meta(self._card_meta(item))
             if thumb:
                 card.set_thumb(thumb)
@@ -1302,6 +1306,12 @@ class MainWindow(QMainWindow):
             card.set_actions(review=ok and has_review,
                              open_=ok and has_out,
                              retry=not ok and error != "cancelled")
+        if ok and self.isActiveWindow():
+            from .toasts import show_toast
+            item = self.queue.item(row)
+            title = (item.data(TITLE_ROLE) if item else "") or ""
+            show_toast(self, tr("Done"),
+                       Path(out).name if out else title)
         if not ok and error != "cancelled":
             self._append_log(f"Error: {error}")
         self._update_overall_progress()
@@ -1322,9 +1332,11 @@ class MainWindow(QMainWindow):
             self.activateWindow()
 
     def _notify_finished(self, summary: str):
-        """Long runs end while the user is elsewhere — flash the
-        taskbar and show a tray balloon unless the window is active."""
+        """Active window gets an in-app toast; a backgrounded one gets
+        the taskbar flash + tray balloon."""
         if self.isActiveWindow():
+            from .toasts import show_toast
+            show_toast(self, summary, duration_ms=7000)
             return
         from PySide6.QtWidgets import QApplication, QSystemTrayIcon
         QApplication.alert(self)
