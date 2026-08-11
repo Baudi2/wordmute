@@ -116,7 +116,7 @@ class ProcessWorker(QThread):
         return path
 
     def _log_history(self, item, status: str, error: str, output=None,
-                     source=None):
+                     source=None, dl_bytes: int = 0):
         try:
             history.append_history({
                 "name": item.display_name,
@@ -130,6 +130,8 @@ class ProcessWorker(QThread):
                 "error": error,
                 "muted": len(self._records),
                 "plan": " -> ".join(f"{e}({m})" for e, m in self._plan),
+                # traffic stat («скачано за месяц» in History)
+                "downloaded_bytes": int(dl_bytes),
             })
         except OSError:
             pass  # history must never break processing
@@ -162,6 +164,7 @@ class ProcessWorker(QThread):
                 self.file_started.emit(i, item.display_name)
                 self._records = []
                 self._cur_pass = 1
+                dl_bytes = 0
                 try:
                     path = item.path
                     if item.kind == "url":
@@ -173,6 +176,10 @@ class ProcessWorker(QThread):
                                 raise error
                         else:
                             path = self._download(item, i)
+                        try:
+                            dl_bytes = path.stat().st_size
+                        except OSError:
+                            dl_bytes = 0
                     # this item is local now — overlap the next URL
                     # item's download with the processing below
                     start_prefetch(i + 1)
@@ -181,10 +188,12 @@ class ProcessWorker(QThread):
                     engine.process_file(path, out, self._wordlist,
                                         self._options, self._plan)
                 except (JobCancelled, downloader.DownloadCancelled):
-                    self._log_history(item, "cancelled", "", source=path)
+                    self._log_history(item, "cancelled", "", source=path,
+                                      dl_bytes=dl_bytes)
                     self.file_finished.emit(i, False, "cancelled")
                 except Exception as exc:
-                    self._log_history(item, "error", str(exc), source=path)
+                    self._log_history(item, "error", str(exc), source=path,
+                                      dl_bytes=dl_bytes)
                     self.file_finished.emit(i, False, str(exc))
                 else:
                     done += 1
@@ -198,7 +207,7 @@ class ProcessWorker(QThread):
                         self.engine_event.emit("review_saved",
                                                {"path": str(rp)})
                     self._log_history(item, "ok", "", output=out,
-                                      source=path)
+                                      source=path, dl_bytes=dl_bytes)
                     self.file_finished.emit(i, True, "")
         finally:
             if prefetch is not None:  # cancel mid-run: let it wind down

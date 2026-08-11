@@ -1,5 +1,8 @@
 """v0.4.0 quality-of-life batch: keep-awake during runs, finish
-notification, initial-window-size clamp."""
+notification, initial-window-size clamp, repair/disk in Models,
+download-traffic stat in History."""
+
+from pathlib import Path
 
 import pytest
 
@@ -143,6 +146,63 @@ def test_repair_declined_keeps_runtime(models_tab, monkeypatch):
                         lambda *a, **k: QMessageBox.StandardButton.No)
     models_tab._repair_components()
     assert runtime_env.runtime_dir().exists()
+
+
+# ------------------------------------------------------------- traffic
+def test_month_traffic_sums_current_month_only(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    import json
+    from wordmute_app.core import history
+
+    history.append_history({"name": "a", "downloaded_bytes": 700})
+    history.append_history({"name": "b", "downloaded_bytes": 300})
+    history.append_history({"name": "old-style-no-field"})
+    # a record from another month is ignored
+    with history.history_path().open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"time": "1999-01-02T10:00:00",
+                            "downloaded_bytes": 10 ** 9}) + "\n")
+    assert history.month_traffic() == 1000
+
+
+def test_worker_records_download_bytes(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    from wordmute_app.core import downloader, history
+    from wordmute_app.core.jobs import QueueItem
+    from test_worker import make_worker
+
+    def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
+                      cookies=None):
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        p = dest / "video.mp4"
+        p.write_bytes(b"x" * 4096)
+        return p
+
+    monkeypatch.setattr(downloader, "download", fake_download)
+    worker, log = make_worker(
+        [QueueItem(kind="url", url="https://e.com/v", title="V")],
+        monkeypatch)
+    worker._download_dir = tmp_path / "dl"
+    worker.run()
+    assert log["files"] == [(0, True, "")]
+    records = history.load_history()
+    assert records[0]["downloaded_bytes"] == 4096
+    assert history.month_traffic() == 4096
+
+
+def test_history_footer_shows_month_traffic(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import history
+    from wordmute_app.core.models import fmt_size
+    from wordmute_app.ui.history_tab import HistoryTab
+
+    tab = HistoryTab()
+    assert tab.traffic_label.text() == ""      # nothing downloaded yet
+    history.append_history({"name": "v.mp4", "status": "ok", "muted": 0,
+                            "plan": "whisper(s)",
+                            "downloaded_bytes": 123_456_789})
+    tab.refresh()
+    assert fmt_size(123_456_789) in tab.traffic_label.text()
 
 
 # ------------------------------------------------------------ size clamp

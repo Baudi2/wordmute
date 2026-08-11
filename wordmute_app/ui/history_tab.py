@@ -114,6 +114,13 @@ class HistoryTab(QWidget):
         self.count_label = QLabel("")
         self.count_label.setProperty("muted", True)
         bottom.addWidget(self.count_label)
+        self.traffic_label = QLabel("")
+        self.traffic_label.setProperty("muted", True)
+        self.traffic_label.setToolTip(
+            tr("Videos downloaded by link this calendar month — handy "
+               "for metered/VPN connections. Component and model "
+               "downloads are not included."))
+        bottom.addWidget(self.traffic_label)
         bottom.addStretch()
         self.folder_button = QPushButton(tr("Open results folder"))
         self.folder_button.clicked.connect(self._open_results_folder)
@@ -162,6 +169,14 @@ class HistoryTab(QWidget):
         self.count_label.setText(
             tr("{} record(s)").format(len(self._records)) if self._records
             else tr("Processed files will appear here."))
+        month = history.month_traffic()
+        if month:
+            from ..core.models import fmt_size
+            self.traffic_label.setText(
+                "· " + tr("downloaded this month: {}")
+                .format(fmt_size(month)))
+        else:
+            self.traffic_label.setText("")
 
     # ---------------------------------------------------------- actions
     def _record_for_row(self, row: int):

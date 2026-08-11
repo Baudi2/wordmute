@@ -383,6 +383,13 @@ RU = {
     "Clear the whole processing history?":
         "Очистить всю историю обработки?",
     "Open results folder": "Открыть папку результатов",
+    "downloaded this month: {}": "скачано за месяц: {}",
+    "Videos downloaded by link this calendar month — handy "
+    "for metered/VPN connections. Component and model "
+    "downloads are not included.":
+        "Видео, загруженные по ссылкам в этом календарном месяце — "
+        "полезно при лимитном трафике или VPN. Загрузки компонентов "
+        "и моделей не учитываются.",
     "Done": "Готово",
     "Error": "Ошибка",
     # file cleanup (queue ⋮ menu + history right-click)
