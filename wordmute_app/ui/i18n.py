@@ -407,6 +407,9 @@ RU = {
         "Очистить всю историю обработки?",
     "Open results folder": "Открыть папку результатов",
     "downloaded this month: {}": "скачано за месяц: {}",
+    "muting": "заглушение",
+    "from cache": "из кэша",
+    "total": "итого",
     "Videos downloaded by link this calendar month — handy "
     "for metered/VPN connections. Component and model "
     "downloads are not included.":

@@ -8,6 +8,7 @@ and CPU/GPU legs overlap — at most one download at a time). Only one
 worker runs at a time (the engine's reporter is module-global)."""
 
 import threading
+import time
 
 from PySide6.QtCore import QThread, Signal
 
@@ -59,6 +60,11 @@ class ProcessWorker(QThread):
         self._records = []      # muted intervals of the current item
         self._cur_pass = 1
         self._cur_engine = plan[0][0] if plan else "whisper"
+        # measure-first: wall-clock per stage, keyed by item index
+        # (download can belong to a PREFETCHED item, hence per-index)
+        self._timings = {}
+        self._asr_t0 = None
+        self._cur_index = None
 
     def cancel(self):
         # Takes effect at the next reporter event (per transcribed
@@ -76,7 +82,36 @@ class ProcessWorker(QThread):
             self._cur_engine = data["engine"]
         elif event == "match_found":
             self._record_intervals(data["intervals"])
+        self._time_stage(event, data)
         self.engine_event.emit(event, data)
+
+    def _time_stage(self, event: str, data: dict):
+        timing = self._timings.get(self._cur_index)
+        if timing is None:
+            return
+        now = time.monotonic()
+        if event == "asr_start":
+            self._asr_t0 = now
+        elif event == "asr_progress_end" and self._asr_t0 is not None:
+            timing.setdefault("passes", []).append(
+                {"engine": self._cur_engine,
+                 "seconds": round(now - self._asr_t0, 1)})
+            self._asr_t0 = None
+        elif event == "cache_hit":
+            timing.setdefault("passes", []).append(
+                {"engine": data.get("engine", self._cur_engine),
+                 "seconds": 0.0, "cached": True})
+        elif event == "mute_start":
+            timing["_mute_t0"] = now
+        elif event == "mute_done" and "_mute_t0" in timing:
+            timing["mute"] = round(now - timing.pop("_mute_t0"), 1)
+
+    def _finish_timing(self, index: int, item_t0: float) -> dict:
+        timing = self._timings.get(index, {})
+        timing.pop("_mute_t0", None)
+        timing["total"] = round(time.monotonic() - item_t0, 1)
+        self._asr_t0 = None
+        return timing
 
     def _record_intervals(self, intervals):
         # a later forced pass can re-find an already-recorded interval
@@ -97,6 +132,7 @@ class ProcessWorker(QThread):
         self.engine_event.emit("download_start",
                                {"url": item.url, "label": item.format_label,
                                 "row": index})
+        dl_t0 = time.monotonic()
         path = downloader.download(
             item.url, item.format_spec, self._download_dir,
             cookies=self._cookies,
@@ -113,10 +149,12 @@ class ProcessWorker(QThread):
         )
         self.engine_event.emit("download_done",
                                {"path": str(path), "row": index})
+        self._timings.setdefault(index, {})["download"] = \
+            round(time.monotonic() - dl_t0, 1)
         return path
 
     def _log_history(self, item, status: str, error: str, output=None,
-                     source=None, dl_bytes: int = 0):
+                     source=None, dl_bytes: int = 0, stages=None):
         try:
             history.append_history({
                 "name": item.display_name,
@@ -132,6 +170,8 @@ class ProcessWorker(QThread):
                 "plan": " -> ".join(f"{e}({m})" for e, m in self._plan),
                 # traffic stat («скачано за месяц» in History)
                 "downloaded_bytes": int(dl_bytes),
+                # measure-first: wall-clock per stage (History tooltip)
+                "stage_seconds": stages or {},
             })
         except OSError:
             pass  # history must never break processing
@@ -165,6 +205,9 @@ class ProcessWorker(QThread):
                 self._records = []
                 self._cur_pass = 1
                 dl_bytes = 0
+                item_t0 = time.monotonic()
+                self._cur_index = i
+                self._timings.setdefault(i, {})
                 try:
                     path = item.path
                     if item.kind == "url":
@@ -189,11 +232,13 @@ class ProcessWorker(QThread):
                                         self._options, self._plan)
                 except (JobCancelled, downloader.DownloadCancelled):
                     self._log_history(item, "cancelled", "", source=path,
-                                      dl_bytes=dl_bytes)
+                                      dl_bytes=dl_bytes,
+                                      stages=self._finish_timing(i, item_t0))
                     self.file_finished.emit(i, False, "cancelled")
                 except Exception as exc:
                     self._log_history(item, "error", str(exc), source=path,
-                                      dl_bytes=dl_bytes)
+                                      dl_bytes=dl_bytes,
+                                      stages=self._finish_timing(i, item_t0))
                     self.file_finished.emit(i, False, str(exc))
                 else:
                     done += 1
@@ -207,7 +252,8 @@ class ProcessWorker(QThread):
                         self.engine_event.emit("review_saved",
                                                {"path": str(rp)})
                     self._log_history(item, "ok", "", output=out,
-                                      source=path, dl_bytes=dl_bytes)
+                                      source=path, dl_bytes=dl_bytes,
+                                      stages=self._finish_timing(i, item_t0))
                     self.file_finished.emit(i, True, "")
         finally:
             if prefetch is not None:  # cancel mid-run: let it wind down

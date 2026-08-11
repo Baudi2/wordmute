@@ -64,6 +64,26 @@ def _files_glyph(record: dict):
                  else "Output deleted")
 
 
+def _fmt_stages(stages: dict) -> str:
+    """«скачивание 2 мин 10 с · Whisper 8 мин 3 с · заглушение 45 с ·
+    итого 11 мин» — from the worker's stage_seconds record."""
+    from .main_window import fmt_hms  # lazy: main_window imports us
+    parts = []
+    if stages.get("download"):
+        parts.append(f"{tr('downloading')} {fmt_hms(stages['download'])}")
+    for p in stages.get("passes", []):
+        label = "GigaAM" if p.get("engine") == "gigaam" else "Whisper"
+        if p.get("cached"):
+            parts.append(f"{label}: {tr('from cache')}")
+        else:
+            parts.append(f"{label} {fmt_hms(p.get('seconds', 0))}")
+    if stages.get("mute"):
+        parts.append(f"{tr('muting')} {fmt_hms(stages['mute'])}")
+    if stages.get("total"):
+        parts.append(f"{tr('total')} {fmt_hms(stages['total'])}")
+    return " · ".join(parts)
+
+
 def _compact_plan(plan: str) -> str:
     """'gigaam(v3) -> gigaam(v3) -> whisper(large-v3)' → 'GigaAM ×2 → Whisper'"""
     from itertools import groupby
@@ -150,8 +170,12 @@ class HistoryTab(QWidget):
             time_item.setToolTip(r.get("time", ""))
             output = r.get("output", "")
             file_item = QTableWidgetItem(r.get("name", ""))
-            if output:
-                file_item.setToolTip(output)
+            tip_lines = [output] if output else []
+            stage_text = _fmt_stages(r.get("stage_seconds") or {})
+            if stage_text:
+                tip_lines.append(stage_text)
+            if tip_lines:
+                file_item.setToolTip("\n".join(tip_lines))
             plan_item = QTableWidgetItem(_compact_plan(r.get("plan", "")))
             plan_item.setToolTip(r.get("plan", ""))
             glyph, tip = _files_glyph(r)

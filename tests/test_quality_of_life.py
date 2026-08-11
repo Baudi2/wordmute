@@ -366,6 +366,57 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# ------------------------------------------------------ stage timing
+def test_worker_records_stage_timings(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    from wordmute_app.core import downloader, history
+    from wordmute_app.core.jobs import QueueItem
+    from test_worker import make_worker
+
+    def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
+                      cookies=None):
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        p = dest / "video.mp4"
+        p.write_bytes(b"x")
+        return p
+
+    monkeypatch.setattr(downloader, "download", fake_download)
+    worker, log = make_worker(
+        [QueueItem(kind="url", url="https://e.com/v", title="V")],
+        monkeypatch)
+    worker._download_dir = tmp_path / "dl"
+    worker.run()
+    assert log["files"] == [(0, True, "")]
+    stages = history.load_history()[0]["stage_seconds"]
+    assert stages["download"] >= 0
+    assert stages["total"] >= 0
+    assert isinstance(stages.get("passes", []), list)
+
+
+def test_stage_tooltip_formatting(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import history
+    from wordmute_app.ui.history_tab import FILE_COL, HistoryTab, _fmt_stages
+
+    text = _fmt_stages({"download": 130, "mute": 45, "total": 660,
+                        "passes": [
+                            {"engine": "whisper", "seconds": 483},
+                            {"engine": "gigaam", "seconds": 0.0,
+                             "cached": True}]})
+    assert "Whisper" in text and "GigaAM" in text
+    assert _fmt_stages({}) == ""
+
+    history.append_history({"name": "v.mp4", "status": "ok", "muted": 1,
+                            "plan": "whisper(s)", "output": "C:/x/v.clean.mp4",
+                            "stage_seconds": {"total": 12,
+                                              "passes": [{"engine": "whisper",
+                                                          "seconds": 10}]}})
+    tab = HistoryTab()
+    tip = tab.table.item(0, FILE_COL).toolTip()
+    assert "Whisper" in tip and "C:/x/v.clean.mp4" in tip
+
+
 # --------------------------------------------------- large-v3-turbo
 def test_large_v3_turbo_wired_everywhere():
     from wordmute_app.core.gpu import WHISPER_VRAM_MB
