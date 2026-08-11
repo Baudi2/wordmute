@@ -205,6 +205,80 @@ def test_history_footer_shows_month_traffic(qapp, tmp_path, monkeypatch):
     assert fmt_size(123_456_789) in tab.traffic_label.text()
 
 
+# ---------------------------------------------------------- self-update
+def _fake_release(monkeypatch, tag, url="https://x/rel"):
+    import io
+    import urllib.request
+    import json as json_mod
+
+    def fake_urlopen(request, timeout=0):
+        class R(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+        return R(json_mod.dumps(
+            {"tag_name": tag, "html_url": url}).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+
+def test_app_update_detected(monkeypatch):
+    import wordmute_app
+    from wordmute_app.core import updates
+
+    monkeypatch.setattr(wordmute_app, "__version__", "0.3.0")
+    _fake_release(monkeypatch, "v9.9.9")
+    info = updates.check_app_update()
+    assert info["update"] is True
+    assert info["latest"] == "9.9.9"
+    assert info["url"] == "https://x/rel"
+
+
+def test_app_update_current_and_offline(monkeypatch):
+    import urllib.request
+    import wordmute_app
+    from wordmute_app.core import updates
+
+    monkeypatch.setattr(wordmute_app, "__version__", "9.9.9")
+    _fake_release(monkeypatch, "v0.3.0")
+    assert updates.check_app_update()["update"] is False
+
+    def boom(*a, **k):
+        raise OSError("offline")
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    info = updates.check_app_update()   # never raises
+    assert info["update"] is False and info["latest"] is None
+
+
+def test_startup_check_notifies_via_tray(window, monkeypatch):
+    messages = []
+
+    class FakeTray:
+        class _Sig:
+            def connect(self, *a):
+                pass
+
+            def disconnect(self, *a):
+                pass
+        messageClicked = _Sig()
+
+        def showMessage(self, title, text, *a):
+            messages.append(text)
+
+    window._tray = FakeTray()
+    window._on_app_update_result(
+        {"update": True, "current": "0.3.0", "latest": "0.4.0",
+         "url": "https://x/rel"})
+    assert messages and "0.4.0" in messages[0]
+    assert window._update_url == "https://x/rel"
+    # no update -> silent
+    messages.clear()
+    window._on_app_update_result({"update": False})
+    assert messages == []
+
+
 # ------------------------------------------------------------ size clamp
 def test_initial_size_clamps_to_small_screens():
     from wordmute_app.ui.main_window import _initial_size

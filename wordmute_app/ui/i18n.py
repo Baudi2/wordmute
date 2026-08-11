@@ -370,6 +370,12 @@ RU = {
         "whisper {}: доступна новая версия модели",
     "GigaAM weights update together with the gigaam package.":
         "Веса GigaAM обновляются вместе с пакетом gigaam.",
+    "WordMute {} → {} — download: {}":
+        "WordMute {} → {} — скачать: {}",
+    "New WordMute version available: {} (you have {})":
+        "Доступна новая версия WordMute: {} (у вас {})",
+    "Click to open the download page.":
+        "Нажмите, чтобы открыть страницу загрузки.",
     "Updates installed.": "Обновления установлены.",
     "Restart the app to use them.":
         "Перезапустите приложение, чтобы они заработали.",

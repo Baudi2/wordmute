@@ -18,6 +18,8 @@ from . import models as models_mod
 from .proc import creationflags
 
 PACKAGES = ("faster-whisper", "gigaam", "yt-dlp")
+APP_REPO = "Baudi2/wordmute"
+APP_RELEASES_URL = f"https://github.com/{APP_REPO}/releases/latest"
 
 
 def installed_version(name: str):
@@ -44,6 +46,30 @@ def is_newer(latest, installed) -> bool:
         return Version(latest) > Version(installed)
     except Exception:
         return latest != installed
+
+
+def check_app_update(timeout: int = 15) -> dict:
+    """Compare the running app against the latest GitHub release.
+    Returns {current, latest, update, url}; latest is None when the
+    check could not be made (offline etc.) — never raises."""
+    from .. import __version__
+    result = {"current": __version__, "latest": None, "update": False,
+              "url": APP_RELEASES_URL}
+    try:
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{APP_REPO}/releases/latest",
+            headers={"User-Agent": "WordMute-update-check",
+                     "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(request, timeout=timeout) as r:
+            release = json.load(r)
+        latest = str(release.get("tag_name", "")).lstrip("vV")
+        if latest:
+            result["latest"] = latest
+            result["update"] = is_newer(latest, __version__)
+            result["url"] = release.get("html_url") or result["url"]
+    except Exception:
+        pass
+    return result
 
 
 def check_packages() -> list:

@@ -5,7 +5,7 @@ import os
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -103,6 +103,14 @@ def fmt_speed(bps) -> str:
     return f"{mbps:.1f} MB/s" if mbps >= 1 else f"{bps / 1024:.0f} KB/s"
 
 
+class AppUpdateWorker(QThread):
+    result = Signal(dict)
+
+    def run(self):
+        from ..core import updates
+        self.result.emit(updates.check_app_update())
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -129,6 +137,10 @@ class MainWindow(QMainWindow):
             self._tray.setToolTip("WordMute")
             self._tray.activated.connect(self._on_tray_activated)
             self._tray.show()
+        # quiet self-update check, a few seconds after startup
+        self._app_update_worker = None
+        self._update_url = None
+        QTimer.singleShot(3000, self._start_update_check)
         self._wordlist_paths = config.ensure_user_wordlists()
         self._settings = config.load_settings()
         self._gpus = gpu.detect_gpus()
@@ -1227,6 +1239,44 @@ class MainWindow(QMainWindow):
             self._tray.showMessage("WordMute", summary,
                                    QSystemTrayIcon.Information, 8000)
 
+    # ------------------------------------------------------ app updates
+    def _start_update_check(self):
+        """Quiet startup check against GitHub releases; silent unless a
+        newer version exists. Opt out: "check_app_updates": false in
+        settings.json."""
+        if (self._app_update_worker is not None
+                or os.environ.get("WORDMUTE_NO_UPDATE_CHECK")
+                or not self._settings.get("check_app_updates", True)):
+            return
+        self._app_update_worker = AppUpdateWorker()
+        self._app_update_worker.result.connect(self._on_app_update_result)
+        self._app_update_worker.start()
+
+    def _on_app_update_result(self, info: dict):
+        if not info.get("update"):
+            return
+        self._update_url = info["url"]
+        line = tr("New WordMute version available: {} (you have {})") \
+            .format(info["latest"], info["current"])
+        self._append_log(line + f" — {info['url']}")
+        if self._tray is not None:
+            from PySide6.QtWidgets import QSystemTrayIcon
+            try:
+                self._tray.messageClicked.disconnect(self._open_update_page)
+            except (TypeError, RuntimeError):
+                pass
+            self._tray.messageClicked.connect(self._open_update_page)
+            self._tray.showMessage(
+                "WordMute", line + "\n"
+                + tr("Click to open the download page."),
+                QSystemTrayIcon.Information, 10000)
+
+    def _open_update_page(self):
+        if getattr(self, "_update_url", None):
+            import webbrowser
+            webbrowser.open(self._update_url)
+            self._update_url = None
+
     # ---------------------------------------------------------- lifecycle
     def closeEvent(self, event):
         if self._worker is not None:
@@ -1242,6 +1292,8 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self.models_tab.shutdown()
+        if self._app_update_worker is not None:
+            self._app_update_worker.wait(5000)
         self._settings.update({
             "use_russian": self.russian_check.isChecked(),
             "use_english": self.english_check.isChecked(),

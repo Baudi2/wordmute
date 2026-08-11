@@ -3,7 +3,7 @@ disk usage, GigaAM cache overview, device indicator."""
 
 import subprocess
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -54,6 +54,7 @@ class CheckUpdatesWorker(QThread):
 
     def run(self):
         self.result.emit({
+            "app": updates.check_app_update(),
             "packages": updates.check_packages(),
             "models": updates.check_whisper_models(),
         })
@@ -178,6 +179,9 @@ class ModelsTab(QWidget):
         self.updates_label = QLabel("")
         self.updates_label.setProperty("muted", True)
         self.updates_label.setWordWrap(True)
+        self.updates_label.setOpenExternalLinks(True)
+        self.updates_label.setTextInteractionFlags(
+            Qt.TextBrowserInteraction)
         layout.addWidget(self.updates_label)
         self._updates_worker = None
         self._upgrade_worker = None
@@ -366,6 +370,17 @@ class ModelsTab(QWidget):
         lines = []
         self._outdated_packages = []
         self._outdated_models = []
+        app = result.get("app")
+        if app:
+            if app["update"]:
+                lines.append(
+                    tr("WordMute {} → {} — download: {}")
+                    .format(app["current"], app["latest"], app["url"]))
+            elif app["latest"] is None:
+                lines.append(f"WordMute: {app['current']} — "
+                             + tr("could not check"))
+            else:
+                lines.append(f"WordMute: {app['current']} ✓")
         for pkg in result["packages"]:
             if pkg["installed"] is None:
                 lines.append(f"{pkg['name']}: {tr('not installed')}")
@@ -388,7 +403,13 @@ class ModelsTab(QWidget):
                 lines.append(f"whisper {m['model']} ✓")
         lines.append(tr("GigaAM weights update together with the "
                         "gigaam package."))
-        self.updates_label.setText("\n".join(lines))
+        import html as html_mod
+        rendered = "<br>".join(html_mod.escape(line) for line in lines)
+        if app and app["update"]:  # make the release URL clickable
+            escaped = html_mod.escape(app["url"])
+            rendered = rendered.replace(
+                escaped, f'<a href="{app["url"]}">{escaped}</a>')
+        self.updates_label.setText(rendered)
         self.update_all_button.setVisible(
             bool(self._outdated_packages or self._outdated_models))
 

@@ -28,7 +28,10 @@ if (-not $iscc) {
     }
 }
 if ($iscc) {
-    & $iscc packaging\installer.iss
+    # version comes from wordmute_app/__init__.py — single source
+    $version = python -c "import wordmute_app; print(wordmute_app.__version__)"
+    if ($LASTEXITCODE -ne 0) { throw "could not read app version" }
+    & $iscc "/DMyAppVersion=$version" packaging\installer.iss
 } else {
     Write-Host "Inno Setup (iscc) not found - skipped installer compile."
     Write-Host "Install it (winget install JRSoftware.InnoSetup), then:"
