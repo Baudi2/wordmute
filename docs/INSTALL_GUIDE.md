@@ -7,7 +7,7 @@
 
 ## Кратко для пользователя
 
-1. Запустите `WordMute-Setup-0.3.0.exe`. Windows покажет предупреждение
+1. Запустите `WordMute-Setup-0.4.0.exe`. Windows покажет предупреждение
    SmartScreen («Система Windows защитила ваш компьютер») — нажмите
    **«Подробнее» → «Выполнить в любом случае»**. Это нормально:
    установщик просто не подписан платным сертификатом.
@@ -16,7 +16,9 @@
 3. При первом запуске WordMute откроет окно **«Компоненты»** и скачает
    недостающее: Python-окружение, распознавание речи Whisper, yt-dlp
    (загрузка видео) и ffmpeg. Выберите вариант GPU, если у вас
-   видеокарта NVIDIA, иначе CPU.
+   видеокарта NVIDIA, иначе CPU. Там же выбирается размер модели
+   распознавания: large-v3 (~3 ГБ, лучшее качество), medium (~1,5 ГБ)
+   или small (~0,5 ГБ) — сама модель скачается при первой обработке.
 4. **Что понадобится:**
    - свободное место: ~1 ГБ (CPU) / ~2.5 ГБ (GPU) для компонентов
      + ~3 ГБ для модели распознавания при первом запуске обработки;
@@ -41,7 +43,7 @@ screen. Answer in the user's language.
 
 ### Architecture facts
 
-- The installer (`WordMute-Setup-0.3.0.exe`, Inno Setup, ~150 MB)
+- The installer (`WordMute-Setup-0.4.0.exe`, Inno Setup, ~150 MB)
   installs ONLY the application, per-user (no admin rights), default
   location `%LOCALAPPDATA%\Programs\WordMute`. It creates a Start-menu
   entry, an optional desktop icon, and an uninstaller in Windows
@@ -62,10 +64,13 @@ screen. Answer in the user's language.
      - `yt-dlp` (~10 MB);
      - optional `gigaam` (~3.5 GB, pulls PyTorch; experimental).
 - On the first actual transcription the app additionally downloads
-  the Whisper model `large-v3` (~3 GB) from `huggingface.co` into
-  `%USERPROFILE%\.cache\huggingface`. Smaller models (medium/small/
-  base) can be chosen in Настройки and pre-downloaded in the Модели
-  tab.
+  the Whisper model chosen during setup (`large-v3` ~3 GB default,
+  `medium` ~1.5 GB, `small` ~0.5 GB) from `huggingface.co` into
+  `%USERPROFILE%\.cache\huggingface`. The model can be changed later
+  in Настройки and pre-downloaded in the Модели tab.
+- The app checks GitHub for new WordMute versions shortly after
+  startup and may show a tray notification offering the download
+  page — this is normal behavior, not malware.
 - App settings live in `%APPDATA%\WordMute` (settings.json,
   word lists, history, thumbnails).
 
@@ -93,7 +98,7 @@ updates or new model downloads.
 | Video download fails for a specific site | yt-dlp needs updating (sites change constantly) | Модели tab → «Проверить обновления» → «Обновить все», then restart the app. |
 | Boosty/member-only videos fail | Cookies needed | Настройки → «Файл cookies»: export cookies from the browser (a "cookies.txt" extension) and select that file. |
 | GigaAM errors about Hugging Face token / pyannote | GigaAM needs a one-time free HF account setup | In the app: «Настройка GigaAM» button walks through it (create account → accept pyannote/segmentation-3.0 terms → paste a read token). |
-| Everything broken, want a clean retry | — | Delete `%LOCALAPPDATA%\WordMute\runtime` and start the app again — the setup dialog reappears. App settings/word lists are elsewhere and survive. |
+| Everything broken, want a clean retry | — | In the app: Модели → **«Починить компоненты»** — deletes the runtime and reruns the component setup in one click (restart the app afterwards). If the app itself won't start: delete `%LOCALAPPDATA%\WordMute\runtime` manually and launch again — the setup dialog reappears. App settings/word lists are elsewhere and survive. |
 
 ### Diagnostics
 
@@ -115,5 +120,6 @@ everywhere except possibly `gigaam` = healthy install.
 - Do not suggest running the installer as administrator; it is
   per-user by design.
 - Do not edit files inside `%LOCALAPPDATA%\Programs\WordMute` — a
-  broken app is fixed by reinstalling; a broken runtime by deleting
-  `%LOCALAPPDATA%\WordMute\runtime`.
+  broken app is fixed by reinstalling; a broken runtime by the
+  «Починить компоненты» button (or deleting
+  `%LOCALAPPDATA%\WordMute\runtime` when the app won't start).
