@@ -117,7 +117,21 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   GitHub API = 60 req/h per IP — never poll it in tight loops from
   the dev machine; the app's check_app_update degrades silently by
   design when rate-limited.
+- Research plan 2026-08 (full report: .claude/research-2026-08.md,
+  gitignored; user approved doing ALL of it). DONE: bug fixes
+  (GigaAM install channel PyPI→pinned GitHub archive — PyPI 0.1.0
+  was broken for users; default gigaam_model v3_e2e_rnnt→v3_rnnt),
+  Package А (large-v3-turbo model option, int8_float16 on GPU,
+  concurrent_fragment_downloads=4, stage-timing report in History
+  tooltips), Package Б (opt-in batched «быстрый режим» — needs an
+  A/B on a real RU video with the user before recommending).
+  REMAINING: Package В onnx-asr GigaAM backend (CPU 43-59x realtime,
+  ~1 ГБ instead of 3.5, kills HF-token wizard — the strategic one),
+  Package Г UI polish (pyqttoast/QtAwesome/waveform in review/
+  skeletons), Package Д features (fade-edged mutes, SRT export,
+  strictness presets, subtitle import).
 - Other open items: LICENSE file decision (repo is public with no
-  license = all-rights-reserved; user undecided), GigaAM in frozen
-  build unverified (torch import from runtime), Inter fonts only
+  license = all-rights-reserved; user undecided), GigaAM frozen-build
+  end-to-end still untested (install channel now fixed; torch is
+  CPU-only from pip — solved properly by Package В), Inter fonts only
   partially referenced by QSS weights.
