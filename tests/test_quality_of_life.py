@@ -366,6 +366,41 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# ---------------------------------------------------- fade-edged mutes
+def test_mute_fades_edges_real_ffmpeg(tmp_path):
+    """Acoustic contract: the muted core is silent, the 40 ms ramps
+    carry intermediate levels, and audio outside is untouched."""
+    import subprocess
+    from array import array
+    from wordmute_app.engine import wordmute as engine
+
+    rate = 48000     # realistic rate: at 8 kHz the 256-sample frames
+    src = tmp_path / "tone.wav"          # are as long as the ramp
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+                    "-i", "sine=frequency=300:duration=3",
+                    "-ar", str(rate), str(src)], check=True)
+    out = tmp_path / "tone.clean.wav"
+    engine.mute(src, [(1.0, 1.5, "x")], out)
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(out),
+                          "-f", "s16le", "-ac", "1", "-ar", str(rate),
+                          "-"], capture_output=True, check=True).stdout
+    samples = array("h")
+    samples.frombytes(raw[:len(raw) - len(raw) % 2])
+
+    def peak(t0, t1):
+        a, b = int(t0 * rate), int(t1 * rate)
+        return max(abs(v) for v in samples[a:b]) / 32768.0
+
+    loud = peak(0.2, 0.8)
+    assert loud > 0.08                     # sine baseline (amp 1/8)
+    assert peak(1.05, 1.45) < loud * 0.02  # core: silent
+    assert peak(1.5 + 0.05, 2.8) > loud * 0.8   # after: restored
+    # second half of the down-ramp: volume must be partial (≈50% at
+    # its start, falling to 0) — proves a ramp exists at all
+    ramp = peak(1.0 - engine.FADE_S / 2, 1.0)
+    assert loud * 0.05 < ramp < loud * 0.75
+
+
 # ----------------------------------------------------- UI polish (Г)
 def test_toast_helper_smokes(qapp, tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))

@@ -8,15 +8,26 @@ from wordmute_app.engine import wordmute as wm
 INTERVALS = [(1.0, 1.5, "бог"), (9.0, 9.4, "черт")]
 
 
-def test_silence_filters_unchanged_format():
+def test_silence_filters_fade_format():
     f = wm._silence_filters(INTERVALS)
-    assert f == ("volume=enable='between(t,1.000,1.500)':volume=0,"
-                 "volume=enable='between(t,9.000,9.400)':volume=0")
+    # frame splitting first (fades quantize away on default frames),
+    # then one fade-envelope filter per interval
+    assert f.startswith("asetnsamples=n=256,")
+    assert f.count("volume=enable=") == 2
+    assert "between(t,0.960,1.540)" in f      # interval ± FADE_S
+    assert "if(lt(t,1.000),(1.000-t)/0.04" in f
+    assert "if(gt(t,9.400),(t-9.400)/0.04,0)" in f
+    assert f.count(":eval=frame") == 2
+
+
+def test_fade_never_starts_before_zero():
+    f = wm._silence_filters([(0.01, 0.5, "x")])
+    assert "between(t,0.000,0.540)" in f
 
 
 def test_beep_filtergraph_structure():
     g = wm._beep_filtergraph(INTERVALS, 1000)
-    assert g.startswith("[0:a]volume=enable=")
+    assert g.startswith("[0:a]asetnsamples=n=256,volume=enable=")
     assert "sine=frequency=1000[tone]" in g
     assert "not(between(t,1.000,1.500)+between(t,9.000,9.400))" in g
     assert g.endswith("[aout]")
@@ -52,7 +63,7 @@ def test_mute_silence_command(tmp_path, monkeypatch):
     cmd = captured["cmd"]
     assert "-filter_script:a" in cmd
     assert "-filter_complex_script" not in cmd
-    assert captured["script"].startswith("volume=enable=")
+    assert captured["script"].startswith("asetnsamples=n=256,volume=enable=")
 
 
 def test_mute_beep_command(tmp_path, monkeypatch):

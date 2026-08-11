@@ -497,10 +497,27 @@ def _run_ffmpeg_with_progress(cmd) -> None:
                 f"ffmpeg failed (code {proc.returncode}): {tail.strip()}")
 
 
+FADE_S = 0.04  # linear ramp at each mute edge — hard cuts sound like clicks
+
+
+def _fade_silence_filter(s: float, e: float) -> str:
+    """Volume envelope: ramp down over FADE_S before the interval,
+    silence inside, ramp back up after. Ramps sit OUTSIDE the already
+    pad_ms-padded interval, so no muted word leaks; chained filters
+    multiply, so close neighbors combine safely."""
+    s0 = max(0.0, s - FADE_S)
+    return (f"volume=enable='between(t,{s0:.3f},{e + FADE_S:.3f})'"
+            f":volume='if(lt(t,{s:.3f}),({s:.3f}-t)/{FADE_S},"
+            f"if(gt(t,{e:.3f}),(t-{e:.3f})/{FADE_S},0))'"
+            f":eval=frame")
+
+
 def _silence_filters(intervals) -> str:
-    return ",".join(
-        f"volume=enable='between(t,{s:.3f},{e:.3f})':volume=0"
-        for s, e, _ in intervals
+    # volume expressions evaluate once per audio FRAME; default frames
+    # (~1024 samples) are longer than the whole ramp, so split them to
+    # 256 samples (~5 ms at 48 kHz) or the fade quantizes away
+    return "asetnsamples=n=256," + ",".join(
+        _fade_silence_filter(s, e) for s, e, _ in intervals
     )
 
 
