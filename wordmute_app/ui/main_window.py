@@ -111,6 +111,33 @@ class AppUpdateWorker(QThread):
         self.result.emit(updates.check_app_update())
 
 
+class MediaProbeWorker(QThread):
+    """Bulk adds defer the per-file ffprobe (duration) and ffmpeg
+    thumbnail grab here, so queueing a folder never freezes the UI;
+    results stream back one card at a time."""
+    ready = Signal(object, object, str)  # QueueItem, duration, thumb
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        from queue import SimpleQueue
+        self._jobs = SimpleQueue()
+
+    def enqueue(self, item):
+        self._jobs.put(item)
+
+    def stop(self):
+        self._jobs.put(None)
+
+    def run(self):
+        while True:
+            item = self._jobs.get()
+            if item is None:
+                return
+            duration = media_duration(item.path)
+            thumb = thumbs.thumbnail_path(item.path)
+            self.ready.emit(item, duration, str(thumb) if thumb else "")
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -141,6 +168,7 @@ class MainWindow(QMainWindow):
         self._app_update_worker = None
         self._update_url = None
         QTimer.singleShot(3000, self._start_update_check)
+        self._probe_worker = None  # lazy: bulk-add duration/thumb jobs
         self._wordlist_paths = config.ensure_user_wordlists()
         self._settings = config.load_settings()
         self._gpus = gpu.detect_gpus()
@@ -599,11 +627,12 @@ class MainWindow(QMainWindow):
             QItemSelectionModel.NoUpdate)
         self._mirror_selection()
 
-    def _insert_row(self, item: QueueItem, status: str = None):
+    def _insert_row(self, item: QueueItem, status: str = None,
+                    defer_media: bool = False):
         if status is None:
             status = tr("queued")
         thumb = None
-        if item.kind == "file":
+        if item.kind == "file" and not defer_media:
             thumb = thumbs.thumbnail_path(item.path)
         list_item = QListWidgetItem()
         list_item.setData(ITEM_ROLE, item)
@@ -619,12 +648,54 @@ class MainWindow(QMainWindow):
 
     def _add_files(self, paths):
         existing = {it.path for it in self._items() if it.kind == "file"}
+        new_paths = []
         for p in expand_inputs(paths):
-            if p in existing:
-                continue
-            existing.add(p)
-            self._insert_row(QueueItem(kind="file", path=p,
-                                       duration=media_duration(p)))
+            if p not in existing:
+                existing.add(p)
+                new_paths.append(p)
+        # single adds probe inline (fast); bulk adds defer the ffprobe
+        # and thumbnail work to a background worker per file
+        bulk = len(new_paths) > 1
+        for p in new_paths:
+            item = QueueItem(kind="file", path=p,
+                             duration=None if bulk else media_duration(p))
+            self._insert_row(item, defer_media=bulk)
+            if bulk:
+                self._probe_in_background(item)
+
+    def _probe_in_background(self, item: QueueItem):
+        if os.environ.get("WORDMUTE_SYNC_PROBE"):  # tests: no threads
+            thumb = thumbs.thumbnail_path(item.path)
+            self._on_media_probed(item, media_duration(item.path),
+                                  str(thumb) if thumb else "")
+            return
+        if self._probe_worker is None:
+            self._probe_worker = MediaProbeWorker(self)
+            self._probe_worker.ready.connect(self._on_media_probed)
+            self._probe_worker.start()
+        self._probe_worker.enqueue(item)
+
+    def _row_of_item(self, item: QueueItem) -> int:
+        for row in range(self.queue.count()):
+            if self.queue.item(row).data(ITEM_ROLE) is item:
+                return row
+        return -1
+
+    def _on_media_probed(self, item: QueueItem, duration, thumb: str):
+        row = self._row_of_item(item)
+        if row < 0:
+            return          # removed from the queue meanwhile
+        item.duration = duration
+        list_item = self.queue.item(row)
+        list_item.setData(DURATION_ROLE, duration)
+        list_item.setData(META_ROLE, self._card_meta(item))
+        if thumb:
+            list_item.setData(THUMB_ROLE, thumb)
+        card = self._card(row)
+        if card:
+            card.set_meta(self._card_meta(item))
+            if thumb:
+                card.set_thumb(thumb)
 
     def _add_url_row(self, item: QueueItem):
         self._insert_row(item,
@@ -1294,6 +1365,9 @@ class MainWindow(QMainWindow):
         self.models_tab.shutdown()
         if self._app_update_worker is not None:
             self._app_update_worker.wait(5000)
+        if self._probe_worker is not None:
+            self._probe_worker.stop()
+            self._probe_worker.wait(10000)
         self._settings.update({
             "use_russian": self.russian_check.isChecked(),
             "use_english": self.english_check.isChecked(),

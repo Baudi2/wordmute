@@ -13,7 +13,16 @@ def window(qapp, tmp_path, monkeypatch):
     from wordmute_app.core import gpu
     monkeypatch.setattr(gpu, "detect_gpus", lambda: [])
     from wordmute_app.ui.main_window import MainWindow
-    return MainWindow()
+    w = MainWindow()
+    yield w
+    # session-long windows/tray icons accumulate and crash Qt teardown
+    tray = w._tray
+    if tray is not None and hasattr(tray, "deleteLater"):  # not a fake
+        tray.hide()
+        tray.deleteLater()
+    w._tray = None
+    w.deleteLater()
+    qapp.processEvents()
 
 
 # ------------------------------------------------------------ keep-awake
@@ -303,6 +312,58 @@ def test_setup_dialog_model_choice(qapp, tmp_path, monkeypatch):
     assert d2.model_radios == {}
     d2.accept()
     assert config.load_settings()["model"] == "medium"
+
+
+# ------------------------------------------------ background thumbnails
+def test_bulk_add_defers_probing(window, tmp_path, monkeypatch):
+    from wordmute_app.ui import main_window as mw
+
+    probes = []
+    monkeypatch.setattr(mw, "media_duration",
+                        lambda p: probes.append(p) or 42.0)
+    thumbs_called = []
+    monkeypatch.setattr(mw.thumbs, "thumbnail_path",
+                        lambda p: thumbs_called.append(p) or None)
+    queued = []
+    monkeypatch.setattr(window, "_probe_in_background", queued.append)
+
+    files = []
+    for name in ("a.mp4", "b.mp4", "c.mp4"):
+        f = tmp_path / name
+        f.touch()
+        files.append(f)
+    window._add_files(files)
+
+    # bulk: nothing probed inline, every item handed to the worker,
+    # cards exist immediately with a duration placeholder
+    assert probes == [] and thumbs_called == []
+    assert len(queued) == 3
+    assert window.queue.count() == 3
+    assert "—" in window.queue.item(0).data(mw.META_ROLE)
+
+    # worker results stream in and fill the card
+    item = queued[0]
+    window._on_media_probed(item, 125.0, "")
+    assert window.queue.item(0).data(mw.DURATION_ROLE) == 125.0
+    assert "2:05" in window.queue.item(0).data(mw.META_ROLE)
+    # a result for an item removed meanwhile is ignored quietly
+    window.queue.takeItem(2)
+    window._on_media_probed(queued[2], 9.0, "")
+
+
+def test_single_add_probes_inline(window, tmp_path, monkeypatch):
+    from wordmute_app.ui import main_window as mw
+
+    monkeypatch.setattr(mw, "media_duration", lambda p: 60.0)
+    monkeypatch.setattr(mw.thumbs, "thumbnail_path", lambda p: None)
+    queued = []
+    monkeypatch.setattr(window, "_probe_in_background", queued.append)
+
+    f = tmp_path / "solo.mp4"
+    f.touch()
+    window._add_files([f])
+    assert queued == []     # no worker involved
+    assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
 # ------------------------------------------------------------ size clamp
