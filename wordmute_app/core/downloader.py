@@ -143,6 +143,11 @@ def download(url: str, format_spec: str, dest_dir,
         "windowsfilenames": True,
         "overwrites": True,
         "progress_hooks": [hook],
+        # HLS/DASH (rutube/VK/Boosty): per-fragment latency serializes
+        # the download, worse behind VPNs — 4 parallel fragments is a
+        # 2-4x win; do NOT raise it (high values can skip the m3u8
+        # fixup and produce broken MP4s, yt-dlp #14302)
+        "concurrent_fragment_downloads": 4,
     }, cookies)
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:

@@ -241,7 +241,9 @@ def get_whisper_model(model_name: str, device: str):
     if key not in _MODELS:
         add_cuda_dll_dirs()
         from faster_whisper import WhisperModel
-        compute = "float16" if device == "cuda" else "int8"
+        # int8_float16: ~35% less VRAM than float16, same-or-faster
+        # decode; CT2 falls back automatically on GPUs without int8
+        compute = "int8_float16" if device == "cuda" else "int8"
         _emit("model_load", engine="whisper", model=model_name, device=device,
               compute=compute)
         _MODELS[key] = WhisperModel(model_name, device=device, compute_type=compute)

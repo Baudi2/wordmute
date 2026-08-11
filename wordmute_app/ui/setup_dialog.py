@@ -23,6 +23,8 @@ from .i18n import tr
 # offered at first run; the model downloads on first USE, not here
 MODEL_CHOICES = (
     ("large-v3", "large-v3 — best quality, ~3 GB"),
+    ("large-v3-turbo",
+     "large-v3-turbo — near large-v3 quality, much faster, ~1.6 GB"),
     ("medium", "medium — good compromise, ~1.5 GB"),
     ("small", "small — fastest, lowest accuracy, ~0.5 GB"),
 )

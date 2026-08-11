@@ -9,7 +9,8 @@ from dataclasses import dataclass
 
 from .proc import creationflags
 
-WHISPER_VRAM_MB = {"large-v3": 4700, "medium": 2600, "small": 1600,
+WHISPER_VRAM_MB = {"large-v3": 4700, "large-v3-turbo": 3000,
+                   "medium": 2600, "small": 1600,
                    "base": 1100}
 WHISPER_FALLBACK_ORDER = ["medium", "small", "base"]
 GIGAAM_VRAM_MB = 3000  # v3 models + pyannote VAD headroom

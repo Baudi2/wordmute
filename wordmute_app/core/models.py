@@ -9,6 +9,9 @@ from pathlib import Path
 
 WHISPER_REPOS = {
     "large-v3": "Systran/faster-whisper-large-v3",
+    # faster-whisper's own name map resolves "large-v3-turbo" to this
+    # repo — the Models tab must track the same cache entry
+    "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
     "medium": "Systran/faster-whisper-medium",
     "small": "Systran/faster-whisper-small",
     "base": "Systran/faster-whisper-base",

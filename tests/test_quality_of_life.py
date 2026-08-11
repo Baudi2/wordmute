@@ -366,6 +366,24 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# --------------------------------------------------- large-v3-turbo
+def test_large_v3_turbo_wired_everywhere():
+    from wordmute_app.core.gpu import WHISPER_VRAM_MB
+    from wordmute_app.core.models import WHISPER_REPOS
+    from wordmute_app.ui.settings_tab import WHISPER_MODELS
+    from wordmute_app.ui.setup_dialog import MODEL_CHOICES
+
+    assert WHISPER_REPOS["large-v3-turbo"] == \
+        "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
+    assert "large-v3-turbo" in WHISPER_MODELS
+    assert "large-v3-turbo" in WHISPER_VRAM_MB
+    assert "large-v3-turbo" in [name for name, _ in MODEL_CHOICES]
+    # faster-whisper itself must resolve the name to the SAME repo,
+    # or the Models tab would track a different cache than the engine
+    from faster_whisper.utils import _MODELS
+    assert _MODELS["large-v3-turbo"] == WHISPER_REPOS["large-v3-turbo"]
+
+
 # ------------------------------------------------------- multi-URL add
 def test_extract_urls_handles_paste_shapes():
     from wordmute_app.ui.url_dialog import extract_urls

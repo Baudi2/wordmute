@@ -25,7 +25,7 @@ from ..core import config
 from .i18n import tr
 from .theme import THEMES, apply_theme
 
-WHISPER_MODELS = ["large-v3", "medium", "small", "base"]
+WHISPER_MODELS = ["large-v3", "large-v3-turbo", "medium", "small", "base"]
 GIGAAM_MODELS = ["v3_e2e_rnnt", "v3_e2e_ctc", "v3_rnnt", "v3_ctc"]
 GROUP_WIDTH = 500  # RU labels run ~40% longer than EN
 
