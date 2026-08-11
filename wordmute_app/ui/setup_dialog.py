@@ -128,7 +128,7 @@ class SetupDialog(QDialog):
 
         self.gigaam_check = QCheckBox(
             tr("GigaAM — better Russian recognition (experimental, "
-               "~3.5 GB download)"))
+               "~60 MB + ~850 MB model on first use, no account needed)"))
         self.gigaam_check.setChecked(False)
         layout.addWidget(self.gigaam_check)
 

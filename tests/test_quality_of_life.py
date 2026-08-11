@@ -366,6 +366,60 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# ---------------------------------------------- gigaam onnx backend
+def test_chars_to_words_conversion():
+    from wordmute_app.engine.wordmute import _chars_to_words
+
+    tokens = list("бог") + [" "] + list("из")
+    times = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
+    words = _chars_to_words(tokens, times, offset=10.0)
+    assert words == [
+        {"w": "бог", "s": 11.0, "e": round(10 + 1.2 + 0.08, 3)},
+        {"w": "из", "s": 11.4, "e": round(10 + 1.5 + 0.08, 3)},
+    ]
+    assert _chars_to_words([], [], 0.0) == []
+    # leading/double spaces never produce empty words
+    only = _chars_to_words([" ", "а", " ", " "], [0, 1, 2, 3], 0.0)
+    assert [w["w"] for w in only] == ["а"]
+
+
+def test_gigaam_backend_routing(tmp_path, monkeypatch):
+    import types
+    from wordmute_app.engine import wordmute as engine
+
+    monkeypatch.setattr(engine, "GIGAAM_BACKEND", "torch")  # restore
+    onnx_calls = []
+    monkeypatch.setattr(
+        engine, "_transcribe_gigaam_onnx",
+        lambda media, name: onnx_calls.append(name)
+        or [{"w": "бог", "s": 1.0, "e": 1.5}])
+
+    media = tmp_path / "v.mp4"
+    media.write_bytes(b"x")
+    engine.configure_gigaam_backend("onnx")
+    words = engine.transcribe(media, "gigaam", "v3_rnnt", "cpu", "ru")
+    assert onnx_calls == ["v3_rnnt"]
+    assert words == [{"w": "бог", "s": 1.0, "e": 1.5}]
+    assert (tmp_path / "v.mp4.gigaam.words.json").exists()
+
+    # torch backend still routes to the original gigaam package path
+    class FakeWord:
+        text, start, end = " чудо ", 2.0, 2.5
+
+    class FakeTorchModel:
+        def transcribe_longform(self, path, word_timestamps):
+            assert word_timestamps is True
+            return types.SimpleNamespace(words=[FakeWord()])
+
+    monkeypatch.setattr(engine, "get_gigaam_model",
+                        lambda n, d: FakeTorchModel())
+    engine.configure_gigaam_backend("torch")
+    media2 = tmp_path / "v2.mp4"
+    media2.write_bytes(b"x")
+    words = engine.transcribe(media2, "gigaam", "v3_rnnt", "cpu", "ru")
+    assert words == [{"w": "чудо", "s": 2.0, "e": 2.5}]
+
+
 # -------------------------------------------------- fast whisper mode
 def test_fast_mode_uses_batched_pipeline(tmp_path, monkeypatch):
     import sys

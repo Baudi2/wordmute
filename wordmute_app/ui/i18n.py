@@ -318,9 +318,10 @@ RU = {
     "ffmpeg (audio/video processing) — ~80 MB":
         "ffmpeg (обработка аудио/видео) — ~80 МБ",
     "GigaAM — better Russian recognition (experimental, "
-    "~3.5 GB download)":
-        "GigaAM — лучше распознает русскую речь (экспериментально, "
-        "загрузка ~3.5 ГБ)",
+    "~60 MB + ~850 MB model on first use, no account needed)":
+        "GigaAM — лучше распознаёт русскую речь (экспериментально, "
+        "~60 МБ + модель ~850 МБ при первом использовании, "
+        "аккаунт не нужен)",
     "Everything is installed under your user "
     "folder; nothing needs administrator rights.":
         "Все ставится в вашу пользовательскую папку; права "

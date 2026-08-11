@@ -27,7 +27,8 @@
      быть заблокированы или замедлены — включите VPN на время
      установки и первого запуска.
 5. Опциональный компонент **GigaAM** (лучше распознаёт русскую речь,
-   ~3.5 ГБ, экспериментальный) можно доустановить позже: вкладка
+   ~60 МБ + модель ~850 МБ при первом использовании, аккаунт не
+   нужен, экспериментальный) можно доустановить позже: вкладка
    «Модели» → «Компоненты…».
 
 ---
@@ -62,7 +63,9 @@ screen. Answer in the user's language.
        normal driver, nothing else;
      - Whisper CPU flavor: `faster-whisper` only (~0.3 GB);
      - `yt-dlp` (~10 MB);
-     - optional `gigaam` (~3.5 GB, pulls PyTorch; experimental).
+     - optional GigaAM via `onnx-asr[cpu,hub]` (~60 MB; the ~850 MB
+       model downloads from huggingface.co on first use — CPU
+       inference, NO Hugging Face account or token required).
 - On the first actual transcription the app additionally downloads
   the Whisper model chosen during setup (`large-v3` ~3 GB default,
   `medium` ~1.5 GB, `small` ~0.5 GB) from `huggingface.co` into
@@ -97,7 +100,7 @@ updates or new model downloads.
 | First transcription stuck at "Загрузка модели" | The ~3 GB model download from huggingface.co is slow/blocked | Wait, or enable VPN; progress is visible in the app log («Подробности»). |
 | Video download fails for a specific site | yt-dlp needs updating (sites change constantly) | Модели tab → «Проверить обновления» → «Обновить все», then restart the app. |
 | Boosty/member-only videos fail | Cookies needed | Настройки → «Файл cookies»: export cookies from the browser (a "cookies.txt" extension) and select that file. |
-| GigaAM errors about Hugging Face token / pyannote | GigaAM needs a one-time free HF account setup | In the app: «Настройка GigaAM» button walks through it (create account → accept pyannote/segmentation-3.0 terms → paste a read token). |
+| GigaAM errors about Hugging Face token / pyannote | Only affects OLD installs using the legacy torch backend | Current versions run GigaAM via onnx-asr and need no account. If this appears: Модели → «Починить компоненты» to reinstall the current component set. The «Настройка GigaAM» wizard remains only for the legacy path. |
 | Everything broken, want a clean retry | — | In the app: Модели → **«Починить компоненты»** — deletes the runtime and reruns the component setup in one click (restart the app afterwards). If the app itself won't start: delete `%LOCALAPPDATA%\WordMute\runtime` manually and launch again — the setup dialog reappears. App settings/word lists are elsewhere and survive. |
 
 ### Diagnostics

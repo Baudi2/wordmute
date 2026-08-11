@@ -29,16 +29,6 @@ GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 FFMPEG_URL = ("https://www.gyan.dev/ffmpeg/builds/"
               "ffmpeg-release-essentials.zip")
 
-# PyPI's gigaam is stuck at 0.1.0 (April 2025): it has no v3 models
-# (our default raises ValueError) and its transcribe API lacks
-# word_timestamps (TypeError) — install the pinned upstream source
-# archive instead. PEP 508 direct reference; an archive zip, not
-# git+..., because users have no git.exe.
-GIGAAM_COMMIT = "559d88d6b72541412743929f633a6ae7c9950b85"  # v0.2.0
-GIGAAM_REQUIREMENT = (
-    "gigaam[torch,longform] @ https://github.com/salute-developers/"
-    f"GigaAM/archive/{GIGAAM_COMMIT}.zip")
-
 # component -> pip packages. Sizes are rough download estimates shown
 # in the setup UI; keep them honest.
 COMPONENTS = {
@@ -55,9 +45,12 @@ COMPONENTS = {
         "packages": ["yt-dlp"],
         "download_gb": 0.01,
     },
-    "gigaam": {  # experimental: pulls torch and pyannote (longform)
-        "packages": [GIGAAM_REQUIREMENT],
-        "download_gb": 3.5,
+    "gigaam": {
+        # onnx-asr runtime: GigaAM v3 on plain CPU (~43-59x realtime),
+        # silero VAD, no torch/pyannote and no Hugging Face account;
+        # the ~850 MB model downloads on first use like whisper's
+        "packages": ["onnx-asr[cpu,hub]"],
+        "download_gb": 0.06,
     },
 }
 
@@ -99,7 +92,9 @@ def status() -> dict:
         "faster_whisper": package_installed("faster_whisper"),
         "cuda_dlls": (site_packages() / "nvidia").is_dir(),
         "yt_dlp": package_installed("yt_dlp"),
-        "gigaam": package_installed("gigaam"),
+        # either backend counts: onnx-asr (current) or torch (legacy)
+        "gigaam": (package_installed("onnx_asr")
+                   or package_installed("gigaam")),
     }
 
 
@@ -275,7 +270,7 @@ def write_report(dest) -> None:
     Import probes prove the frozen app can actually use the runtime's
     packages, not just that their folders exist."""
     imports = {}
-    for module in ("faster_whisper", "yt_dlp"):
+    for module in ("faster_whisper", "yt_dlp", "onnx_asr"):
         try:
             __import__(module)
             imports[module] = True

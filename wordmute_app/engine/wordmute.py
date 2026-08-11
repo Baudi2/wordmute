@@ -262,6 +262,78 @@ def get_gigaam_model(model_name: str, device: str):
     return _GIGAAM_MODELS[model_name]
 
 
+# GigaAM backend: "torch" = the original gigaam package (GPU-capable,
+# needs pyannote + an HF token for longform); "onnx" = onnx-asr on
+# onnxruntime — fast on plain CPU (~43-59x realtime), ~850 MB model,
+# silero VAD, no Hugging Face account. Word output format identical.
+GIGAAM_BACKEND = "torch"
+_GIGAAM_ONNX = {}
+
+
+def configure_gigaam_backend(name: str) -> None:
+    global GIGAAM_BACKEND
+    GIGAAM_BACKEND = name
+
+
+def _gigaam_onnx_pipeline(model_name: str):
+    if model_name not in _GIGAAM_ONNX:
+        os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+        import onnx_asr
+        onnx_name = "gigaam-" + model_name.replace("_", "-")
+        _emit("model_load", engine="gigaam", model=model_name, device="cpu")
+        _GIGAAM_ONNX[model_name] = (
+            onnx_asr.load_model(onnx_name)
+            .with_vad(onnx_asr.load_vad("silero"))
+            .with_timestamps())
+    return _GIGAAM_ONNX[model_name]
+
+
+def _chars_to_words(tokens, times, offset: float):
+    """onnx-asr emits char-level tokens with per-char times RELATIVE to
+    the VAD segment; split on the space token into word dicts. A word's
+    end gets one ~80 ms emission frame of padding."""
+    words, cur = [], []
+    t_first = t_last = 0.0
+    for tok, t in zip(tokens, times):
+        if tok == " ":
+            if cur:
+                words.append({"w": "".join(cur),
+                              "s": round(offset + t_first, 3),
+                              "e": round(offset + t_last + 0.08, 3)})
+            cur = []
+        else:
+            if not cur:
+                t_first = t
+            cur.append(tok)
+            t_last = t
+    if cur:
+        words.append({"w": "".join(cur), "s": round(offset + t_first, 3),
+                      "e": round(offset + t_last + 0.08, 3)})
+    return words
+
+
+def _transcribe_gigaam_onnx(media: Path, model_name: str):
+    pipe = _gigaam_onnx_pipeline(model_name)
+    # onnx-asr reads WAV/numpy only — extract 16 kHz mono via ffmpeg
+    fd, tmp = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    try:
+        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(media),
+                            "-vn", "-ac", "1", "-ar", "16000", tmp],
+                           capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError("ffmpeg audio extraction failed: "
+                               + (r.stderr or "")[-300:])
+        words = []
+        for seg in pipe.recognize(tmp):
+            words.extend(_chars_to_words(seg.tokens, seg.timestamps,
+                                         seg.start))
+            _emit("asr_progress", minutes=seg.end / 60)
+        return words
+    finally:
+        os.unlink(tmp)
+
+
 def _cache_path(media: Path, engine: str) -> Path:
     # whisper keeps the original untagged cache name for backward
     # compatibility with transcripts cached before GigaAM support existed.
@@ -309,16 +381,21 @@ def transcribe(media: Path, engine: str, model_name: str, device: str, language:
                 words.append({"w": w.word.strip(), "s": round(w.start, 3),
                               "e": round(w.end, 3)})
             _emit("asr_progress", minutes=seg.end / 60)
-        _emit("asr_progress_end")
 
     elif engine == "gigaam":
-        model = get_gigaam_model(model_name, device)
-        result = model.transcribe_longform(str(media), word_timestamps=True)
-        words = [{"w": w.text.strip(), "s": round(w.start, 3), "e": round(w.end, 3)}
-                 for w in result.words]
+        if GIGAAM_BACKEND == "onnx":
+            words = _transcribe_gigaam_onnx(media, model_name)
+        else:
+            model = get_gigaam_model(model_name, device)
+            result = model.transcribe_longform(str(media), word_timestamps=True)
+            words = [{"w": w.text.strip(), "s": round(w.start, 3),
+                      "e": round(w.end, 3)} for w in result.words]
 
     else:
         raise ValueError(f"unknown engine: {engine!r} (use 'whisper' or 'gigaam')")
+
+    # closes the pass for the stage-timing report (all engines)
+    _emit("asr_progress_end")
 
     cache.write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
     _emit("cache_saved", cache=cache.name)
@@ -616,6 +693,12 @@ def main():
                          "higher chance of missed words (chunks lose "
                          "cross-context) and ~2x RAM on CPU; ignored "
                          "with --no-vad")
+    ap.add_argument("--gigaam-backend", choices=["torch", "onnx"],
+                    default="torch",
+                    help="onnx = onnx-asr runtime: fast on plain CPU, "
+                         "~850 MB model, no HF token (pip install "
+                         "onnx-asr[cpu,hub]); torch = original gigaam "
+                         "package (GPU-capable)")
     ap.add_argument("--passes", type=int, default=2,
                     help="number of whisper passes; ignored if --engines is "
                          "given. Each extra pass re-transcribes the cleaned "
@@ -637,6 +720,7 @@ def main():
                          "to run with a brand-new transcription.")
     args = ap.parse_args()
     configure_fast_mode(args.fast)
+    configure_gigaam_backend(args.gigaam_backend)
 
     if args.engines:
         engine_names = [e.strip().lower() for e in args.engines.split(",") if e.strip()]

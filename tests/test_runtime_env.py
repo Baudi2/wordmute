@@ -125,13 +125,11 @@ def test_components_are_sane():
     assert runtime_env.COMPONENTS["whisper_cpu"]["packages"] == \
         ["faster-whisper"]
     assert runtime_env.COMPONENTS["ytdlp"]["packages"] == ["yt-dlp"]
-    # PyPI gigaam is stale (0.1.0: no v3 models, no word timestamps) —
-    # the component must install the pinned GitHub archive with the
-    # torch+longform extras, never the bare PyPI name
-    (gigaam_req,) = runtime_env.COMPONENTS["gigaam"]["packages"]
-    assert gigaam_req.startswith("gigaam[torch,longform] @ https://")
-    assert runtime_env.GIGAAM_COMMIT in gigaam_req
-    assert gigaam_req.endswith(".zip")
+    # GigaAM ships via onnx-asr (CPU-fast, no torch/pyannote/HF token);
+    # never the bare PyPI "gigaam" — PyPI is stale (0.1.0: no v3
+    # models, no word timestamps)
+    assert runtime_env.COMPONENTS["gigaam"]["packages"] == \
+        ["onnx-asr[cpu,hub]"]
 
 
 def test_default_gigaam_model_is_v3_rnnt(tmp_path, monkeypatch):

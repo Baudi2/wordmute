@@ -999,7 +999,16 @@ class MainWindow(QMainWindow):
                     self, "WordMute",
                     tr("Add at least one pass to the plan."))
             return
-        if not auto and "gigaam" in engines and not self._gigaam_ready():
+        # GigaAM backend: prefer onnx-asr (CPU-fast, no HF token) when
+        # installed; only the torch path needs the one-time HF wizard
+        try:
+            import onnx_asr  # noqa: F401
+            gigaam_backend = "onnx"
+        except ImportError:
+            gigaam_backend = "torch"
+        if (not auto and "gigaam" in engines
+                and gigaam_backend == "torch"
+                and not self._gigaam_ready()):
             answer = QMessageBox.question(
                 self, "WordMute",
                 tr("The plan includes GigaAM passes, but the one-time "
@@ -1016,9 +1025,10 @@ class MainWindow(QMainWindow):
 
         wordlist = merge_wordlists(lists)
         s = self._settings
-        # engine-level toggle, captured at Start like the options below
+        # engine-level toggles, captured at Start like the options below
         from ..engine import wordmute as engine_mod
         engine_mod.configure_fast_mode(s.get("fast_mode", False))
+        engine_mod.configure_gigaam_backend(gigaam_backend)
         options = JobOptions(
             device=s["device"], language=s["language"], pad=s["pad_ms"],
             no_vad=not s["vad"],
