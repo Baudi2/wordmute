@@ -366,6 +366,53 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# ------------------------------------------------------- SRT export
+def test_export_srt_format_and_filtering(tmp_path):
+    from wordmute_app.core.review import export_srt
+
+    data = {"intervals": [
+        {"s": 2.48, "e": 3.1, "text": "чудеса", "muted": True},
+        {"s": 61.5, "e": 62.0, "text": "обожаю", "muted": False},
+        {"s": 3661.25, "e": 3662.0, "text": "верю", "muted": True},
+    ]}
+    dest = tmp_path / "out.srt"
+    assert export_srt(data, dest) == 2          # unmuted one skipped
+    text = dest.read_text(encoding="utf-8")
+    assert "1\n00:00:02,480 --> 00:00:03,100\nчудеса\n" in text
+    assert "2\n01:01:01,250 --> 01:01:02,000\nверю\n" in text
+    assert "обожаю" not in text
+    assert export_srt(data, dest, muted_only=False) == 3
+
+
+def test_review_dialog_srt_button(qapp, tmp_path, monkeypatch):
+    from wordmute_app.core import review
+    from wordmute_app.ui import review_dialog as rd
+
+    class DummyPlayer:
+        def play(self, *a): pass
+        def stop(self): pass
+        def dispose(self): pass
+
+    monkeypatch.setattr(rd, "SnippetPlayer", DummyPlayer)
+    src = tmp_path / "v.mp4"
+    src.write_bytes(b"x")
+    out = tmp_path / "v.clean.mp4"
+    out.write_bytes(b"x")
+    rp = review.save_review(src, out, 100, [
+        {"s": 1.0, "e": 1.5, "text": "бог", "pass": 1,
+         "engine": "whisper", "muted": True}])
+    dialog = rd.ReviewDialog(rp)
+    dest = tmp_path / "export.srt"
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        staticmethod(lambda *a, **k: (str(dest), "")))
+    dialog._export_srt()
+    assert "бог" in dest.read_text(encoding="utf-8")
+    assert "export.srt" in dialog.status_label.text()
+    dialog._wave_worker = None
+    dialog.close()
+
+
 # ---------------------------------------------------- fade-edged mutes
 def test_mute_fades_edges_real_ffmpeg(tmp_path):
     """Acoustic contract: the muted core is silent, the 40 ms ramps

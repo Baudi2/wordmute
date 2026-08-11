@@ -410,6 +410,14 @@ RU = {
     "downloaded this month: {}": "скачано за месяц: {}",
     "muting": "заглушение",
     "Re-render finished": "Пересборка завершена",
+    "Save SRT": "Сохранить SRT",
+    "Export the muted words with their timestamps as an "
+    ".srt subtitle file.":
+        "Сохранить заглушенные слова с таймкодами в файл "
+        "субтитров .srt.",
+    "Subtitles (*.srt)": "Субтитры (*.srt)",
+    "SRT saved: {} ({} entries)": "SRT сохранён: {} (записей: {})",
+    "Save failed: {}": "Не удалось сохранить: {}",
     "from cache": "из кэша",
     "total": "итого",
     "Videos downloaded by link this calendar month — handy "

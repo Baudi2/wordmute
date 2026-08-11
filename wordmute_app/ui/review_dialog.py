@@ -145,6 +145,11 @@ class ReviewDialog(QDialog):
         self.mute_all_button.clicked.connect(lambda: self._set_all(True))
         self.unmute_all_button = QPushButton(tr("Unmute all"))
         self.unmute_all_button.clicked.connect(lambda: self._set_all(False))
+        self.srt_button = QPushButton(tr("Save SRT"))
+        self.srt_button.setToolTip(
+            tr("Export the muted words with their timestamps as an "
+               ".srt subtitle file."))
+        self.srt_button.clicked.connect(self._export_srt)
         self.rerender_button = QPushButton(tr("Re-render output"))
         self.rerender_button.setProperty("primary", True)
         self.rerender_button.clicked.connect(self._rerender)
@@ -154,6 +159,7 @@ class ReviewDialog(QDialog):
         buttons.addWidget(self.stop_button)
         buttons.addWidget(self.mute_all_button)
         buttons.addWidget(self.unmute_all_button)
+        buttons.addWidget(self.srt_button)
         buttons.addStretch()
         buttons.addWidget(self.rerender_button)
         buttons.addWidget(close_button)
@@ -259,6 +265,21 @@ class ReviewDialog(QDialog):
         rows = self.table.selectionModel().selectedRows()
         if rows and rows[0].row() == row:
             self._wave.set_peaks(peaks, f0, f1)
+
+    def _export_srt(self):
+        from PySide6.QtWidgets import QFileDialog
+        default = str(Path(self._data["output"]).with_suffix(".muted.srt"))
+        dest, _ = QFileDialog.getSaveFileName(
+            self, tr("Save SRT"), default, tr("Subtitles (*.srt)"))
+        if not dest:
+            return
+        try:
+            count = review.export_srt(self._data, dest)
+        except OSError as exc:
+            self.status_label.setText(tr("Save failed: {}").format(exc))
+            return
+        self.status_label.setText(
+            tr("SRT saved: {} ({} entries)").format(Path(dest).name, count))
 
     # ---------------------------------------------------------- re-render
     def _rerender(self):

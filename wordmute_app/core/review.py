@@ -47,6 +47,28 @@ def load_review(path) -> dict:
     return data
 
 
+def _srt_ts(t: float) -> str:
+    ms = int(round(t * 1000))
+    hours, rem = divmod(ms, 3_600_000)
+    minutes, rem = divmod(rem, 60_000)
+    seconds, ms = divmod(rem, 1000)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{ms:03d}"
+
+
+def export_srt(data: dict, dest, muted_only: bool = True) -> int:
+    """Write the review intervals as an SRT subtitle file (muted ones
+    by default) — a reviewable/archivable record of what was cut.
+    Returns the number of entries written."""
+    entries = [iv for iv in data["intervals"]
+               if not muted_only or iv.get("muted", True)]
+    lines = []
+    for n, iv in enumerate(entries, 1):
+        lines += [str(n), f"{_srt_ts(iv['s'])} --> {_srt_ts(iv['e'])}",
+                  iv.get("text", ""), ""]
+    Path(dest).write_text("\n".join(lines), encoding="utf-8")
+    return len(entries)
+
+
 def apply_review(data: dict) -> None:
     """Rebuild the output from the original source, muting only the
     intervals still flagged muted. With everything un-muted the output
