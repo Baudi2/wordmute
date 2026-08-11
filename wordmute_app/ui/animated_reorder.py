@@ -231,6 +231,11 @@ class AnimatedReorder(QObject):
         self._lift.raise_()
 
         widget.hide()                # its slot becomes the traveling gap
+        # hiding the pressed widget clears Qt's implicit mouse grab, so
+        # a release outside the viewport would be LOST and the drag
+        # would hang mid-air; an explicit grab routes every mouse event
+        # here until _commit releases it
+        self._view.viewport().grabMouse()
         self._drag_to(pos)
 
     def _round_corners(self, pixmap: QPixmap) -> QPixmap:
@@ -362,6 +367,8 @@ class AnimatedReorder(QObject):
     def _commit(self, cancel: bool):
         src, dst = self._src, self._dst
         self._edge_timer.stop()
+        if self._view.viewport().mouseGrabber() is self._view.viewport():
+            self._view.viewport().releaseMouse()
         for anim, _target in self._anims.values():
             if anim is not None:
                 anim.stop()

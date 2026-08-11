@@ -233,6 +233,32 @@ def test_escape_key_event_cancels(qapp, card_list):
     assert moves == []
 
 
+def test_drag_grabs_mouse_until_commit(qapp, card_list):
+    """Regression: hiding the pressed card clears Qt's implicit grab,
+    so a release outside the list never reached the filter and the
+    drag hung mid-air. The explicit grab keeps every event routed to
+    the viewport; releasing far outside the list must still settle."""
+    from PySide6.QtWidgets import QWidget
+
+    moves = []
+    ctrl = AnimatedReorder(card_list, lambda s, d: moves.append((s, d)))
+    ctrl._land_ms = 0
+    ctrl._slide_ms = 0
+    vp = card_list.viewport()
+    _send_mouse(vp, QEvent.MouseButtonPress, _mid(card_list, 0))
+    _send_mouse(vp, QEvent.MouseMove, _mid(card_list, 2) + QPoint(0, 10),
+                buttons=Qt.LeftButton)
+    assert ctrl._src == 0
+    assert QWidget.mouseGrabber() is vp
+    # release "outside": under a grab the event still arrives at the
+    # viewport, with coordinates far beyond its bounds
+    _send_mouse(vp, QEvent.MouseButtonRelease,
+                _mid(card_list, 2) + QPoint(0, 500))
+    assert ctrl._src == -1
+    assert QWidget.mouseGrabber() is None
+    assert moves == [(0, 2)]
+
+
 def test_abort_cancels_armed_and_lifted(qapp, card_list):
     moves = []
     ctrl = AnimatedReorder(card_list, lambda s, d: moves.append((s, d)))
