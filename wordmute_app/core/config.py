@@ -21,7 +21,10 @@ WORDLIST_TEMPLATES = {
 DEFAULT_SETTINGS = {
     "device": "cuda",
     "model": "large-v3",
-    "gigaam_model": "v3_e2e_rnnt",
+    # v3_rnnt beats v3_e2e_rnnt on Sber's own eval (8.3% vs 11.2% avg
+    # WER over 11 RU test sets); e2e's punctuation is stripped by our
+    # matching anyway. Existing settings.json values are respected.
+    "gigaam_model": "v3_rnnt",
     "pad_ms": 100,
     "language": "ru",
     "vad": True,

@@ -125,6 +125,19 @@ def test_components_are_sane():
     assert runtime_env.COMPONENTS["whisper_cpu"]["packages"] == \
         ["faster-whisper"]
     assert runtime_env.COMPONENTS["ytdlp"]["packages"] == ["yt-dlp"]
+    # PyPI gigaam is stale (0.1.0: no v3 models, no word timestamps) —
+    # the component must install the pinned GitHub archive with the
+    # torch+longform extras, never the bare PyPI name
+    (gigaam_req,) = runtime_env.COMPONENTS["gigaam"]["packages"]
+    assert gigaam_req.startswith("gigaam[torch,longform] @ https://")
+    assert runtime_env.GIGAAM_COMMIT in gigaam_req
+    assert gigaam_req.endswith(".zip")
+
+
+def test_default_gigaam_model_is_v3_rnnt(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import config
+    assert config.load_settings()["gigaam_model"] == "v3_rnnt"
 
 
 def test_setup_dialog_defaults(qapp, fake_runtime, monkeypatch):
