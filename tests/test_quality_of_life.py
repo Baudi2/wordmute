@@ -279,6 +279,32 @@ def test_startup_check_notifies_via_tray(window, monkeypatch):
     assert messages == []
 
 
+# ------------------------------------------------- setup: model choice
+def test_setup_dialog_model_choice(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    from wordmute_app.core import config, gpu
+    monkeypatch.setattr(gpu, "detect_gpus", lambda: [])
+    from wordmute_app.ui.setup_dialog import SetupDialog
+
+    d = SetupDialog(first_run=True)
+    # default reflects settings (large-v3), radios are their own group:
+    # picking a model must not uncheck the CPU/GPU flavor
+    assert d.model_radios["large-v3"].isChecked()
+    flavor_before = d.cpu_radio.isChecked()
+    d.model_radios["medium"].setChecked(True)
+    assert d.cpu_radio.isChecked() == flavor_before
+    assert not d.model_radios["large-v3"].isChecked()
+    d.accept()
+    assert config.load_settings()["model"] == "medium"
+
+    # repair mode has no model choice and accept() must not crash
+    d2 = SetupDialog(first_run=False)
+    assert d2.model_radios == {}
+    d2.accept()
+    assert config.load_settings()["model"] == "medium"
+
+
 # ------------------------------------------------------------ size clamp
 def test_initial_size_clamps_to_small_screens():
     from wordmute_app.ui.main_window import _initial_size

@@ -5,6 +5,7 @@ tab."""
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QDialog,
     QHBoxLayout,
@@ -16,8 +17,15 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..core import gpu, runtime_env
+from ..core import config, gpu, runtime_env
 from .i18n import tr
+
+# offered at first run; the model downloads on first USE, not here
+MODEL_CHOICES = (
+    ("large-v3", "large-v3 — best quality, ~3 GB"),
+    ("medium", "medium — good compromise, ~1.5 GB"),
+    ("small", "small — fastest, lowest accuracy, ~0.5 GB"),
+)
 
 INTRO = ("WordMute needs a few components that are downloaded once "
          "(they are not inside the installer to keep it small). "
@@ -122,6 +130,30 @@ class SetupDialog(QDialog):
         self.gigaam_check.setChecked(False)
         layout.addWidget(self.gigaam_check)
 
+        # first run only: pick the recognition model size up front so a
+        # weak PC / slow VPN doesn't silently get the 3 GB default
+        self.model_radios = {}
+        if first_run:
+            caption = QLabel(
+                tr("Recognition model (downloads on first use; "
+                   "changeable later in Settings):"))
+            caption.setProperty("muted", True)
+            caption.setWordWrap(True)
+            layout.addWidget(caption)
+            # own group — must not merge with the GPU/CPU radio pair
+            self._model_group = QButtonGroup(self)
+            current = config.load_settings().get("model", "large-v3")
+            for name, label in MODEL_CHOICES:
+                row = QHBoxLayout()
+                row.addSpacing(24)
+                radio = QRadioButton(tr(label))
+                radio.setChecked(name == current)
+                self._model_group.addButton(radio)
+                self.model_radios[name] = radio
+                row.addWidget(radio)
+                row.addStretch()
+                layout.addLayout(row)
+
         note = QLabel(tr("Everything is installed under your user "
                          "folder; nothing needs administrator rights."))
         note.setProperty("muted", True)
@@ -219,6 +251,19 @@ class SetupDialog(QDialog):
                 tr("Setup failed: {}").format(message))
             self.log.appendPlainText(message)
             self.install_button.setEnabled(True)
+
+    def accept(self):
+        self._save_model_choice()
+        super().accept()
+
+    def _save_model_choice(self):
+        for name, radio in self.model_radios.items():
+            if radio.isChecked():
+                settings = config.load_settings()
+                if settings.get("model") != name:
+                    settings["model"] = name
+                    config.save_settings(settings)
+                return
 
     def _close_clicked(self):
         if self._worker is not None:

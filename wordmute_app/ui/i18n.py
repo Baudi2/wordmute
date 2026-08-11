@@ -372,6 +372,17 @@ RU = {
         "Веса GigaAM обновляются вместе с пакетом gigaam.",
     "WordMute {} → {} — download: {}":
         "WordMute {} → {} — скачать: {}",
+    # setup dialog: model-size choice
+    "Recognition model (downloads on first use; "
+    "changeable later in Settings):":
+        "Модель распознавания (скачается при первой обработке; "
+        "можно поменять позже в Настройках):",
+    "large-v3 — best quality, ~3 GB":
+        "large-v3 — лучшее качество, ~3 ГБ",
+    "medium — good compromise, ~1.5 GB":
+        "medium — хороший компромисс, ~1,5 ГБ",
+    "small — fastest, lowest accuracy, ~0.5 GB":
+        "small — самая быстрая, точность ниже, ~0,5 ГБ",
     "New WordMute version available: {} (you have {})":
         "Доступна новая версия WordMute: {} (у вас {})",
     "Click to open the download page.":
