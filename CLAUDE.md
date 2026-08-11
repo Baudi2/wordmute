@@ -134,12 +134,17 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   pyqt-toast-notification + QtPy, both MIT), review waveform strip
   (ui/waveform.py — ffmpeg peaks, no numpy), skeleton shimmer on
   bulk-add cards; QtAwesome deliberately skipped (icon consistency).
-  REMAINING: Package Д features (fade-edged mutes — engine mute()
-  change, CLI FIRST; SRT export of muted words; strictness presets;
-  subtitle import as ASR bypass). Then per the user's plan: refresh
-  the webpage for the new state and RELEASE 0.5.0. Also pending: A/B
-  of «быстрый режим» on a real RU video (user), and the next
-  installer build must be report-checked for onnx_asr import from
+  Package Д code items DONE: fade-edged mutes (40 ms ramps, CLI
+  first + vendored; asetnsamples=256 because volume exprs eval
+  per-FRAME — verified acoustically on decoded PCM) and «Сохранить
+  SRT» in the review dialog. Д3 strictness presets and Д4 subtitle
+  import are DELIBERATELY parked pending user decisions (presets
+  need the user to curate severity categories in THEIR lists;
+  subtitle import conflicts with word-precision muting — phrase-
+  level cues would mute whole sentences). NEXT per the user's plan:
+  refresh the webpage for the new state and RELEASE 0.5.0. Also
+  pending: A/B of «быстрый режим» on a real RU video (user), and
+  the 0.5.0 build must be report-checked for onnx_asr import from
   the frozen exe (probe added to WORDMUTE_RUNTIME_REPORT).
 - Other open items: LICENSE file decision (repo is public with no
   license = all-rights-reserved; user undecided), GigaAM frozen-build
