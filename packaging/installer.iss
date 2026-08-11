@@ -41,10 +41,13 @@ Source: "..\docs\INSTALL_GUIDE.md"; DestDir: "{app}"; \
     Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+; AppUserModelID must match main.py's APP_USER_MODEL_ID — Windows
+; resolves the notification name/icon through this shortcut
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
+    AppUserModelID: "Baudi2.WordMute"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
-    Tasks: desktopicon
+    AppUserModelID: "Baudi2.WordMute"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; \

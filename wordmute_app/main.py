@@ -18,6 +18,24 @@ def _use_bundled_ffmpeg():
             break
 
 
+APP_USER_MODEL_ID = "Baudi2.WordMute"
+
+
+def _set_app_identity():
+    """Windows attributes taskbar grouping and tray notifications to
+    the process AppUserModelID — without this a dev run shows up as
+    «Python». The installer registers the same ID on the Start-menu
+    shortcut so notifications carry the WordMute name and icon."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            APP_USER_MODEL_ID)
+    except (OSError, AttributeError):
+        pass
+
+
 def main():
     # under pythonw / a frozen GUI there is no stdout; give print()ing
     # code (engine default reporter, libraries) a safe sink
@@ -25,6 +43,7 @@ def main():
         sys.stdout = open(os.devnull, "w", encoding="utf-8")
     if sys.stderr is None:
         sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    _set_app_identity()
     _use_bundled_ffmpeg()
 
     # slim installer: engine packages + ffmpeg live in an app-managed
