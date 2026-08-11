@@ -5,7 +5,7 @@
 ; fallback for a bare `iscc installer.iss` run — build.ps1 overrides
 ; this with /DMyAppVersion=<wordmute_app.__version__>
 #ifndef MyAppVersion
-  #define MyAppVersion "0.4.0"
+  #define MyAppVersion "0.5.0"
 #endif
 #define MyAppExeName "WordMute.exe"
 
