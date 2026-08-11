@@ -270,6 +270,17 @@ def _cache_path(media: Path, engine: str) -> Path:
     return media.with_suffix(media.suffix + f".{engine}.words.json")
 
 
+FAST_MODE = False
+
+
+def configure_fast_mode(on: bool) -> None:
+    """Opt-in batched whisper decoding: ~2-4x faster on GPU, ~2.4x on
+    CPU (at ~2x RAM), slightly higher miss risk (chunks lose cross-
+    context). Requires VAD — the no-VAD path stays sequential."""
+    global FAST_MODE
+    FAST_MODE = bool(on)
+
+
 def transcribe(media: Path, engine: str, model_name: str, device: str, language: str,
                force: bool = False, vad: bool = True):
     cache = _cache_path(media, engine)
@@ -281,9 +292,17 @@ def transcribe(media: Path, engine: str, model_name: str, device: str, language:
 
     if engine == "whisper":
         model = get_whisper_model(model_name, device)
-        segments, info = model.transcribe(
-            str(media), language=language, word_timestamps=True, vad_filter=vad,
-        )
+        if FAST_MODE and vad:
+            from faster_whisper import BatchedInferencePipeline
+            segments, info = BatchedInferencePipeline(model=model).transcribe(
+                str(media), language=language, word_timestamps=True,
+                vad_filter=True, batch_size=8 if device == "cuda" else 4,
+            )
+        else:
+            segments, info = model.transcribe(
+                str(media), language=language, word_timestamps=True,
+                vad_filter=vad,
+            )
         words = []
         for seg in segments:
             for w in seg.words or []:
@@ -592,6 +611,11 @@ def main():
                     help="disable voice activity detection for whisper passes "
                          "(try with --retranscribe if words at clip edges "
                          "are missed); has no effect on gigaam passes")
+    ap.add_argument("--fast", action="store_true",
+                    help="batched whisper decoding: ~2-4x faster, slightly "
+                         "higher chance of missed words (chunks lose "
+                         "cross-context) and ~2x RAM on CPU; ignored "
+                         "with --no-vad")
     ap.add_argument("--passes", type=int, default=2,
                     help="number of whisper passes; ignored if --engines is "
                          "given. Each extra pass re-transcribes the cleaned "
@@ -612,6 +636,7 @@ def main():
                          "passes 1-2 behave normally, pass 3 is guaranteed "
                          "to run with a brand-new transcription.")
     args = ap.parse_args()
+    configure_fast_mode(args.fast)
 
     if args.engines:
         engine_names = [e.strip().lower() for e in args.engines.split(",") if e.strip()]

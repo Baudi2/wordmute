@@ -473,6 +473,14 @@ RU = {
     "passes.":
         "Код языка Whisper (например, ru, en); проходы GigaAM его "
         "игнорируют.",
+    "Fast Whisper mode (experimental)":
+        "Быстрый режим Whisper (эксперимент)",
+    "Batched decoding: 2-4x faster transcription, but a "
+    "slightly higher chance of missed words and about twice "
+    "the RAM on CPU. Requires voice activity detection.":
+        "Пакетное распознавание: в 2–4 раза быстрее, но чуть выше "
+        "шанс пропустить слово и примерно вдвое больше памяти на CPU. "
+        "Требует включённого VAD.",
     "Disable if words at clip edges are missed.":
         "Отключите, если пропускаются слова на краях записи.",
     "Extra silence around each muted word; never bleeds into "

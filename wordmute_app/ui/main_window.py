@@ -1016,6 +1016,9 @@ class MainWindow(QMainWindow):
 
         wordlist = merge_wordlists(lists)
         s = self._settings
+        # engine-level toggle, captured at Start like the options below
+        from ..engine import wordmute as engine_mod
+        engine_mod.configure_fast_mode(s.get("fast_mode", False))
         options = JobOptions(
             device=s["device"], language=s["language"], pad=s["pad_ms"],
             no_vad=not s["vad"],

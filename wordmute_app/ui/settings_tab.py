@@ -79,6 +79,15 @@ class SettingsTab(QWidget):
             tr("Disable if words at clip edges are missed."))
         rec_form.addRow("", self.vad_check)
 
+        self.fast_check = QCheckBox(
+            tr("Fast Whisper mode (experimental)"))
+        self.fast_check.setChecked(bool(settings.get("fast_mode", False)))
+        self.fast_check.setToolTip(
+            tr("Batched decoding: 2-4x faster transcription, but a "
+               "slightly higher chance of missed words and about twice "
+               "the RAM on CPU. Requires voice activity detection."))
+        rec_form.addRow("", self.fast_check)
+
         # ---- Muting
         muting = QGroupBox(tr("Muting"))
         muting.setMaximumWidth(GROUP_WIDTH)
@@ -259,6 +268,7 @@ class SettingsTab(QWidget):
             "pad_ms": self.pad_spin.value(),
             "language": self.language_edit.text().strip() or "ru",
             "vad": self.vad_check.isChecked(),
+            "fast_mode": self.fast_check.isChecked(),
             "output_mode": ("folder" if self.folder_radio.isChecked()
                             and self.output_dir_edit.text().strip()
                             else "beside"),

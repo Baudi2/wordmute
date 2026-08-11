@@ -28,6 +28,7 @@ DEFAULT_SETTINGS = {
     "pad_ms": 100,
     "language": "ru",
     "vad": True,
+    "fast_mode": False,  # batched whisper decoding (opt-in, see engine)
     "use_russian": True,
     "use_english": False,
     "plan": ["whisper", "whisper"],

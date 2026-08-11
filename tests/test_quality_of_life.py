@@ -366,6 +366,67 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# -------------------------------------------------- fast whisper mode
+def test_fast_mode_uses_batched_pipeline(tmp_path, monkeypatch):
+    import sys
+    import types
+    from wordmute_app.engine import wordmute as engine
+
+    calls = []
+
+    class FakeSeg:
+        def __init__(self):
+            self.words = [types.SimpleNamespace(word=" бог",
+                                                start=1.0, end=1.5)]
+            self.end = 2.0
+
+    class FakePipe:
+        def __init__(self, model):
+            calls.append("init")
+
+        def transcribe(self, path, **kw):
+            calls.append(("batched", kw.get("batch_size"),
+                          kw.get("word_timestamps")))
+            return [FakeSeg()], None
+
+    fake = types.ModuleType("faster_whisper")
+    fake.BatchedInferencePipeline = FakePipe
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake)
+    monkeypatch.setattr(engine, "get_whisper_model",
+                        lambda n, d: object())
+    monkeypatch.setattr(engine, "FAST_MODE", False)  # restore on teardown
+
+    media = tmp_path / "v.mp4"
+    media.write_bytes(b"x")
+    engine.configure_fast_mode(True)
+    words = engine.transcribe(media, "whisper", "small", "cpu", "ru")
+    assert words == [{"w": "бог", "s": 1.0, "e": 1.5}]
+    assert ("batched", 4, True) in calls      # CPU batch size, words on
+
+    # vad=False must fall back to the sequential path (batched
+    # decoding requires VAD on long audio)
+    calls.clear()
+    sequential = []
+
+    class FakeSeqModel:
+        def transcribe(self, path, **kw):
+            sequential.append(kw)
+            return [FakeSeg()], None
+
+    monkeypatch.setattr(engine, "get_whisper_model",
+                        lambda n, d: FakeSeqModel())
+    media2 = tmp_path / "v2.mp4"
+    media2.write_bytes(b"x")
+    engine.transcribe(media2, "whisper", "small", "cpu", "ru", vad=False)
+    assert calls == [] and len(sequential) == 1
+
+
+def test_fast_mode_settings_roundtrip(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import config
+    assert config.load_settings()["fast_mode"] is False  # default off
+
+
 # ------------------------------------------------------ stage timing
 def test_worker_records_stage_timings(qapp, tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
