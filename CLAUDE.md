@@ -125,11 +125,17 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   concurrent_fragment_downloads=4, stage-timing report in History
   tooltips), Package Б (opt-in batched «быстрый режим» — needs an
   A/B on a real RU video with the user before recommending).
-  REMAINING: Package В onnx-asr GigaAM backend (CPU 43-59x realtime,
-  ~1 ГБ instead of 3.5, kills HF-token wizard — the strategic one),
-  Package Г UI polish (pyqttoast/QtAwesome/waveform in review/
-  skeletons), Package Д features (fade-edged mutes, SRT export,
-  strictness presets, subtitle import).
+  Package В DONE: GigaAM now runs via onnx-asr (engine backend
+  selector, CLI default torch / app auto-prefers onnx; component =
+  onnx-asr[cpu,hub] ~60 МБ + ~850 МБ model on first use; no HF
+  token — wizard gates only the legacy torch path; verified with
+  real inference end-to-end incl. matching). REMAINING: Package Г UI
+  polish (pyqttoast/QtAwesome/waveform in review/skeletons), Package
+  Д features (fade-edged mutes, SRT export, strictness presets,
+  subtitle import). Also pending: A/B of «быстрый режим» on a real
+  RU video (user), and the next installer build should be
+  report-checked for onnx_asr import from the frozen exe (probe
+  added to WORDMUTE_RUNTIME_REPORT).
 - Other open items: LICENSE file decision (repo is public with no
   license = all-rights-reserved; user undecided), GigaAM frozen-build
   end-to-end still untested (install channel now fixed; torch is
