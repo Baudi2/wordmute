@@ -2,10 +2,10 @@
 
 Runs the engine over a list of queue items (local files and/or URLs),
 forwarding reporter and download events as Qt signals. URL items are
-downloaded first, then processed like local files; while one item is
-being processed, the NEXT URL item's download already runs (network
-and CPU/GPU legs overlap — at most one download at a time). Only one
-worker runs at a time (the engine's reporter is module-global)."""
+downloaded by a continuously rolling pump thread — one download at a
+time, but the network leg never idles while the CPU/GPU leg is busy
+processing. Only one worker runs at a time (the engine's reporter is
+module-global)."""
 
 import threading
 import time
@@ -20,24 +20,37 @@ class JobCancelled(Exception):
     pass
 
 
-class _Prefetch(threading.Thread):
-    """One-ahead download of a later URL item. Any exception is kept
-    and re-raised when that item's turn comes, so error/cancel handling
-    stays identical to an inline download."""
+class _DownloadPump(threading.Thread):
+    """Downloads every URL item in queue order, back to back. Each
+    item's result (path or the exception) is picked up by the main
+    loop when that item's turn comes, so error/cancel handling stays
+    identical to an inline download — a failed download only fails
+    ITS item, the pump rolls on to the next one."""
 
-    def __init__(self, worker, index, item):
+    def __init__(self, worker, jobs):
         super().__init__(daemon=True)
-        self.index = index
-        self.path = None
-        self.error = None
         self._worker = worker
-        self._item = item
+        self._jobs = jobs                 # [(item index, QueueItem)]
+        self._results = {}                # index -> (path, error)
+        self._done = {index: threading.Event() for index, _ in jobs}
+
+    def wait_for(self, index):
+        """Block until item `index` finished downloading; returns
+        (path, error) — exactly one of the two is set."""
+        self._done[index].wait()
+        return self._results[index]
 
     def run(self):
-        try:
-            self.path = self._worker._download(self._item, self.index)
-        except BaseException as exc:
-            self.error = exc
+        for index, item in self._jobs:
+            if self._worker._cancelled:
+                self._results[index] = (None, JobCancelled())
+            else:
+                try:
+                    path = self._worker._download(item, index)
+                    self._results[index] = (path, None)
+                except BaseException as exc:
+                    self._results[index] = (None, exc)
+            self._done[index].set()
 
 
 class ProcessWorker(QThread):
@@ -180,17 +193,11 @@ class ProcessWorker(QThread):
         engine.set_reporter(self._report)
         done = 0
         total = len(self._items)
-        prefetch = None
-
-        def start_prefetch(after: int):
-            nonlocal prefetch
-            if prefetch is not None or self._cancelled:
-                return
-            for j in range(after, total):
-                if self._items[j].kind == "url":
-                    prefetch = _Prefetch(self, j, self._items[j])
-                    prefetch.start()
-                    return
+        url_jobs = [(i, item) for i, item in enumerate(self._items)
+                    if item.kind == "url"]
+        pump = _DownloadPump(self, url_jobs) if url_jobs else None
+        if pump is not None:
+            pump.start()
 
         # output_for treats an out path as a file unless it's an existing
         # directory, so a configured output folder must exist up front
@@ -211,21 +218,13 @@ class ProcessWorker(QThread):
                 try:
                     path = item.path
                     if item.kind == "url":
-                        if prefetch is not None and prefetch.index == i:
-                            prefetch.join()
-                            error, path = prefetch.error, prefetch.path
-                            prefetch = None
-                            if error is not None:
-                                raise error
-                        else:
-                            path = self._download(item, i)
+                        path, error = pump.wait_for(i)
+                        if error is not None:
+                            raise error
                         try:
                             dl_bytes = path.stat().st_size
                         except OSError:
                             dl_bytes = 0
-                    # this item is local now — overlap the next URL
-                    # item's download with the processing below
-                    start_prefetch(i + 1)
                     out = engine.output_for(path, self._output_dir,
                                             multi=total > 1)
                     engine.process_file(path, out, self._wordlist,
@@ -256,7 +255,7 @@ class ProcessWorker(QThread):
                                       stages=self._finish_timing(i, item_t0))
                     self.file_finished.emit(i, True, "")
         finally:
-            if prefetch is not None:  # cancel mid-run: let it wind down
-                prefetch.join()
+            if pump is not None:  # cancel mid-run: let it wind down
+                pump.join()
             engine.set_reporter(None)
             self.all_finished.emit(done, total)

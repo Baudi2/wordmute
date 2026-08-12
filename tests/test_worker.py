@@ -188,6 +188,7 @@ def test_url_item_downloads_then_processes(qapp, tmp_path, monkeypatch):
     worker, log = make_worker([item], monkeypatch)
     worker._download_dir = tmp_path / "dl"
     worker.run()
+    qapp.processEvents()   # pump-thread signals are queued cross-thread
 
     assert log["files"] == [(0, True, "")]
     assert "download_start" in log["events"]
@@ -247,6 +248,47 @@ def test_second_url_downloads_while_first_processes(qapp, tmp_path,
     assert ("download_start", 0) in rows and ("download_start", 1) in rows
     assert ("download_done", 0) in rows and ("download_done", 1) in rows
     assert all(row is not None for _, row in rows)
+
+
+def test_downloads_roll_continuously(qapp, tmp_path, monkeypatch):
+    """Regression: downloads used to stay only ONE ahead — item 3
+    waited for item 2 to start processing. The pump must download
+    everything back to back while item 1 is still processing."""
+    import threading
+    from wordmute_app.core import downloader
+
+    downloaded = []
+    all_three = threading.Event()
+
+    def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
+                      cookies=None):
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        p = dest / f"{url}.mp4"
+        p.write_bytes(b"x")
+        downloaded.append(url)
+        if len(downloaded) == 3:
+            all_three.set()
+        return p
+
+    monkeypatch.setattr(downloader, "download", fake_download)
+    worker, log = make_worker(
+        [QueueItem(kind="url", url=f"u{n}", title=str(n))
+         for n in (1, 2, 3)], monkeypatch)
+
+    stub = engine.transcribe
+
+    def blocking(media, *a, **k):
+        if media.name == "u1.mp4":
+            assert all_three.wait(5), "downloads stalled behind processing"
+        return stub(media, *a, **k)
+
+    monkeypatch.setattr(engine, "transcribe", blocking)
+    worker._download_dir = tmp_path / "dl"
+    worker.run()
+    qapp.processEvents()
+    assert log["files"] == [(0, True, ""), (1, True, ""), (2, True, "")]
+    assert downloaded == ["u1", "u2", "u3"]
 
 
 def test_url_download_failure_isolated(qapp, tmp_path, monkeypatch):
