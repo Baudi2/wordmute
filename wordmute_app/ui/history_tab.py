@@ -169,7 +169,14 @@ class HistoryTab(QWidget):
             time_item = QTableWidgetItem(_short_time(r.get("time", "")))
             time_item.setToolTip(r.get("time", ""))
             output = r.get("output", "")
-            file_item = QTableWidgetItem(r.get("name", ""))
+            name = r.get("name", "")
+            if name.startswith(("http://", "https://")):
+                # older records of batch-added links stored the URL;
+                # the recorded local file name is the real title
+                src = r.get("source", "")
+                if src and Path(src).is_absolute():
+                    name = Path(src).stem
+            file_item = QTableWidgetItem(name)
             tip_lines = [output] if output else []
             stage_text = _fmt_stages(r.get("stage_seconds") or {})
             if stage_text:

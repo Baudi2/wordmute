@@ -366,6 +366,26 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# ------------------------------------------- history URL-name repair
+def test_history_repairs_url_names_from_source(qapp, tmp_path,
+                                               monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import history
+    from wordmute_app.ui.history_tab import FILE_COL, HistoryTab
+
+    history.append_history({
+        "name": "https://www.youtube.com/watch?v=zGVyStp27bw",
+        "status": "ok", "muted": 0, "plan": "whisper(s)",
+        "source": r"C:\dl\How to Maintain your Car [brofphmC7GI].webm"})
+    history.append_history({  # URL name and URL source: nothing better
+        "name": "https://x.com/v", "status": "error", "muted": 0,
+        "plan": "whisper(s)", "source": "https://x.com/v"})
+    tab = HistoryTab()
+    assert tab.table.item(1, FILE_COL).text() == \
+        "How to Maintain your Car [brofphmC7GI]"
+    assert tab.table.item(0, FILE_COL).text() == "https://x.com/v"
+
+
 # ------------------------------------------------- per-item language
 def test_item_language_menu_updates_meta(window, tmp_path):
     from wordmute_app.ui import main_window as mw

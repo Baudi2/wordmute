@@ -250,6 +250,31 @@ def test_second_url_downloads_while_first_processes(qapp, tmp_path,
     assert all(row is not None for _, row in rows)
 
 
+def test_batch_url_gets_title_from_downloaded_file(qapp, tmp_path,
+                                                   monkeypatch):
+    """Batch-added links have no title (no format fetch) — history
+    must show the downloaded file's name, not the URL."""
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    from wordmute_app.core import downloader, history
+
+    def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
+                      cookies=None):
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        p = dest / "Building a Cheap Car [Jr9EwUBFmQU].webm"
+        p.write_bytes(b"x")
+        return p
+
+    monkeypatch.setattr(downloader, "download", fake_download)
+    item = QueueItem(kind="url", url="https://youtube.com/watch?v=x")
+    worker, log = make_worker([item], monkeypatch)
+    worker._download_dir = tmp_path / "dl"
+    worker.run()
+    assert log["files"] == [(0, True, "")]
+    record = history.load_history()[0]
+    assert record["name"] == "Building a Cheap Car [Jr9EwUBFmQU]"
+
+
 def test_per_item_language_profiles(qapp, tmp_path, monkeypatch):
     """Items marked ru/en get their language's word list, plan and ASR
     language; auto items keep the run's main setup."""

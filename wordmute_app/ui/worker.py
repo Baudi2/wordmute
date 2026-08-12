@@ -171,6 +171,11 @@ class ProcessWorker(QThread):
                                {"path": str(path), "row": index})
         self._timings.setdefault(index, {})["download"] = \
             round(time.monotonic() - dl_t0, 1)
+        if not item.title:
+            # batch-added links skip the format fetch and have no
+            # title — the downloaded file's name (yt-dlp's outtmpl)
+            # is the real one; history/logs use display_name
+            item.title = path.stem
         return path
 
     def _log_history(self, item, status: str, error: str, output=None,
