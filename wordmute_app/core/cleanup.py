@@ -29,9 +29,16 @@ def resolve_source(output=None, fallback=None):
 
 def related_files(source=None, output=None, include_output=False) -> list:
     """Every file the app knows around this video that exists right
-    now. Always: the source and its transcript caches, plus the review
-    sidecar (useless once the source is gone). include_output adds the
-    clean video and its own transcript caches."""
+    now: the source and its transcript caches, plus the review sidecar
+    (useless once the source is gone). include_output adds the clean
+    video and its own transcript caches.
+
+    Safety rule: in keep-the-clean mode (include_output=False) the
+    SOURCE is only listed when a clean copy actually exists on disk —
+    when nothing was muted, no .clean file was written and the source
+    is the user's only copy, so «удалить исходник» degrades to
+    deleting just the JSON files. «Удалить все файлы» still removes
+    everything."""
     files = []
 
     def add(path):
@@ -41,7 +48,9 @@ def related_files(source=None, output=None, include_output=False) -> list:
                 files.append(path)
 
     if source:
-        add(source)
+        clean_exists = bool(output and Path(output).exists())
+        if include_output or clean_exists:
+            add(source)
         for suffix in CACHE_SUFFIXES:
             add(str(source) + suffix)
     if output:

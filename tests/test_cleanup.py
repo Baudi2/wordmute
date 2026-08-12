@@ -54,6 +54,30 @@ def test_related_files_delete_all(processed):
         "v.clean.mp4.wordmute.json", "v.clean.mp4"}
 
 
+def test_source_protected_when_no_clean_copy(tmp_path):
+    """No matches -> no .clean file -> the source is the user's ONLY
+    copy: «удалить исходник» must degrade to JSONs only; «удалить все»
+    may still take the source."""
+    src = tmp_path / "v.mp4"
+    src.write_bytes(b"src")
+    (tmp_path / "v.mp4.words.json").write_text("[]", encoding="utf-8")
+    out = tmp_path / "v.clean.mp4"          # recorded but NEVER created
+
+    keep = cleanup.related_files(source=src, output=out,
+                                 include_output=False)
+    assert {f.name for f in keep} == {"v.mp4.words.json"}
+
+    everything = cleanup.related_files(source=src, output=out,
+                                       include_output=True)
+    assert {f.name for f in everything} == {"v.mp4", "v.mp4.words.json"}
+
+    # once a clean copy exists, keep-mode includes the source again
+    out.write_bytes(b"out")
+    keep = cleanup.related_files(source=src, output=out,
+                                 include_output=False)
+    assert "v.mp4" in {f.name for f in keep}
+
+
 def test_related_files_skips_missing(tmp_path):
     # nothing on disk -> nothing to delete, menu stays disabled
     assert cleanup.related_files(source=tmp_path / "gone.mp4",
