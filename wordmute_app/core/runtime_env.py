@@ -26,8 +26,15 @@ PYTHON_VERSION = "3.12.10"
 PYTHON_EMBED_URL = (f"https://www.python.org/ftp/python/{PYTHON_VERSION}/"
                     f"python-{PYTHON_VERSION}-embed-amd64.zip")
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
-FFMPEG_URL = ("https://www.gyan.dev/ffmpeg/builds/"
-              "ffmpeg-release-essentials.zip")
+# first real tester: gyan.dev timed out mid-download from RU — try
+# each host twice, then fall back to the GitHub-hosted builds (GitHub
+# is reachable wherever the installer itself was downloaded from)
+FFMPEG_URLS = (
+    "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+    "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/"
+    "ffmpeg-master-latest-win64-gpl.zip",
+)
+FFMPEG_URL = FFMPEG_URLS[0]  # backward-compat alias
 
 # component -> pip packages. Sizes are rough download estimates shown
 # in the setup UI; keep them honest.
@@ -207,9 +214,28 @@ def install_ffmpeg(log=None, progress=None, cancelled=None) -> None:
     work = runtime_dir() / "tmp"
     work.mkdir(parents=True, exist_ok=True)
     zip_path = work / "ffmpeg.zip"
-    if log:
-        log("Downloading ffmpeg…")
-    _download(FFMPEG_URL, zip_path, progress, cancelled)
+    last_error = None
+    for url in FFMPEG_URLS:
+        host = url.split("/")[2]
+        for attempt in (1, 2):
+            if log:
+                retry = " (retry)" if attempt == 2 else ""
+                log(f"Downloading ffmpeg from {host}…{retry}")
+            try:
+                _download(url, zip_path, progress, cancelled)
+                last_error = None
+                break
+            except SetupCancelled:
+                raise
+            except Exception as exc:
+                last_error = exc
+                if log:
+                    log(f"  download failed: {exc}")
+        if last_error is None:
+            break
+    if last_error is not None:
+        raise RuntimeError(f"ffmpeg download failed on every mirror: "
+                           f"{last_error}")
     extract = work / "ffmpeg-extract"
     with zipfile.ZipFile(zip_path) as zf:
         zf.extractall(extract)

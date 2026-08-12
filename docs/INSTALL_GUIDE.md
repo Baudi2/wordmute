@@ -105,7 +105,17 @@ updates or new model downloads.
 
 ### Diagnostics
 
-To produce a machine-readable status report, run in PowerShell:
+To produce a machine-readable status report: real users' default
+terminal is often cmd, not PowerShell — give them the variant that
+matches their window (or the cmd one, it also runs from Win+R).
+
+cmd («Командная строка», black window; also works via Win+R):
+
+```
+set "WORDMUTE_RUNTIME_REPORT=%USERPROFILE%\Desktop\wordmute-report.json" && "%LOCALAPPDATA%\Programs\WordMute\WordMute.exe"
+```
+
+PowerShell (blue window, prompt starts with `PS`):
 
 ```
 $env:WORDMUTE_RUNTIME_REPORT="$env:USERPROFILE\Desktop\wordmute-report.json"

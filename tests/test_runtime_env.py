@@ -132,6 +132,59 @@ def test_components_are_sane():
         ["onnx-asr[cpu,hub]"]
 
 
+def _fake_ffmpeg_zip(dest):
+    import zipfile
+    with zipfile.ZipFile(dest, "w") as zf:
+        zf.writestr("ffmpeg-x/bin/ffmpeg.exe", b"x")
+        zf.writestr("ffmpeg-x/bin/ffprobe.exe", b"x")
+
+
+def test_install_ffmpeg_falls_back_to_mirror(fake_runtime, monkeypatch):
+    """Regression from the first tester: gyan.dev timed out and the
+    whole setup died — now each host is tried twice, then the GitHub
+    mirror takes over."""
+    attempts = []
+
+    def fake_download(url, dest, progress=None, cancelled=None,
+                      timeout=60):
+        attempts.append(url.split("/")[2])
+        if "gyan.dev" in url:
+            raise TimeoutError("The read operation timed out")
+        _fake_ffmpeg_zip(dest)
+
+    monkeypatch.setattr(runtime_env, "_download", fake_download)
+    logs = []
+    runtime_env.install_ffmpeg(log=logs.append)
+    assert attempts == ["www.gyan.dev", "www.gyan.dev", "github.com"]
+    assert (runtime_env.ffmpeg_dir() / "ffmpeg.exe").exists()
+    assert (runtime_env.ffmpeg_dir() / "ffprobe.exe").exists()
+    assert any("retry" in line for line in logs)
+
+
+def test_install_ffmpeg_all_mirrors_down(fake_runtime, monkeypatch):
+    def fake_download(url, dest, progress=None, cancelled=None,
+                      timeout=60):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(runtime_env, "_download", fake_download)
+    with pytest.raises(RuntimeError, match="every mirror"):
+        runtime_env.install_ffmpeg()
+
+
+def test_install_ffmpeg_cancel_not_retried(fake_runtime, monkeypatch):
+    calls = []
+
+    def fake_download(url, dest, progress=None, cancelled=None,
+                      timeout=60):
+        calls.append(url)
+        raise runtime_env.SetupCancelled()
+
+    monkeypatch.setattr(runtime_env, "_download", fake_download)
+    with pytest.raises(runtime_env.SetupCancelled):
+        runtime_env.install_ffmpeg()
+    assert len(calls) == 1          # user cancel is not a network error
+
+
 def test_default_gigaam_model_is_v3_rnnt(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     from wordmute_app.core import config
