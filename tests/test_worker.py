@@ -250,6 +250,54 @@ def test_second_url_downloads_while_first_processes(qapp, tmp_path,
     assert all(row is not None for _, row in rows)
 
 
+def test_per_item_language_profiles(qapp, tmp_path, monkeypatch):
+    """Items marked ru/en get their language's word list, plan and ASR
+    language; auto items keep the run's main setup."""
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    from wordmute_app.ui.worker import ProcessWorker
+
+    calls = []
+
+    def fake_process(path, out, wordlist, options, plan):
+        calls.append((Path(path).name, wordlist, options.language, plan))
+        Path(out).write_bytes(b"muted")
+
+    monkeypatch.setattr(engine, "process_file", fake_process)
+    files = []
+    for name, profile in (("a.mp4", "auto"), ("b.mp4", "en"),
+                          ("c.mp4", "ru")):
+        f = tmp_path / name
+        f.write_bytes(b"x")
+        files.append(QueueItem(kind="file", path=f, lang_profile=profile))
+
+    auto_list = ({"бог"}, [], [], [])
+    ru_list = ({"чёрт"}, [], [], [])
+    en_list = ({"damn"}, [], [], [])
+    auto_plan = [("gigaam", "v3_rnnt"), ("whisper", "large-v3")]
+    en_plan = [("whisper", "large-v3"), ("whisper", "large-v3")]
+
+    worker = ProcessWorker(
+        files, auto_list, auto_plan, JobOptions(device="cpu",
+                                                language="ru"),
+        profiles={"ru": (ru_list, auto_plan, "ru"),
+                  "en": (en_list, en_plan, "en")})
+    log = {"files": []}
+    worker.file_finished.connect(
+        lambda i, ok, err: log["files"].append((i, ok)))
+    worker.run()
+
+    assert log["files"] == [(0, True), (1, True), (2, True)]
+    by_name = {name: (wl, lang, plan) for name, wl, lang, plan in calls}
+    assert by_name["a.mp4"] == (auto_list, "ru", auto_plan)
+    assert by_name["b.mp4"] == (en_list, "en", en_plan)
+    assert by_name["c.mp4"] == (ru_list, "ru", auto_plan)
+    # the per-item plan reaches the history record too
+    from wordmute_app.core import history
+    records = {r["name"]: r["plan"] for r in history.load_history()}
+    assert "gigaam" not in records["b.mp4"]
+    assert "gigaam" in records["c.mp4"]
+
+
 def test_downloads_roll_continuously(qapp, tmp_path, monkeypatch):
     """Regression: downloads used to stay only ONE ahead — item 3
     waited for item 2 to start processing. The pump must download

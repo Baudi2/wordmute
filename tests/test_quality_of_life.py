@@ -366,6 +366,21 @@ def test_single_add_probes_inline(window, tmp_path, monkeypatch):
     assert window.queue.item(0).data(mw.DURATION_ROLE) == 60.0
 
 
+# ------------------------------------------------- per-item language
+def test_item_language_menu_updates_meta(window, tmp_path):
+    from wordmute_app.ui import main_window as mw
+
+    f = tmp_path / "v.mp4"
+    f.touch()
+    window._add_files([f])
+    window._set_item_lang(0, "en")
+    item = window.queue.item(0).data(mw.ITEM_ROLE)
+    assert item.lang_profile == "en"
+    assert "EN" in window.queue.item(0).data(mw.META_ROLE)
+    window._set_item_lang(0, "auto")
+    assert "EN" not in window.queue.item(0).data(mw.META_ROLE)
+
+
 # ------------------------------------------------------- SRT export
 def test_export_srt_format_and_filtering(tmp_path):
     from wordmute_app.core.review import export_srt

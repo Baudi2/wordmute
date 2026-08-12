@@ -7,6 +7,7 @@ time, but the network leg never idles while the CPU/GPU leg is busy
 processing. Only one worker runs at a time (the engine's reporter is
 module-global)."""
 
+import dataclasses
 import threading
 import time
 
@@ -60,12 +61,18 @@ class ProcessWorker(QThread):
     all_finished = Signal(int, int)         # done count, total
 
     def __init__(self, items, wordlist, plan, options, output_dir=None,
-                 download_dir=None, cookies=None, parent=None):
+                 download_dir=None, cookies=None, profiles=None,
+                 parent=None):
         super().__init__(parent)
         self._items = list(items)
         self._wordlist = wordlist
         self._plan = plan
         self._options = options
+        # per-item language profiles: profile key -> (wordlist, plan,
+        # asr language or None = keep options.language). "auto" is the
+        # run's main setup.
+        self._profiles = {"auto": (wordlist, plan, None)}
+        self._profiles.update(profiles or {})
         self._output_dir = output_dir
         self._download_dir = download_dir
         self._cookies = cookies
@@ -215,6 +222,16 @@ class ProcessWorker(QThread):
                 item_t0 = time.monotonic()
                 self._cur_index = i
                 self._timings.setdefault(i, {})
+                # per-item language profile (word list / plan / ASR
+                # language); self._plan feeds the history record too
+                wordlist, plan, language = self._profiles.get(
+                    getattr(item, "lang_profile", "auto") or "auto",
+                    self._profiles["auto"])
+                self._plan = plan
+                self._cur_engine = plan[0][0] if plan else "whisper"
+                options = (dataclasses.replace(self._options,
+                                               language=language)
+                           if language else self._options)
                 try:
                     path = item.path
                     if item.kind == "url":
@@ -227,8 +244,8 @@ class ProcessWorker(QThread):
                             dl_bytes = 0
                     out = engine.output_for(path, self._output_dir,
                                             multi=total > 1)
-                    engine.process_file(path, out, self._wordlist,
-                                        self._options, self._plan)
+                    engine.process_file(path, out, wordlist,
+                                        options, plan)
                 except (JobCancelled, downloader.DownloadCancelled):
                     self._log_history(item, "cancelled", "", source=path,
                                       dl_bytes=dl_bytes,

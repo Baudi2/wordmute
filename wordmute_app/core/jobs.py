@@ -21,6 +21,9 @@ class QueueItem:
     format_label: str = "best quality"
     title: str = ""
     duration: float | None = None
+    # per-item processing profile: "auto" follows the main setup;
+    # "ru"/"en" force that language's word list, plan and ASR language
+    lang_profile: str = "auto"
 
     @property
     def display_name(self) -> str:

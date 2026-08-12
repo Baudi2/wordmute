@@ -554,7 +554,9 @@ class MainWindow(QMainWindow):
 
     def _card_meta(self, item: QueueItem) -> str:
         where = item.url if item.kind == "url" else str(item.path)
-        return f"{fmt_duration(item.duration)} · {where}"
+        tag = {"ru": " · RU", "en": " · EN"}.get(
+            getattr(item, "lang_profile", "auto"), "")
+        return f"{fmt_duration(item.duration)}{tag} · {where}"
 
     def _build_card(self, list_item) -> QueueCard:
         """Create a card entirely from the item's data roles (used on
@@ -808,6 +810,20 @@ class MainWindow(QMainWindow):
         act_review = menu.addAction(tr("Review"))
         act_review.setEnabled(bool(rev and Path(rev).exists()))
         menu.addSeparator()
+        # per-item language: force the RU/EN list+plan for this video
+        row_item = self.queue.item(row)
+        queue_obj = row_item.data(ITEM_ROLE) if row_item else None
+        lang_menu = menu.addMenu(tr("Processing language"))
+        current = getattr(queue_obj, "lang_profile", "auto") or "auto"
+        for key, label in (("auto", tr("Auto (main setup)")),
+                           ("ru", tr("Russian")),
+                           ("en", tr("English"))):
+            act = lang_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(key == current)
+            act.triggered.connect(
+                lambda _=False, k=key, r=row: self._set_item_lang(r, k))
+        menu.addSeparator()
         deletable = self._worker is None
         act_del_src = menu.addAction(tr("Delete source video and JSONs"))
         act_del_src.setEnabled(
@@ -834,6 +850,18 @@ class MainWindow(QMainWindow):
         elif chosen is act_remove:
             self.queue.takeItem(row)
             self._update_queue_stack()
+
+    def _set_item_lang(self, row: int, profile: str):
+        list_item = self.queue.item(row)
+        if list_item is None:
+            return
+        item = list_item.data(ITEM_ROLE)
+        item.lang_profile = profile
+        meta = self._card_meta(item)
+        list_item.setData(META_ROLE, meta)
+        card = self._card(row)
+        if card:
+            card.set_meta(meta)
 
     def _files_for_row(self, row: int, include_output: bool) -> list:
         from ..core import cleanup
@@ -1041,6 +1069,16 @@ class MainWindow(QMainWindow):
             beep_hz=s.get("beep_hz", 0) or None,
         )
         plan = build_plan(engines, s["model"], s["gigaam_model"])
+        # per-item RU/EN profiles: both lists load regardless of the
+        # global checkboxes, so one queue can mix languages (card ⋮
+        # menu → «Язык обработки»). GigaAM can't do English, so the
+        # EN plan converts its passes to whisper, keeping the count.
+        profiles = {
+            "ru": (merge_wordlists([self._wordlist_paths["russian"]]),
+                   plan, "ru"),
+            "en": (merge_wordlists([self._wordlist_paths["english"]]),
+                   [("whisper", s["model"]) for _ in plan], "en"),
+        }
         output_dir = (Path(s["output_dir"])
                       if s["output_mode"] == "folder" and s["output_dir"]
                       else None)
@@ -1057,7 +1095,8 @@ class MainWindow(QMainWindow):
         self._worker = ProcessWorker(items, wordlist, plan, options,
                                      output_dir=output_dir,
                                      download_dir=config.download_dir(s),
-                                     cookies=s.get("cookies_file") or None)
+                                     cookies=s.get("cookies_file") or None,
+                                     profiles=profiles)
         self._worker.engine_event.connect(self._on_engine_event)
         self._worker.file_started.connect(self._on_file_started)
         self._worker.file_finished.connect(self._on_file_finished)

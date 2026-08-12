@@ -410,6 +410,8 @@ RU = {
     "downloaded this month: {}": "скачано за месяц: {}",
     "muting": "заглушение",
     "Re-render finished": "Пересборка завершена",
+    "Processing language": "Язык обработки",
+    "Auto (main setup)": "Авто (общие настройки)",
     "Save SRT": "Сохранить SRT",
     "Export the muted words with their timestamps as an "
     ".srt subtitle file.":
