@@ -147,6 +147,14 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   verified). The in-app update check was confirmed LIVE: a simulated
   0.4.0 detects 0.5.0 with the correct release URL. Still pending:
   A/B of «быстрый режим» on a real RU video (user).
+- Post-0.5.0 fixes from the user's real 5-video night batch (all on
+  master, unreleased — 0.5.1 material): continuous download pump
+  (was one-ahead), per-item language profiles «Язык обработки» in
+  the card ⋮ menu (mixed RU/EN queues; auto language detection
+  deliberately rejected — mixed-speech videos), delete-source
+  protected when no .clean copy exists, batch-added links get real
+  video names (worker backfills title from the downloaded file;
+  История repairs old URL-named rows at display time).
 - Other open items: LICENSE file decision (repo is public with no
   license = all-rights-reserved; user undecided), GigaAM frozen-build
   end-to-end still untested (install channel now fixed; torch is
