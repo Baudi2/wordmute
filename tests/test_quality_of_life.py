@@ -386,12 +386,26 @@ def test_ffmpeg_is_required_not_optional(wizard):
     nothing can be muted at all."""
     from wordmute_app.ui.setup_dialog import SetupDialog
 
+    from PySide6.QtWidgets import QCheckBox
+
     page = wizard.pages.widget(STEP_INDEX("ffmpeg"))
     badges = [w.property("badge") for w in page.findChildren(object)
               if hasattr(w, "property") and w.property("badge")]
     assert "required" in badges
     assert "optional" not in badges
     assert isinstance(wizard, SetupDialog)
+
+    # and it cannot be declined: no checkbox lives on that page, the
+    # plan installs it regardless of any stale flag
+    assert page.findChildren(QCheckBox) == []
+    assert not wizard.ffmpeg_check.isEnabled()
+    assert wizard.ffmpeg_check.isChecked()          # missing -> install
+    assert "ffmpeg" in [k for k, _s in wizard._build_steps()]
+
+    # the optional pages DO have their checkbox card
+    for key in ("ytdlp", "gigaam"):
+        opt_page = wizard.pages.widget(STEP_INDEX(key))
+        assert opt_page.findChildren(QCheckBox)
 
 
 def STEP_INDEX(key):

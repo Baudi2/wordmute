@@ -515,6 +515,14 @@ RU = {
     "Install ffmpeg": "Установить ffmpeg",
     "Required — muting is impossible without ffmpeg.":
         "Обязательный компонент — без ffmpeg заглушение невозможно.",
+    "Extracts audio for recognition and writes the muted "
+    "file back.":
+        "Извлекает звук для распознавания и собирает обратно файл "
+        "с заглушками.",
+    "Also makes the thumbnails in the queue.":
+        "Также делает миниатюры файлов в очереди.",
+    "Installed automatically — it cannot be skipped.":
+        "Устанавливается автоматически — пропустить нельзя.",
     "Better Russian recognition": "Точнее для русской речи",
     "An optional second engine that is noticeably more "
     "accurate on Russian speech. Runs fast even without a "

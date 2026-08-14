@@ -302,9 +302,11 @@ class SetupDialog(QDialog):
         self.ytdlp_check = QCheckBox(tr("Install"))
         self.ytdlp_check.setChecked(not st["yt_dlp"])
         self.ytdlp_check.setEnabled(not st["yt_dlp"])
+        # ffmpeg is mandatory: no card, no way to decline — the flag
+        # only records "already there or not" for the install plan
         self.ffmpeg_check = QCheckBox(tr("Install"))
         self.ffmpeg_check.setChecked(not st["ffmpeg"])
-        self.ffmpeg_check.setEnabled(not st["ffmpeg"])
+        self.ffmpeg_check.setEnabled(False)
         self.gigaam_check = QCheckBox(tr("Install"))
         # on by default: the onnx backend is verified working, needs no
         # account and adds real accuracy on the app's main language
@@ -593,9 +595,18 @@ class SetupDialog(QDialog):
         self._lead(box, tr(
             "Does the actual muting and audio extraction. WordMute "
             "cannot process anything without it."))
-        box.addWidget(SelectCard(
-            self.ffmpeg_check, tr("Install ffmpeg"),
-            tr("Required — muting is impossible without ffmpeg.")))
+        self._bullets(box, [
+            tr("Extracts audio for recognition and writes the muted "
+               "file back."),
+            tr("Also makes the thumbnails in the queue."),
+        ])
+        # no checkbox: a required component must not be declinable
+        if self._status["ffmpeg"]:
+            self._note(box, tr("Already installed — this step will be "
+                               "skipped."))
+        else:
+            self._note(box, tr("Installed automatically — it cannot be "
+                               "skipped."))
 
     def _page_gigaam(self, box):
         total = GIGAAM_PKG_MB + runtime_env.GIGAAM_ONNX_SIZE_MB
