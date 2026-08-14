@@ -382,6 +382,126 @@ RU = {
     "up to 720p": "до 720p",
     "up to 480p": "до 480p",
     "audio only (smallest)": "только аудио (самое лёгкое)",
+    # setup wizard (8 steps)
+    "component setup": "установка компонентов",
+    "What you need": "Что понадобится",
+    "Review": "Проверка",
+    "Installing": "Установка",
+    "Step {} of {}": "Шаг {} из {}",
+    "{} left": "осталось {}",
+    "last step": "последний шаг",
+    "Next": "Далее",
+    "Back": "Назад",
+    "Abort": "Прервать",
+    "Start working": "Начать работу",
+    "required": "обязательно",
+    "optional": "по желанию",
+    "GB": "ГБ",
+    "MB": "МБ",
+    "Install": "Установить",
+    "WordMute installs the app itself; the recognition engines "
+    "are downloaded once, right now. Everything lands in your "
+    "user folder — no administrator rights needed.":
+        "Само приложение уже установлено; движки распознавания "
+        "скачиваются один раз — сейчас. Всё попадает в вашу "
+        "пользовательскую папку, права администратора не нужны.",
+    "A stable internet connection and free disk space.":
+        "Стабильный интернет и свободное место на диске.",
+    "In Russia python.org / PyPI / Hugging Face may be "
+    "blocked or throttled — turn on a VPN for the setup.":
+        "В России python.org / PyPI / Hugging Face могут быть "
+        "заблокированы или замедлены — включите VPN на время "
+        "установки.",
+    "The download can be interrupted and resumed: already "
+    "downloaded parts are kept.":
+        "Загрузку можно прервать и продолжить позже: уже скачанное "
+        "сохраняется.",
+    "After this setup the app works fully offline — nothing "
+    "downloads mid-video.":
+        "После установки приложение работает полностью офлайн — "
+        "ничего не докачивается во время обработки.",
+    "Python runtime": "Python-окружение",
+    "Isolated interpreter for the engines":
+        "Отдельный интерпретатор для движков",
+    "An embeddable Python build plus pip, installed only for "
+    "WordMute. Your system Python (if any) is not touched.":
+        "Компактная сборка Python и pip только для WordMute. "
+        "Системный Python (если он есть) не затрагивается.",
+    "Already installed — this step will be skipped.":
+        "Уже установлено — этот шаг будет пропущен.",
+    "Speech recognition engine": "Движок распознавания речи",
+    "faster-whisper handles any language and runs right after "
+    "setup. Pick how it should run and which model to fetch.":
+        "faster-whisper понимает любые языки и работает сразу после "
+        "установки. Выберите, как его запускать и какую модель "
+        "скачать.",
+    "Device": "Устройство",
+    "GPU (NVIDIA)": "Видеокарта NVIDIA",
+    "CPU only": "Только процессор",
+    "Fast. Requires an NVIDIA card ({} download).":
+        "Быстро. Нужна видеокарта NVIDIA (загрузка {}).",
+    "Works everywhere, slower ({} download).":
+        "Работает везде, медленнее (загрузка {}).",
+    "No NVIDIA GPU detected — CPU is preselected.":
+        "Видеокарта NVIDIA не найдена — выбран процессор.",
+    "Recognition model": "Модель распознавания",
+    "Downloaded during this setup, so the first video starts "
+    "immediately.":
+        "Скачивается сейчас, поэтому первое видео начнётся сразу.",
+    "best quality": "лучшее качество",
+    "almost large-v3, much faster": "почти как large-v3, быстрее",
+    "good compromise": "хороший компромисс",
+    "fastest, lower accuracy": "самая быстрая, точность ниже",
+    "Recognition model {}": "Модель распознавания {}",
+    "Download videos by link": "Загрузка видео по ссылке",
+    "Lets you paste a link (YouTube, VK, rutube, Boosty…) "
+    "instead of picking a local file. Tiny download.":
+        "Позволяет вставить ссылку (YouTube, VK, rutube, Boosty…) "
+        "вместо выбора файла на диске. Занимает совсем мало места.",
+    "Install yt-dlp": "Установить yt-dlp",
+    "Without it, only local files can be processed.":
+        "Без него можно обрабатывать только файлы с диска.",
+    "Audio and video processing": "Обработка аудио и видео",
+    "Does the actual muting and audio extraction. WordMute "
+    "cannot process anything without it.":
+        "Именно он заглушает слова и извлекает звук. Без него "
+        "WordMute не сможет обработать ни одного файла.",
+    "Install ffmpeg": "Установить ffmpeg",
+    "Required — muting is impossible without ffmpeg.":
+        "Обязательный компонент — без ffmpeg заглушение невозможно.",
+    "Better Russian recognition": "Точнее для русской речи",
+    "An optional second engine that is noticeably more "
+    "accurate on Russian speech. Runs fast even without a "
+    "graphics card and needs no accounts.":
+        "Необязательный второй движок, заметно точнее на русской "
+        "речи. Быстро работает даже без видеокарты, аккаунты не "
+        "нужны.",
+    "Engine and model are downloaded now — nothing is left "
+    "for the first video.":
+        "Движок и модель скачиваются сейчас — на первое видео "
+        "ничего не остаётся.",
+    "Experimental: use it together with Whisper, not "
+    "instead of it.":
+        "Экспериментально: используйте вместе с Whisper, а не "
+        "вместо него.",
+    "Install GigaAM": "Установить GigaAM",
+    "{} including the model": "{} вместе с моделью",
+    "What will be downloaded now": "Что будет скачано сейчас",
+    "Total download: {}": "Всего к загрузке: {}",
+    "Install folder: {}": "Папка установки: {}",
+    "skipped": "пропущено",
+    "waiting": "ожидает",
+    "downloading…": "скачивание…",
+    "done": "готово",
+    "failed": "ошибка",
+    "Do not close the window.": "Не закрывайте окно.",
+    "Details": "Подробности",
+    "Done — everything is installed and ready.":
+        "Готово — всё установлено и готово к работе.",
+    "Stop the installation? Downloaded parts are kept and setup "
+    "resumes next time.":
+        "Остановить установку? Уже скачанное сохранится, установка "
+        "продолжится в следующий раз.",
     # setup dialog: model-size choice
     "Recognition model (downloads on first use; "
     "changeable later in Settings):":

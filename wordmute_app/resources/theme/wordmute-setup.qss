@@ -1,0 +1,234 @@
+/* ============================================================
+   WordMute — first-run setup wizard, DARK theme (QSS)
+   ------------------------------------------------------------
+   ADDITIVE sheet: load it AFTER wordmute.qss, in one string —
+
+       base = Path("wordmute.qss").read_text(encoding="utf-8")
+       wiz  = Path("wordmute-setup.qss").read_text(encoding="utf-8")
+       app.setStyle("Fusion"); app.setStyleSheet(base + "\n" + wiz)
+
+   (Light pair: wordmute-light.qss + wordmute-setup-light.qss.)
+   Only wizard-specific hooks live here; buttons, inputs, radios,
+   checkboxes, scrollbars, menus and tooltips come from the base sheet.
+
+   Widget tree, layout metrics, signals and the i18n plan:
+   deliverables/setup-wizard-handoff.md — read that first.
+
+   QSS styles color / border / radius / font only. Sizes, margins and
+   spacing marked "(code)" below are set in Python, not here.
+
+   Tokens (Nocturne dark):
+     bg #161826 · chrome #131522 · surface #1b1d2c · surface2 #232532
+     border #3f424d · border-hover #595d6c · seg(rule) #292b31
+     text #e9e9ed · muted #9397ab
+     accent #9184d9 · accent-300 #d2cefd · accent-800 #423a6a · accent-900 #2b2741
+     warning #cdb380 / text #e6d5ae · error #cd8484 / text #eab7b7
+   ============================================================ */
+
+/* ---- Shell ----------------------------------------------------
+   QDialog#setup_wizard, modal, fixed 920x620 (code), no resize grip.
+   Layout: header (56) / step strip / QStackedWidget / footer (64). */
+QDialog#setup_wizard { background: #161826; }
+
+/* ---- Header bar (fixed height 56, margins 18,0,20,0 — code) ---- */
+QWidget#wizard_header { background: #131522; border-bottom: 1px solid #292b31; }
+QLabel#wizard_logo {                       /* 26x26 rounded accent tile, wordmute-icon.svg 14px */
+  background: #2b2741; border: 1px solid #423a6a; border-radius: 7px;
+  min-width: 26px; max-width: 26px; min-height: 26px; max-height: 26px;
+  qproperty-alignment: AlignCenter;
+}
+QLabel#wizard_brand { font-size: 14px; font-weight: 500; }
+QLabel#wizard_brand_sub { color: #9397ab; }
+
+/* Language switcher — QToolButton with a QMenu, visible on EVERY step.
+   Code: setPopupMode(InstantPopup); text = native language name;
+   icon icons/globe.svg 14px; arrow icons/chevron-down.svg via the base
+   QToolButton rules is suppressed, so keep a trailing "  ⌄" glyph off —
+   use ::menu-indicator below instead. */
+QToolButton#lang_button {
+  background: transparent; border: 1px solid #3f424d; border-radius: 6px;
+  padding: 6px 10px; color: #e9e9ed; font-size: 12px;
+}
+QToolButton#lang_button:hover { background: #292b31; border-color: #595d6c; }
+QToolButton#lang_button:pressed { background: #3f424d; }
+QToolButton#lang_button:focus { border-color: #b5abfc; }
+QToolButton#lang_button::menu-indicator {
+  image: url(icons/chevron-down.svg); width: 10px; height: 10px;
+  subcontrol-position: right center; right: 6px;
+}
+/* The menu itself inherits QMenu from the base sheet; the active language
+   carries a check (QAction.setCheckable(True) + setChecked). */
+QMenu#lang_menu::indicator { image: url(icons/check.svg); width: 12px; height: 12px; left: 8px; }
+
+/* ---- Step strip ("Шаг 3 из 8" + progress rail) ----------------
+   QWidget#step_strip, margins 24,14,24,16 (code), spacing 10.
+   Row 1: QLabel#step_counter (accent) + QLabel#step_chip (muted, the
+   step's short name) on the left, QLabel#step_remaining right-aligned.
+   Row 2: QWidget#step_rail — QHBoxLayout, spacing 5, one
+   QFrame[railSeg="true"] per step, each expanding, 4px tall.
+   Segments are clickable (mousePressEvent -> jump, only to visited
+   steps); set state via setProperty + unpolish/polish. */
+QWidget#step_strip { background: #161826; border-bottom: 1px solid #292b31; }
+QLabel#step_counter { color: #d2cefd; font-size: 12px; }
+QLabel#step_chip, QLabel#step_remaining { color: #9397ab; font-size: 12px; }
+QFrame[railSeg="true"] {
+  border: none; border-radius: 2px; min-height: 4px; max-height: 4px;
+  background: #292b31;                      /* todo */
+}
+QFrame[railSeg="true"][state="done"]    { background: #423a6a; }
+QFrame[railSeg="true"][state="current"] { background: #9184d9; }
+QFrame[railSeg="true"]:hover            { background: #595d6c; }
+QFrame[railSeg="true"][state="current"]:hover { background: #9184d9; }
+
+/* ---- Page area ------------------------------------------------
+   QStackedWidget#wizard_pages, each page wrapped in QScrollArea
+   (frameShape NoFrame, widgetResizable). Page margins 24,22,24,20 (code),
+   section spacing 18, tight row spacing 8. */
+QStackedWidget#wizard_pages { background: #161826; }
+QScrollArea#page_scroll { background: transparent; border: none; }
+QScrollArea#page_scroll > QWidget > QWidget { background: transparent; }
+
+QLabel#page_title { font-size: 21px; font-weight: 500; color: #e9e9ed; }
+QLabel#page_lead  { font-size: 13px; color: #e9e9ed; }         /* setWordWrap(True), max width 660 (code) */
+QLabel#page_sub   { font-size: 13px; color: #9397ab; }
+QLabel#section_label {                                          /* "Устройство", "Модель распознавания" */
+  color: #9397ab; font-size: 11px; letter-spacing: 1px;         /* text uppercased in code */
+}
+QFrame#page_rule { border: none; background: #292b31; max-height: 1px; min-height: 1px; }
+
+/* Bullet rows: QLabel#bullet_dot (5px accent dot) + QLabel#bullet_text */
+QLabel#bullet_dot {
+  background: #9184d9; border-radius: 3px;
+  min-width: 5px; max-width: 5px; min-height: 5px; max-height: 5px;
+}
+QLabel#bullet_text { font-size: 13px; color: #e9e9ed; }
+QLabel#bullet_text[muted="true"] { font-size: 12px; color: #9397ab; }
+
+/* ---- Component header (name + badge + size) ------------------- */
+QLabel#comp_name { font-size: 21px; font-weight: 500; }
+QLabel#comp_sub  { font-size: 13px; color: #9397ab; }
+QLabel#comp_size { font-size: 17px; font-weight: 500; color: #d2cefd; }
+QLabel#comp_size_sub { font-size: 11px; color: #9397ab; }
+/* Badge: label.setProperty("badge", "required"|"optional") */
+QLabel[badge="required"] {
+  color: #d2cefd; background: #2b2741; border: 1px solid #423a6a;
+  border-radius: 11px; padding: 3px 8px; font-size: 11px;
+}
+QLabel[badge="optional"] {
+  color: #9397ab; background: transparent; border: 1px solid #3f424d;
+  border-radius: 11px; padding: 3px 8px; font-size: 11px;
+}
+
+/* ---- Selectable cards (include toggle, device + model choices) --
+   One QFrame[selectCard="true"] per option; the whole card is the hit
+   target (mousePressEvent forwards to the child QCheckBox/QRadioButton,
+   which stays visible and keeps keyboard access). Mirror the checked
+   state onto the frame with setProperty("selected", bool) + re-polish.
+   Card padding 11..13 / min-height 44 (code). */
+QFrame[selectCard="true"] {
+  background: #1b1d2c; border: 1px solid #3f424d; border-radius: 8px;
+}
+QFrame[selectCard="true"]:hover { border-color: #595d6c; }
+QFrame[selectCard="true"][selected="true"] { background: #2b2741; border-color: #9184d9; }
+QFrame[selectCard="true"][disabled="true"] { background: #1b1d2c; border-color: #292b31; }
+QFrame[selectCard="true"] QLabel { background: transparent; }
+QLabel#card_option_title { font-size: 13px; }
+QLabel#card_option_hint  { font-size: 11px; color: #9397ab; }
+/* The include checkbox is one notch larger than the app default */
+QCheckBox#include_toggle::indicator { width: 18px; height: 18px; border-radius: 5px; }
+/* Model rows keep the model id monospace — it is a literal argument */
+QLabel#model_id { font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px; }
+QLabel#model_hint { font-size: 11px; color: #9397ab; }
+
+/* ---- Notes / warnings on a page -------------------------------
+   QLabel#page_note, setProperty("severity", "info"|"warn"|"error").
+   Icon drawn by a sibling QLabel#page_note_icon (14px svg, tinted). */
+QLabel#page_note[severity="info"] {
+  background: #1b1d2c; border: 1px solid #3f424d; border-radius: 7px;
+  color: #9397ab; padding: 11px 13px; font-size: 12px;
+}
+QLabel#page_note[severity="warn"] {
+  background: rgba(205,179,128,0.10); border: 1px solid rgba(205,179,128,0.45);
+  border-radius: 7px; color: #e6d5ae; padding: 11px 13px; font-size: 12px;
+}
+QLabel#page_note[severity="error"] {
+  background: rgba(205,132,132,0.10); border: 1px solid rgba(205,132,132,0.50);
+  border-radius: 7px; color: #eab7b7; padding: 11px 13px; font-size: 12px;
+}
+
+/* ---- Review page ---------------------------------------------
+   QFrame#review_card holds one QFrame[reviewRow="true"] per component
+   (rule between rows) and a QWidget#review_total_row footer strip. */
+QFrame#review_card { background: #1b1d2c; border: 1px solid #3f424d; border-radius: 8px; }
+QFrame[reviewRow="true"] { background: transparent; border: none; border-bottom: 1px solid #292b31; }
+QFrame[reviewRow="true"]:last-child { border-bottom: none; }
+QLabel#review_name { font-size: 13px; }
+QLabel#review_name[state="skip"] { color: #9397ab; }
+QLabel#review_sub  { font-size: 11px; color: #9397ab; }
+QLabel#review_size { font-size: 12px; }                 /* tabular numerals via QFont.setFixedPitch or Inter tnum */
+QLabel#review_size[state="skip"] { color: #9397ab; }
+QWidget#review_total_row { background: #232532; }
+QLabel#review_total_label { font-size: 12px; color: #9397ab; }
+QLabel#review_total_value { font-size: 14px; font-weight: 500; color: #d2cefd; }
+QLabel#review_later, QLabel#review_disk { font-size: 12px; color: #9397ab; }
+/* Install folder strip: QFrame#folder_row + path + QPushButton#btn_change_folder */
+QFrame#folder_row { background: #1b1d2c; border: 1px solid #3f424d; border-radius: 7px; }
+QLabel#folder_label { font-size: 11px; color: #9397ab; }
+QLabel#folder_path {
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px; color: #e9e9ed;
+}                                                       /* elide in code: QFontMetrics.elidedText(ElideMiddle) */
+QPushButton#btn_change_folder { padding: 5px 12px; font-size: 12px; }
+
+/* ---- Install page --------------------------------------------
+   QLabel#install_title / #install_sub, QLabel#install_percent (big),
+   QProgressBar#total_progress (6px, base sheet gives the chunk),
+   then one QFrame[installRow="true"] per component, spacing 7 (code). */
+QLabel#install_title { font-size: 21px; font-weight: 500; }
+QLabel#install_sub { font-size: 12px; color: #9397ab; }
+QLabel#install_percent { font-size: 26px; font-weight: 300; color: #d2cefd; }
+QProgressBar#total_progress { max-height: 6px; border-radius: 3px; background: #292b31; }
+QProgressBar#total_progress::chunk { background: #9184d9; border-radius: 3px; }
+
+QFrame[installRow="true"] {
+  background: #1b1d2c; border: 1px solid #3f424d; border-radius: 7px;
+}
+QFrame[installRow="true"][state="run"]  { border-color: #9184d9; }
+QFrame[installRow="true"][state="err"]  { border-color: #6c4a4a; }
+QLabel#row_icon { min-width: 16px; max-width: 16px; }   /* check.svg / x / spinner frame, tinted in code */
+QLabel#row_name { font-size: 13px; }                    /* fixed width 190 (code) */
+QLabel#row_name[state="skip"] { color: #9397ab; }
+QProgressBar#row_progress { max-height: 4px; border-radius: 2px; background: #292b31; }
+QProgressBar#row_progress::chunk { background: #9184d9; border-radius: 2px; }
+QProgressBar#row_progress[state="ok"]::chunk { background: #423a6a; }
+QLabel#row_state { font-size: 11px; color: #9397ab; }   /* fixed width 132, AlignRight (code) */
+QLabel#row_state[state="err"] { color: #eab7b7; }
+
+/* Log disclosure + pane (collapsed state remembered in QSettings) */
+QToolButton#log_toggle {
+  background: transparent; border: none; padding: 2px 0;
+  color: #9397ab; font-size: 11px;
+}
+QToolButton#log_toggle:hover { color: #e9e9ed; }
+QPlainTextEdit#setup_log {
+  background: #111322; border: 1px solid #292b31; border-radius: 7px;
+  color: #9397ab; padding: 11px 13px;
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 11px;
+  max-height: 120px;
+}
+/* Retry strip shown when a step fails: QFrame#retry_row + primary button */
+QPushButton#btn_retry { }                                /* setProperty("primary", True) */
+
+/* ---- Footer ---------------------------------------------------
+   QWidget#wizard_footer, fixed 64, margins 20,0,20,0 (code).
+   Left: QPushButton#btn_cancel (flat). Right: #btn_back then the
+   primary #btn_next — one button whose text/role changes per step
+   (Далее / Установить / Прервать / Начать работу). */
+QWidget#wizard_footer { background: #161826; border-top: 1px solid #292b31; }
+QPushButton#btn_cancel {
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  color: #9397ab; padding: 8px 14px;
+}
+QPushButton#btn_cancel:hover { background: #292b31; color: #e9e9ed; }
+QPushButton#btn_back { padding: 8px 18px; }
+QPushButton#btn_next { padding: 8px 20px; }              /* setProperty("primary", True) */
+QPushButton#btn_next[danger="true"] { border-color: #6c4a4a; color: #eab7b7; }  /* while installing: Прервать */

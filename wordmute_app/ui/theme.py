@@ -17,6 +17,12 @@ THEMES = {
     "dark": "wordmute.qss",
     "light": "wordmute-light.qss",
 }
+# the setup wizard's sheet is appended to the base theme (it only adds
+# rules keyed by objectName, per the design handoff)
+SETUP_THEMES = {
+    "dark": "wordmute-setup.qss",
+    "light": "wordmute-setup-light.qss",
+}
 DEFAULT_THEME = "dark"
 
 _PLACEHOLDER = {"dark": "#75798c", "light": "#8b8fa3"}
@@ -30,8 +36,12 @@ def theme_dir():
 
 def load_stylesheet(name: str) -> str:
     name = name if name in THEMES else DEFAULT_THEME
-    path = theme_dir() / THEMES[name]
-    qss = path.read_text(encoding="utf-8")
+    parts = []
+    for table in (THEMES, SETUP_THEMES):
+        path = theme_dir() / table[name]
+        if path.exists():
+            parts.append(path.read_text(encoding="utf-8"))
+    qss = "\n".join(parts)
     # icon urls in the QSS are relative to the file; Qt resolves url()
     # against the process cwd, so rewrite to absolute (forward slashes)
     base = theme_dir().as_posix()

@@ -1,0 +1,173 @@
+/* ============================================================
+   WordMute — first-run setup wizard, LIGHT theme (QSS)
+   ------------------------------------------------------------
+   Same objectNames, properties and layout metrics as
+   wordmute-setup.qss — only colors differ. Load additively:
+
+       base = Path("wordmute-light.qss").read_text(encoding="utf-8")
+       wiz  = Path("wordmute-setup-light.qss").read_text(encoding="utf-8")
+       app.setStyle("Fusion"); app.setStyleSheet(base + "\n" + wiz)
+
+   Comments explaining the widget tree are in the dark file; this one
+   stays a pure palette swap so the two can be diffed.
+
+   Tokens (Nocturne light):
+     bg #f3f5fe · chrome #e9ecf9 · surface #f8f9ff · surface2 #eef0fb
+     border #cfd3e5 · border-hover #b2b6ca · rule #dfe3f3
+     text #292b31 · muted #595d6c
+     accent #9184d9 · accent-deep #5d5294 · accent-200 #e7e5fe · accent-300 #d2cefd
+     warning #a5813c / text #7a5f2b · error #b05656
+   ============================================================ */
+
+QDialog#setup_wizard { background: #f3f5fe; }
+
+QWidget#wizard_header { background: #e9ecf9; border-bottom: 1px solid #dfe3f3; }
+QLabel#wizard_logo {
+  background: #e7e5fe; border: 1px solid #d2cefd; border-radius: 7px;
+  min-width: 26px; max-width: 26px; min-height: 26px; max-height: 26px;
+  qproperty-alignment: AlignCenter;
+}
+QLabel#wizard_brand { font-size: 14px; font-weight: 500; }
+QLabel#wizard_brand_sub { color: #595d6c; }
+
+QToolButton#lang_button {
+  background: transparent; border: 1px solid #cfd3e5; border-radius: 6px;
+  padding: 6px 10px; color: #292b31; font-size: 12px;
+}
+QToolButton#lang_button:hover { background: #e4e7f5; border-color: #b2b6ca; }
+QToolButton#lang_button:pressed { background: #cfd3e5; }
+QToolButton#lang_button:focus { border-color: #796cbf; }
+QToolButton#lang_button::menu-indicator {
+  image: url(icons/chevron-down.svg); width: 10px; height: 10px;
+  subcontrol-position: right center; right: 6px;
+}
+QMenu#lang_menu::indicator { image: url(icons/check.svg); width: 12px; height: 12px; left: 8px; }
+
+QWidget#step_strip { background: #f3f5fe; border-bottom: 1px solid #dfe3f3; }
+QLabel#step_counter { color: #5d5294; font-size: 12px; }
+QLabel#step_chip, QLabel#step_remaining { color: #595d6c; font-size: 12px; }
+QFrame[railSeg="true"] {
+  border: none; border-radius: 2px; min-height: 4px; max-height: 4px;
+  background: #dfe3f3;
+}
+QFrame[railSeg="true"][state="done"]    { background: #d2cefd; }
+QFrame[railSeg="true"][state="current"] { background: #9184d9; }
+QFrame[railSeg="true"]:hover            { background: #b2b6ca; }
+QFrame[railSeg="true"][state="current"]:hover { background: #9184d9; }
+
+QStackedWidget#wizard_pages { background: #f3f5fe; }
+QScrollArea#page_scroll { background: transparent; border: none; }
+QScrollArea#page_scroll > QWidget > QWidget { background: transparent; }
+
+QLabel#page_title { font-size: 21px; font-weight: 500; color: #292b31; }
+QLabel#page_lead  { font-size: 13px; color: #292b31; }
+QLabel#page_sub   { font-size: 13px; color: #595d6c; }
+QLabel#section_label { color: #595d6c; font-size: 11px; letter-spacing: 1px; }
+QFrame#page_rule { border: none; background: #dfe3f3; max-height: 1px; min-height: 1px; }
+
+QLabel#bullet_dot {
+  background: #9184d9; border-radius: 3px;
+  min-width: 5px; max-width: 5px; min-height: 5px; max-height: 5px;
+}
+QLabel#bullet_text { font-size: 13px; color: #292b31; }
+QLabel#bullet_text[muted="true"] { font-size: 12px; color: #595d6c; }
+
+QLabel#comp_name { font-size: 21px; font-weight: 500; }
+QLabel#comp_sub  { font-size: 13px; color: #595d6c; }
+QLabel#comp_size { font-size: 17px; font-weight: 500; color: #5d5294; }
+QLabel#comp_size_sub { font-size: 11px; color: #595d6c; }
+QLabel[badge="required"] {
+  color: #5d5294; background: #e7e5fe; border: 1px solid #d2cefd;
+  border-radius: 11px; padding: 3px 8px; font-size: 11px;
+}
+QLabel[badge="optional"] {
+  color: #595d6c; background: transparent; border: 1px solid #cfd3e5;
+  border-radius: 11px; padding: 3px 8px; font-size: 11px;
+}
+
+QFrame[selectCard="true"] {
+  background: #f8f9ff; border: 1px solid #cfd3e5; border-radius: 8px;
+}
+QFrame[selectCard="true"]:hover { border-color: #b2b6ca; }
+QFrame[selectCard="true"][selected="true"] { background: #e7e5fe; border-color: #9184d9; }
+QFrame[selectCard="true"][disabled="true"] { background: #f8f9ff; border-color: #dfe3f3; }
+QFrame[selectCard="true"] QLabel { background: transparent; }
+QLabel#card_option_title { font-size: 13px; }
+QLabel#card_option_hint  { font-size: 11px; color: #595d6c; }
+QCheckBox#include_toggle::indicator { width: 18px; height: 18px; border-radius: 5px; }
+QLabel#model_id { font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px; }
+QLabel#model_hint { font-size: 11px; color: #595d6c; }
+
+QLabel#page_note[severity="info"] {
+  background: #f8f9ff; border: 1px solid #cfd3e5; border-radius: 7px;
+  color: #595d6c; padding: 11px 13px; font-size: 12px;
+}
+QLabel#page_note[severity="warn"] {
+  background: rgba(165,129,60,0.10); border: 1px solid rgba(165,129,60,0.45);
+  border-radius: 7px; color: #7a5f2b; padding: 11px 13px; font-size: 12px;
+}
+QLabel#page_note[severity="error"] {
+  background: rgba(176,86,86,0.09); border: 1px solid rgba(176,86,86,0.45);
+  border-radius: 7px; color: #b05656; padding: 11px 13px; font-size: 12px;
+}
+
+QFrame#review_card { background: #f8f9ff; border: 1px solid #cfd3e5; border-radius: 8px; }
+QFrame[reviewRow="true"] { background: transparent; border: none; border-bottom: 1px solid #dfe3f3; }
+QFrame[reviewRow="true"]:last-child { border-bottom: none; }
+QLabel#review_name { font-size: 13px; }
+QLabel#review_name[state="skip"] { color: #595d6c; }
+QLabel#review_sub  { font-size: 11px; color: #595d6c; }
+QLabel#review_size { font-size: 12px; }
+QLabel#review_size[state="skip"] { color: #595d6c; }
+QWidget#review_total_row { background: #eef0fb; }
+QLabel#review_total_label { font-size: 12px; color: #595d6c; }
+QLabel#review_total_value { font-size: 14px; font-weight: 500; color: #5d5294; }
+QLabel#review_later, QLabel#review_disk { font-size: 12px; color: #595d6c; }
+QFrame#folder_row { background: #f8f9ff; border: 1px solid #cfd3e5; border-radius: 7px; }
+QLabel#folder_label { font-size: 11px; color: #595d6c; }
+QLabel#folder_path {
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px; color: #292b31;
+}
+QPushButton#btn_change_folder { padding: 5px 12px; font-size: 12px; }
+
+QLabel#install_title { font-size: 21px; font-weight: 500; }
+QLabel#install_sub { font-size: 12px; color: #595d6c; }
+QLabel#install_percent { font-size: 26px; font-weight: 300; color: #5d5294; }
+QProgressBar#total_progress { max-height: 6px; border-radius: 3px; background: #dfe3f3; }
+QProgressBar#total_progress::chunk { background: #9184d9; border-radius: 3px; }
+
+QFrame[installRow="true"] {
+  background: #f8f9ff; border: 1px solid #cfd3e5; border-radius: 7px;
+}
+QFrame[installRow="true"][state="run"] { border-color: #9184d9; }
+QFrame[installRow="true"][state="err"] { border-color: rgba(176,86,86,0.55); }
+QLabel#row_icon { min-width: 16px; max-width: 16px; }
+QLabel#row_name { font-size: 13px; }
+QLabel#row_name[state="skip"] { color: #595d6c; }
+QProgressBar#row_progress { max-height: 4px; border-radius: 2px; background: #dfe3f3; }
+QProgressBar#row_progress::chunk { background: #9184d9; border-radius: 2px; }
+QProgressBar#row_progress[state="ok"]::chunk { background: #b3a9e6; }  /* accent at 55% over the track — #d2cefd is invisible on #dfe3f3 */
+QLabel#row_state { font-size: 11px; color: #595d6c; }
+QLabel#row_state[state="err"] { color: #b05656; }
+
+QToolButton#log_toggle {
+  background: transparent; border: none; padding: 2px 0;
+  color: #595d6c; font-size: 11px;
+}
+QToolButton#log_toggle:hover { color: #292b31; }
+QPlainTextEdit#setup_log {
+  background: #e9ecf9; border: 1px solid #dfe3f3; border-radius: 7px;
+  color: #595d6c; padding: 11px 13px;
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 11px;
+  max-height: 120px;
+}
+
+QWidget#wizard_footer { background: #f3f5fe; border-top: 1px solid #dfe3f3; }
+QPushButton#btn_cancel {
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  color: #595d6c; padding: 8px 14px;
+}
+QPushButton#btn_cancel:hover { background: #e4e7f5; color: #292b31; }
+QPushButton#btn_back { padding: 8px 18px; }
+QPushButton#btn_next { padding: 8px 20px; }
+QPushButton#btn_next[danger="true"] { border-color: rgba(176,86,86,0.55); color: #b05656; }

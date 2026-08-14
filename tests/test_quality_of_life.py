@@ -294,7 +294,7 @@ def test_setup_dialog_model_choice(qapp, tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
     from wordmute_app.core import config, gpu
     monkeypatch.setattr(gpu, "detect_gpus", lambda: [])
-    from wordmute_app.ui.setup_dialog import SetupDialog
+    from wordmute_app.ui.setup_dialog import MODEL_CHOICES, SetupDialog
 
     d = SetupDialog(first_run=True)
     # default reflects settings (large-v3), radios are their own group:
@@ -307,11 +307,121 @@ def test_setup_dialog_model_choice(qapp, tmp_path, monkeypatch):
     d.accept()
     assert config.load_settings()["model"] == "medium"
 
-    # repair mode has no model choice and accept() must not crash
+    # the wizard doubles as the component manager: same pages, so the
+    # model choice exists there too and accept() persists it
     d2 = SetupDialog(first_run=False)
-    assert d2.model_radios == {}
+    assert set(d2.model_radios) == {c[0] for c in MODEL_CHOICES}
     d2.accept()
     assert config.load_settings()["model"] == "medium"
+
+
+# ------------------------------------------------------ setup wizard
+@pytest.fixture
+def wizard(qapp, tmp_path, monkeypatch):
+    """A pristine machine: nothing installed, no GPU. The UI language
+    is process-global — restore it so a switch test can't leak into
+    every other test in the session."""
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    from wordmute_app.core import gpu
+    from wordmute_app.ui import i18n
+    monkeypatch.setattr(gpu, "detect_gpus", lambda: [])
+    before = i18n.current_language()
+    from wordmute_app.ui.setup_dialog import SetupDialog
+    dialog = SetupDialog(first_run=True)
+    yield dialog
+    i18n.set_language(before)
+    dialog.deleteLater()
+
+
+def test_wizard_has_eight_steps_and_navigates(wizard):
+    from wordmute_app.ui.setup_dialog import STEP_KEYS
+
+    assert list(STEP_KEYS) == ["intro", "python", "whisper", "ytdlp",
+                               "ffmpeg", "gigaam", "review", "install"]
+    assert wizard.pages.count() == 8
+    assert wizard._step == 0
+    assert not wizard.btn_back.isEnabled()          # first step
+
+    wizard._next_clicked()
+    assert wizard._step == 1 and wizard.btn_back.isEnabled()
+    assert "2" in wizard.step_counter.text()   # 1-based: "Step 2 of 8"
+    assert "8" in wizard.step_counter.text()
+
+    # the rail jumps back to visited steps only
+    wizard._rail_clicked(0)
+    assert wizard._step == 0
+    wizard._rail_clicked(5)
+    assert wizard._step == 0
+
+
+def test_gigaam_downloads_its_model_during_setup(wizard):
+    """Must-do: opting into GigaAM downloads engine AND model now —
+    nothing may be left for the first video."""
+    wizard.gigaam_check.setChecked(True)
+    keys = [key for key, _step in wizard._build_steps()]
+    assert "gigaam" in keys and "gigaam_model" in keys
+    assert keys.index("gigaam") < keys.index("gigaam_model")
+
+    # ... and the whisper weights too, so no run stalls on a download
+    assert "whisper_model" in keys
+
+    # the model page advertises the full size, not just the package
+    _key, label, mb, on = [row for row in wizard._plan()
+                           if row[0] == "gigaam"][0]
+    assert on and mb >= runtime_env_gigaam_size()
+
+    wizard.gigaam_check.setChecked(False)
+    keys = [key for key, _step in wizard._build_steps()]
+    assert "gigaam" not in keys and "gigaam_model" not in keys
+
+
+def runtime_env_gigaam_size():
+    from wordmute_app.core import runtime_env
+    return runtime_env.GIGAAM_ONNX_SIZE_MB
+
+
+def test_ffmpeg_is_required_not_optional(wizard):
+    """Tester feedback: ffmpeg cannot be 'recommended' — without it
+    nothing can be muted at all."""
+    from wordmute_app.ui.setup_dialog import SetupDialog
+
+    page = wizard.pages.widget(STEP_INDEX("ffmpeg"))
+    badges = [w.property("badge") for w in page.findChildren(object)
+              if hasattr(w, "property") and w.property("badge")]
+    assert "required" in badges
+    assert "optional" not in badges
+    assert isinstance(wizard, SetupDialog)
+
+
+def STEP_INDEX(key):
+    from wordmute_app.ui.setup_dialog import STEP_KEYS
+    return list(STEP_KEYS).index(key)
+
+
+def test_wizard_language_switch_keeps_selections(wizard):
+    wizard.gigaam_check.setChecked(True)
+    wizard.model_radios["small"].setChecked(True)
+    wizard.set_step(3)
+    wizard._set_language("ru")
+    # pages rebuilt, state intact
+    assert wizard.gigaam_check.isChecked()
+    assert wizard.model_radios["small"].isChecked()
+    assert wizard._step == 3
+    assert wizard.pages.count() == 8
+    assert wizard.step_counter.text().startswith("Шаг")
+    wizard._set_language("en")
+    assert wizard.step_counter.text().startswith("Step")
+
+
+def test_review_totals_track_choices(wizard):
+    wizard.set_step(STEP_INDEX("review"))
+    base = wizard.total_mb()
+    wizard.gigaam_check.setChecked(True)
+    wizard._refresh_review()
+    assert wizard.total_mb() > base
+    assert "GB" in wizard.review_total.text() \
+        or "ГБ" in wizard.review_total.text()
 
 
 # ------------------------------------------------ background thumbnails
@@ -818,7 +928,7 @@ def test_large_v3_turbo_wired_everywhere():
         "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
     assert "large-v3-turbo" in WHISPER_MODELS
     assert "large-v3-turbo" in WHISPER_VRAM_MB
-    assert "large-v3-turbo" in [name for name, _ in MODEL_CHOICES]
+    assert "large-v3-turbo" in [c[0] for c in MODEL_CHOICES]
     # faster-whisper itself must resolve the name to the SAME repo,
     # or the Models tab would track a different cache than the engine
     from faster_whisper.utils import _MODELS

@@ -258,6 +258,49 @@ def install_packages(packages, log=None, cancelled=None) -> None:
          "--no-warn-script-location", *packages], log, cancelled)
 
 
+# ---------------------------------------------------------- model weights
+# Weights used to download on the first REAL transcription, which looked
+# like a frozen app minutes into a user's first video. Setup now fetches
+# everything it needs, so a finished install is genuinely ready.
+GIGAAM_ONNX_SIZE_MB = 850
+WHISPER_SIZE_MB = {"large-v3": 3000, "large-v3-turbo": 1600,
+                   "medium": 1500, "small": 500, "base": 150}
+
+
+def install_gigaam_model(model_name: str, log=None, progress=None,
+                         cancelled=None) -> None:
+    """Download (and load once, which validates it) the GigaAM ONNX
+    model plus the silero VAD inside the managed runtime, so the first
+    video does not stop for a ~850 MB download."""
+    onnx_name = "gigaam-" + model_name.replace("_", "-")
+    script = (
+        "import onnx_asr\n"
+        f"print('downloading {onnx_name} ...', flush=True)\n"
+        f"onnx_asr.load_model({onnx_name!r})\n"
+        "print('downloading silero vad ...', flush=True)\n"
+        "onnx_asr.load_vad('silero')\n"
+        "print('gigaam model ready', flush=True)\n")
+    _run_streaming([str(python_exe()), "-c", script], log, cancelled)
+
+
+def install_whisper_model(model_name: str, log=None, progress=None,
+                          cancelled=None) -> None:
+    """Pre-download the chosen faster-whisper model into the shared HF
+    cache (same place the engine reads it from)."""
+    from . import models as models_mod
+
+    repo = models_mod.WHISPER_REPOS.get(model_name)
+    if not repo:
+        return
+    if log:
+        log(f"Downloading whisper model {model_name} ({repo}) …")
+    script = (
+        "from huggingface_hub import snapshot_download\n"
+        f"snapshot_download({repo!r})\n"
+        "print('whisper model ready', flush=True)\n")
+    _run_streaming([str(python_exe()), "-c", script], log, cancelled)
+
+
 def _run_streaming(cmd, log=None, cancelled=None) -> None:
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True,
