@@ -582,6 +582,7 @@ def test_gigaam_backend_choice(window, monkeypatch):
 
 # ---------------------------------------------- gigaam onnx backend
 def test_chars_to_words_conversion():
+    """Character-level tokens (v3 ctc/rnnt): bare space separates."""
     from wordmute_app.engine.wordmute import _chars_to_words
 
     tokens = list("бог") + [" "] + list("из")
@@ -595,6 +596,39 @@ def test_chars_to_words_conversion():
     # leading/double spaces never produce empty words
     only = _chars_to_words([" ", "а", " ", " "], [0, 1, 2, 3], 0.0)
     assert [w["w"] for w in only] == ["а"]
+
+
+def test_subword_tokens_split_into_words():
+    """Regression (real user report): the *_e2e_* models use
+    SentencePiece subwords where a LEADING space starts a word — the
+    old splitter only cut on a bare ' ' token, so whole sentences
+    became a single 'word' and muting one cut the whole sentence."""
+    from wordmute_app.engine.wordmute import _chars_to_words
+
+    # shape produced by gigaam-v3-e2e-rnnt (leading-space subwords,
+    # punctuation attached, occasional bare-space token)
+    tokens = [" Замен", "ят", " ли", " программист", "ов", "?",
+              " Этот", " вопрос", ","]
+    times = [0.0, 0.2, 0.4, 0.6, 0.9, 1.0, 1.2, 1.5, 1.7]
+    words = _chars_to_words(tokens, times, offset=100.0)
+    assert [w["w"] for w in words] == [
+        "Заменят", "ли", "программистов?", "Этот", "вопрос,"]
+    assert words[0]["s"] == 100.0
+    assert words[2]["s"] == 100.6          # word starts at its subword
+    # every word must be short — no sentence-long spans
+    assert all(w["e"] - w["s"] < 1.0 for w in words)
+
+    # raw sentencepiece marker form is handled too
+    raw = _chars_to_words(["▁мас", "совый", "▁звез", "дец", "."],
+                          [0.0, 0.3, 0.6, 0.9, 1.1], offset=0.0)
+    assert [w["w"] for w in raw] == ["массовый", "звездец."]
+
+    # and the matching engine sees single words, not sentences
+    from wordmute_app.engine import wordmute as engine
+    exact, stems, phrases, subs = engine.parse_wordlist_lines(["звездец"])
+    hits = engine.find_hits(raw, exact, stems, phrases, subs, pad_ms=100)
+    assert len(hits) == 1
+    assert hits[0][1] - hits[0][0] < 1.0   # ~one word, not a sentence
 
 
 def test_gigaam_backend_routing(tmp_path, monkeypatch):

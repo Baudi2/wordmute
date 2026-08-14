@@ -290,26 +290,40 @@ def _gigaam_onnx_pipeline(model_name: str):
 
 
 def _chars_to_words(tokens, times, offset: float):
-    """onnx-asr emits char-level tokens with per-char times RELATIVE to
-    the VAD segment; split on the space token into word dicts. A word's
-    end gets one ~80 ms emission frame of padding."""
+    """Fold onnx-asr tokens into word dicts (times are RELATIVE to the
+    VAD segment; a word's end gets one ~80 ms emission frame of pad).
+
+    Two token shapes exist and BOTH must split into single words:
+      * character-level (v3 ctc/rnnt): 'с','е',' ','м','ы' — a bare
+        space token separates words;
+      * SentencePiece subwords (the *_e2e_* models): ' Замен','ят',
+        ' ли','?' — a LEADING space (or a raw '▁') starts a new word,
+        punctuation attaches to the word before it.
+    Getting this wrong once cost whole muted sentences: without the
+    subword case every e2e segment folded into ONE 10-second 'word'."""
     words, cur = [], []
-    t_first = t_last = 0.0
+    start = end = 0.0
+
+    def flush():
+        text = "".join(cur).strip()
+        if text:
+            words.append({"w": text, "s": round(offset + start, 3),
+                          "e": round(offset + end + 0.08, 3)})
+        cur.clear()
+
     for tok, t in zip(tokens, times):
-        if tok == " ":
-            if cur:
-                words.append({"w": "".join(cur),
-                              "s": round(offset + t_first, 3),
-                              "e": round(offset + t_last + 0.08, 3)})
-            cur = []
-        else:
-            if not cur:
-                t_first = t
-            cur.append(tok)
-            t_last = t
-    if cur:
-        words.append({"w": "".join(cur), "s": round(offset + t_first, 3),
-                      "e": round(offset + t_last + 0.08, 3)})
+        if not tok:
+            continue
+        if tok.startswith((" ", "▁")) or not tok.strip():
+            flush()                      # word boundary
+        piece = tok.replace("▁", " ").strip()
+        if not piece:
+            continue
+        if not cur:
+            start = t
+        cur.append(piece)
+        end = t
+    flush()
     return words
 
 
