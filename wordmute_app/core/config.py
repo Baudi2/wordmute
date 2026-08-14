@@ -25,6 +25,9 @@ DEFAULT_SETTINGS = {
     # WER over 11 RU test sets); e2e's punctuation is stripped by our
     # matching anyway. Existing settings.json values are respected.
     "gigaam_model": "v3_rnnt",
+    # auto = torch on a CUDA GPU (fastest), onnx-asr otherwise;
+    # "torch"/"onnx" force one backend
+    "gigaam_backend": "auto",
     "pad_ms": 100,
     "language": "ru",
     "vad": True,

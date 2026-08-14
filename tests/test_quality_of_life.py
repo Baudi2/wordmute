@@ -545,6 +545,41 @@ def test_waveform_strip_paints(qapp):
     strip.hide()
 
 
+# ------------------------------------------- gigaam backend routing
+def test_gigaam_backend_choice(window, monkeypatch):
+    """Regression: installing onnx-asr silently moved GigaAM off the
+    user's GPU onto the CPU. torch must win when a CUDA GPU is
+    actually usable; onnx-asr wins everywhere else."""
+    import importlib.util
+
+    installed = {"gigaam", "onnx_asr"}
+    monkeypatch.setattr(
+        importlib.util, "find_spec",
+        lambda name: object() if name in installed else None)
+
+    window._gpus = [object()]        # a GPU is present
+    assert window._pick_gigaam_backend({"device": "cuda"}) == "torch"
+    # CPU device chosen in settings -> onnx (torch on CPU is slow)
+    assert window._pick_gigaam_backend({"device": "cpu"}) == "onnx"
+    # no GPU detected -> onnx even with device=cuda in settings
+    window._gpus = []
+    assert window._pick_gigaam_backend({"device": "cuda"}) == "onnx"
+
+    # only onnx installed -> onnx; only torch installed -> torch
+    window._gpus = [object()]
+    installed = {"onnx_asr"}
+    assert window._pick_gigaam_backend({"device": "cuda"}) == "onnx"
+    installed = {"gigaam"}
+    assert window._pick_gigaam_backend({"device": "cpu"}) == "torch"
+
+    # explicit setting always wins
+    installed = {"gigaam", "onnx_asr"}
+    assert window._pick_gigaam_backend(
+        {"device": "cuda", "gigaam_backend": "onnx"}) == "onnx"
+    assert window._pick_gigaam_backend(
+        {"device": "cpu", "gigaam_backend": "torch"}) == "torch"
+
+
 # ---------------------------------------------- gigaam onnx backend
 def test_chars_to_words_conversion():
     from wordmute_app.engine.wordmute import _chars_to_words

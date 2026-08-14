@@ -280,7 +280,8 @@ def _gigaam_onnx_pipeline(model_name: str):
         os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
         import onnx_asr
         onnx_name = "gigaam-" + model_name.replace("_", "-")
-        _emit("model_load", engine="gigaam", model=model_name, device="cpu")
+        _emit("model_load", engine="gigaam", model=model_name,
+              device="cpu (onnx-asr)")
         _GIGAAM_ONNX[model_name] = (
             onnx_asr.load_model(onnx_name)
             .with_vad(onnx_asr.load_vad("silero"))

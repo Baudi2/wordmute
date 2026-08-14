@@ -966,6 +966,24 @@ class MainWindow(QMainWindow):
             style.polish(self.warnings_label)
 
     # ---------------------------------------------------------- run
+    def _pick_gigaam_backend(self, settings) -> str:
+        """torch on a working CUDA GPU is still by far the fastest
+        GigaAM path; onnx-asr wins everywhere else (fast on plain CPU,
+        no HF account). Settings "gigaam_backend" forces either one.
+        find_spec avoids importing torch/onnxruntime just to choose."""
+        from importlib.util import find_spec
+
+        forced = settings.get("gigaam_backend", "auto")
+        if forced in ("torch", "onnx"):
+            return forced
+        has_torch = find_spec("gigaam") is not None
+        has_onnx = find_spec("onnx_asr") is not None
+        if has_torch and settings.get("device") == "cuda" and self._gpus:
+            return "torch"          # GPU: torch is much faster
+        if has_onnx:
+            return "onnx"
+        return "torch"
+
     def _selected_wordlists(self):
         paths = []
         if self.russian_check.isChecked():
@@ -1031,13 +1049,7 @@ class MainWindow(QMainWindow):
                     self, "WordMute",
                     tr("Add at least one pass to the plan."))
             return
-        # GigaAM backend: prefer onnx-asr (CPU-fast, no HF token) when
-        # installed; only the torch path needs the one-time HF wizard
-        try:
-            import onnx_asr  # noqa: F401
-            gigaam_backend = "onnx"
-        except ImportError:
-            gigaam_backend = "torch"
+        gigaam_backend = self._pick_gigaam_backend(self._settings)
         if (not auto and "gigaam" in engines
                 and gigaam_backend == "torch"
                 and not self._gigaam_ready()):
