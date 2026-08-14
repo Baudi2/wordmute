@@ -847,7 +847,7 @@ def test_url_dialog_multi_mode(qapp):
     from wordmute_app.ui.url_dialog import AddUrlDialog
 
     d = AddUrlDialog(auto_fetch=False)
-    d.url_edit.setText("https://a.com/1 https://b.com/2 https://c.com/3")
+    d.url_edit.setPlainText("https://a.com/1 https://b.com/2 https://c.com/3")
     assert d._multi_urls == ["https://a.com/1", "https://b.com/2",
                              "https://c.com/3"]
     assert "3" in d.best_button.text()
@@ -879,7 +879,7 @@ def test_batch_quality_presets_and_selection(qapp):
 
     # a remembered choice is preselected and honoured
     d = AddUrlDialog(auto_fetch=False, quality="480")
-    d.url_edit.setText("https://a.com/1 https://b.com/2")
+    d.url_edit.setPlainText("https://a.com/1 https://b.com/2")
     assert d.quality() == "480"
     assert "480" in d.status.text() or "480" in d.result_items()[0].format_spec
     d.quality_combo.setCurrentIndex(d.quality_combo.findData("audio"))
@@ -887,13 +887,46 @@ def test_batch_quality_presets_and_selection(qapp):
 
     # single-link mode never shows the batch selector
     single = AddUrlDialog(auto_fetch=False)
-    single.url_edit.setText("https://only.com/1")
+    single.url_edit.setPlainText("https://only.com/1")
     assert not single.quality_row.isVisibleTo(single)
+
+
+def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
+    from PySide6.QtWidgets import QDialogButtonBox
+    from wordmute_app.ui.url_dialog import AddUrlDialog
+
+    d = AddUrlDialog(auto_fetch=False)
+    single_h = d.url_edit.maximumHeight()
+    assert d.table.isVisibleTo(d)
+
+    d.url_edit.setPlainText(
+        "https://a.com/1 https://b.com/2 https://c.com/3")
+    # pasted on one line -> rewritten one per line, no text lost
+    assert d.url_edit.toPlainText() == \
+        "https://a.com/1\nhttps://b.com/2\nhttps://c.com/3"
+    # the table's space goes to the input; table + "add selected" gone
+    assert not d.table.isVisibleTo(d)
+    assert not d.buttons.button(QDialogButtonBox.Ok).isVisibleTo(d)
+    assert d.url_edit.maximumHeight() > single_h
+    assert d.layout().stretch(
+        d.layout().indexOf(d.url_edit)) == 1
+
+    # editing the list further must not fight the caret or re-wrap
+    d.url_edit.setPlainText("https://a.com/1\nhttps://b.com/2")
+    assert d._multi_urls == ["https://a.com/1", "https://b.com/2"]
+    assert d.url_edit.toPlainText() == \
+        "https://a.com/1\nhttps://b.com/2"
+
+    # back to one link -> single-line layout restored
+    d.url_edit.setPlainText("https://only.com/1")
+    assert d.table.isVisibleTo(d)
+    assert d.buttons.button(QDialogButtonBox.Ok).isVisibleTo(d)
+    assert d.url_edit.maximumHeight() == single_h
 
     # back to a single link: normal mode, single result
     d2 = AddUrlDialog(auto_fetch=False)
-    d2.url_edit.setText("https://a.com/1 https://b.com/2")
-    d2.url_edit.setText("https://only.com/1")
+    d2.url_edit.setPlainText("https://a.com/1 https://b.com/2")
+    d2.url_edit.setPlainText("https://only.com/1")
     assert d2._multi_urls == []
     d2._use_best = True
     assert [i.url for i in d2.result_items()] == ["https://only.com/1"]

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QTableWidget,
@@ -44,6 +44,21 @@ def extract_urls(text: str) -> list:
         if url not in seen:
             seen.append(url)
     return seen
+
+
+class _UrlEdit(QPlainTextEdit):
+    """URL input that grows: one line for a single link, a proper
+    multi-line list when several are pasted. Enter submits (Shift+
+    Enter always inserts a newline), so a single link still behaves
+    like the old one-line field."""
+    submitted = Signal()
+
+    def keyPressEvent(self, event):
+        if (event.key() in (Qt.Key_Return, Qt.Key_Enter)
+                and not (event.modifiers() & Qt.ShiftModifier)):
+            self.submitted.emit()
+            return
+        super().keyPressEvent(event)
 
 
 class FormatListWorker(QThread):
@@ -80,16 +95,24 @@ class AddUrlDialog(QDialog):
         self._fetch_generation = 0
         self._multi_urls = []
 
+        self._reformatting = False   # guard: setPlainText re-enters
+
         layout = QVBoxLayout(self)
-        self.url_edit = QLineEdit(url)
+        self.url_edit = _UrlEdit()
+        self.url_edit.setPlainText(url)
         self.url_edit.setPlaceholderText("https://…")
+        self.url_edit.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.url_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._single_height = (self.url_edit.fontMetrics().height()
+                               + 20)   # one line + QSS padding
+        self.url_edit.setFixedHeight(self._single_height)
         # formats load automatically: debounce typing, Enter = right now
         self._fetch_timer = QTimer(self)
         self._fetch_timer.setSingleShot(True)
         self._fetch_timer.setInterval(800)
         self._fetch_timer.timeout.connect(self._fetch)
         self.url_edit.textChanged.connect(self._schedule_fetch)
-        self.url_edit.returnPressed.connect(self._fetch)
+        self.url_edit.submitted.connect(self._fetch)
         layout.addWidget(self.url_edit)
 
         self.status = QLabel(tr("Paste a video URL — the format list "
@@ -184,14 +207,16 @@ class AddUrlDialog(QDialog):
 
     # ---------------------------------------------------------- fetching
     def _url(self) -> str:
-        return self.url_edit.text().strip()
+        return self.url_edit.toPlainText().strip()
 
     @staticmethod
     def _looks_like_url(text: str) -> bool:
         return text.strip().startswith(("http://", "https://"))
 
     def _schedule_fetch(self):
-        urls = extract_urls(self.url_edit.text())
+        if self._reformatting:
+            return
+        urls = extract_urls(self.url_edit.toPlainText())
         if len(urls) >= 2:
             self._enter_multi_mode(urls)
             return
@@ -204,15 +229,40 @@ class AddUrlDialog(QDialog):
 
     def _enter_multi_mode(self, urls):
         """Several links pasted: no per-link format table — one quality
-        cap applies to the whole batch."""
+        cap applies to the whole batch, and the input takes over the
+        table's space to show one link per line."""
         self._fetch_timer.stop()
+        first_time = not self._multi_urls
         self._multi_urls = urls
         self.loading_bar.setVisible(False)
         self.table.setRowCount(0)
+        self.table.setVisible(False)      # useless without a fetch
         self._info = None
         self.quality_row.setVisible(True)
+        # one URL per line; keep the caret at the end after rewriting
+        wanted = "\n".join(urls)
+        if self.url_edit.toPlainText().strip() != wanted:
+            self._reformatting = True
+            try:
+                self.url_edit.setPlainText(wanted)
+                cursor = self.url_edit.textCursor()
+                cursor.movePosition(cursor.MoveOperation.End)
+                self.url_edit.setTextCursor(cursor)
+            finally:
+                self._reformatting = False
+        if first_time:
+            self.url_edit.setMinimumHeight(self._single_height)
+            self.url_edit.setMaximumHeight(16777215)
+            self._url_stretch(True)
+            # nothing to select without the table
+            self.buttons.button(QDialogButtonBox.Ok).setVisible(False)
         self._update_multi_labels()
         self._update_ok()
+
+    def _url_stretch(self, on: bool):
+        """Give the input the table's vertical space in batch mode."""
+        layout = self.layout()
+        layout.setStretchFactor(self.url_edit, 1 if on else 0)
 
     def _update_multi_labels(self):
         if not self._multi_urls:
@@ -230,6 +280,11 @@ class AddUrlDialog(QDialog):
     def _leave_multi_mode(self):
         self._multi_urls = []
         self.quality_row.setVisible(False)
+        self.table.setVisible(True)
+        self.buttons.button(QDialogButtonBox.Ok).setVisible(True)
+        self._url_stretch(False)
+        self.url_edit.setMinimumHeight(0)
+        self.url_edit.setFixedHeight(self._single_height)
         self.best_button.setText(tr("Add (best quality)"))
         self.status.setText(tr("Paste a video URL — the format list "
                                "loads automatically."))

@@ -73,8 +73,8 @@ def test_stale_fetch_results_ignored(qapp):
 
 def test_debounce_starts_only_for_urls(qapp):
     d = make_dialog(qapp)
-    d.url_edit.setText("not a url")
+    d.url_edit.setPlainText("not a url")
     assert not d._fetch_timer.isActive()
-    d.url_edit.setText("https://example.com/other")
+    d.url_edit.setPlainText("https://example.com/other")
     assert d._fetch_timer.isActive()
     d._fetch_timer.stop()
