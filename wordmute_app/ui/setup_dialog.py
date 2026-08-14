@@ -205,13 +205,17 @@ class SetupDialog(QDialog):
         brand = QLabel("WordMute")
         brand.setObjectName("wizard_brand")
         row.addWidget(brand)
-        self.brand_sub = QLabel(tr("component setup"))
+        self.brand_sub = QLabel("· " + tr("first-run setup"))
         self.brand_sub.setObjectName("wizard_brand_sub")
         row.addWidget(self.brand_sub)
         row.addStretch()
         self.lang_button = QToolButton()
         self.lang_button.setObjectName("lang_button")
         self.lang_button.setPopupMode(QToolButton.InstantPopup)
+        self.lang_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        from .theme import ui_icon
+        self.lang_button.setIcon(ui_icon("globe"))
+        self.lang_button.setIconSize(QSize(14, 14))
         menu = QMenu(self.lang_button)
         menu.setObjectName("lang_menu")
         for code, native in (("ru", "Русский"), ("en", "English")):
@@ -302,7 +306,10 @@ class SetupDialog(QDialog):
         self.ffmpeg_check.setChecked(not st["ffmpeg"])
         self.ffmpeg_check.setEnabled(not st["ffmpeg"])
         self.gigaam_check = QCheckBox(tr("Install"))
-        self.gigaam_check.setChecked(False)
+        # on by default: the onnx backend is verified working, needs no
+        # account and adds real accuracy on the app's main language
+        self.gigaam_check.setChecked(not st["gigaam"])
+        self.gigaam_check.setEnabled(not st["gigaam"])
 
         self.device_group = QButtonGroup(self)
         self.gpu_radio = QRadioButton(tr("GPU (NVIDIA)"))
@@ -341,23 +348,26 @@ class SetupDialog(QDialog):
                        and (self.whisper_check.isChecked()
                             or self.ytdlp_check.isChecked()
                             or self.gigaam_check.isChecked()))
+        device = tr("GPU") if self.gpu_radio.isChecked() else tr("CPU")
         rows = [
-            ("python", tr("Python runtime"), PYTHON_MB, need_python),
-            ("whisper", "Whisper", self._whisper_mb(),
+            ("python", "Python", tr("runtime environment"),
+             PYTHON_MB, need_python),
+            ("whisper", "Whisper", device, self._whisper_mb(),
              self.whisper_check.isChecked()),
-            ("whisper_model", tr("Recognition model {}").format(model),
-             model_mb, self.whisper_check.isChecked()
-             or not st["faster_whisper"]),
-            ("ytdlp", "yt-dlp", YTDLP_MB, self.ytdlp_check.isChecked()),
-            ("ffmpeg", "ffmpeg", FFMPEG_MB, self.ffmpeg_check.isChecked()),
-            ("gigaam", "GigaAM",
+            ("whisper_model", tr("Recognition model"), model, model_mb,
+             self.whisper_check.isChecked() or not st["faster_whisper"]),
+            ("ytdlp", "yt-dlp", tr("downloads by link"), YTDLP_MB,
+             self.ytdlp_check.isChecked()),
+            ("ffmpeg", "ffmpeg", tr("audio and video"), FFMPEG_MB,
+             self.ffmpeg_check.isChecked()),
+            ("gigaam", "GigaAM", tr("Russian speech"),
              GIGAAM_PKG_MB + runtime_env.GIGAAM_ONNX_SIZE_MB,
              self.gigaam_check.isChecked()),
         ]
         return rows
 
     def total_mb(self) -> int:
-        return sum(mb for _k, _l, mb, on in self._plan() if on)
+        return sum(mb for _k, _l, _s, mb, on in self._plan() if on)
 
     # ------------------------------------------------------------- pages
     def _persistent_controls(self):
@@ -391,32 +401,60 @@ class SetupDialog(QDialog):
         scroll.setWidget(body)
         return scroll, box
 
-    def _head(self, box, name, sub, size_mb=None, required=None):
+    def _head(self, box, name, sub, size_mb=None, required=None,
+              size_sub=None):
+        """Component header: name + badge on the left, size and its
+        caption right-aligned, sub-line under the name, then a rule."""
         row = QHBoxLayout()
         row.setSpacing(8)
+        left = QVBoxLayout()
+        left.setSpacing(2)
+        name_row = QHBoxLayout()
+        name_row.setSpacing(8)
         title = QLabel(name)
         title.setObjectName("comp_name")
-        row.addWidget(title)
+        name_row.addWidget(title)
         if required is not None:
             badge = QLabel(tr("required") if required else tr("optional"))
             badge.setProperty("badge",
                               "required" if required else "optional")
-            row.addWidget(badge)
-        row.addStretch()
-        if size_mb is not None:
-            size = QLabel(fmt_mb(size_mb))
-            size.setObjectName("comp_size")
-            row.addWidget(size)
-        box.addLayout(row)
+            name_row.addWidget(badge, alignment=Qt.AlignVCenter)
+        name_row.addStretch()
+        left.addLayout(name_row)
         if sub:
             sub_label = QLabel(sub)
             sub_label.setObjectName("comp_sub")
             sub_label.setWordWrap(True)
-            box.addWidget(sub_label)
+            left.addWidget(sub_label)
+        row.addLayout(left, stretch=1)
+        if size_mb is not None:
+            right = QVBoxLayout()
+            right.setSpacing(2)
+            size = QLabel(fmt_mb(size_mb))
+            size.setObjectName("comp_size")
+            size.setAlignment(Qt.AlignRight)
+            right.addWidget(size)
+            caption = QLabel(size_sub or tr("downloaded once"))
+            caption.setObjectName("comp_size_sub")
+            caption.setAlignment(Qt.AlignRight)
+            right.addWidget(caption)
+            row.addLayout(right)
+        box.addLayout(row)
         rule = QFrame()
         rule.setObjectName("page_rule")
         rule.setFixedHeight(1)
         box.addWidget(rule)
+
+    def _title(self, box, text):
+        label = QLabel(text)
+        label.setObjectName("page_title")
+        label.setWordWrap(True)
+        box.addWidget(label)
+
+    def _section(self, box, text):
+        label = QLabel(text.upper())     # QSS letter-spaces the caps
+        label.setObjectName("section_label")
+        box.addWidget(label)
 
     def _lead(self, box, text):
         label = QLabel(text)
@@ -429,8 +467,9 @@ class SetupDialog(QDialog):
         for text in items:
             row = QHBoxLayout()
             row.setSpacing(8)
-            dot = QLabel("•")
+            dot = QLabel()            # the 5px dot is drawn by the QSS
             dot.setObjectName("bullet_dot")
+            dot.setFixedSize(5, 5)
             row.addWidget(dot, alignment=Qt.AlignTop)
             label = QLabel(text)
             label.setObjectName("bullet_text")
@@ -440,18 +479,30 @@ class SetupDialog(QDialog):
             box.addLayout(row)
 
     def _note(self, box, text, severity="info"):
-        row = QHBoxLayout()
+        """Icon + boxed text as ONE widget, so hiding the note hides
+        its icon too (a lone floating glyph looked like a glitch)."""
+        holder = QWidget()
+        row = QHBoxLayout(holder)
+        row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
-        icon = QLabel("⚠" if severity != "info" else "ℹ")
+        icon = QLabel()
         icon.setObjectName("page_note_icon")
+        icon.setFixedWidth(16)
+        if severity in ("warn", "error"):
+            from .theme import ui_icon
+            tint = "#e6d5ae" if severity == "warn" else "#eab7b7"
+            icon.setPixmap(ui_icon("warning", 14, tint).pixmap(14, 14))
+        else:
+            icon.setText("ℹ")
         row.addWidget(icon, alignment=Qt.AlignTop)
         label = QLabel(text)
         label.setObjectName("page_note")
         label.setProperty("severity", severity)
         label.setWordWrap(True)
         row.addWidget(label, stretch=1)
-        box.addLayout(row)
-        return label
+        box.addWidget(holder)
+        holder.label = label
+        return holder
 
     def _make_page(self, key):
         scroll, box = self._page_shell()
@@ -461,20 +512,23 @@ class SetupDialog(QDialog):
         return scroll
 
     def _page_intro(self, box):
-        self._head(box, tr("What you need"), "", None, None)
+        self._title(box, tr("Let's get WordMute ready"))
         self._lead(box, tr(
             "WordMute installs the app itself; the recognition engines "
             "are downloaded once, right now. Everything lands in your "
             "user folder — no administrator rights needed."))
         self._bullets(box, [
-            tr("A stable internet connection and free disk space."),
-            tr("In Russia python.org / PyPI / Hugging Face may be "
-               "blocked or throttled — turn on a VPN for the setup."),
-            tr("The download can be interrupted and resumed: already "
-               "downloaded parts are kept."),
+            tr("Next: one step per component — what it is, how big it "
+               "is, whether you need it."),
+            tr("Required components are marked; optional ones can be "
+               "skipped and added later in Settings."),
+            tr("A stable connection and free disk space are needed. "
+               "Setup can be interrupted and resumed later."),
         ])
-        self._note(box, tr("After this setup the app works fully "
-                           "offline — nothing downloads mid-video."))
+        self._note(box, tr("In Russia python.org, PyPI and Hugging Face "
+                           "may be blocked or throttled. If a download "
+                           "stalls — turn on a VPN and press «Retry»."),
+                   "warn")
 
     def _page_python(self, box):
         self._head(box, tr("Python runtime"),
@@ -493,9 +547,7 @@ class SetupDialog(QDialog):
         self._lead(box, tr(
             "faster-whisper handles any language and runs right after "
             "setup. Pick how it should run and which model to fetch."))
-        label = QLabel(tr("Device"))
-        label.setObjectName("section_label")
-        box.addWidget(label)
+        self._section(box, tr("Device"))
         device_row = QHBoxLayout()
         device_row.setSpacing(8)
         device_row.addWidget(SelectCard(
@@ -510,9 +562,7 @@ class SetupDialog(QDialog):
         if not self._gpus:
             self._note(box, tr("No NVIDIA GPU detected — CPU is "
                                "preselected."))
-        label = QLabel(tr("Recognition model"))
-        label.setObjectName("section_label")
-        box.addWidget(label)
+        self._section(box, tr("Recognition model"))
         sub = QLabel(tr("Downloaded during this setup, so the first "
                         "video starts immediately."))
         sub.setObjectName("page_sub")
@@ -550,77 +600,163 @@ class SetupDialog(QDialog):
     def _page_gigaam(self, box):
         total = GIGAAM_PKG_MB + runtime_env.GIGAAM_ONNX_SIZE_MB
         self._head(box, "GigaAM", tr("Better Russian recognition"),
-                   total, False)
+                   total, False,
+                   size_sub=tr("engine and model"))
         self._lead(box, tr(
-            "An optional second engine that is noticeably more "
-            "accurate on Russian speech. Runs fast even without a "
-            "graphics card and needs no accounts."))
+            "A second engine from Sber that reads Russian speech more "
+            "accurately than Whisper. Runs fast even without a "
+            "graphics card, and needs no accounts or tokens."))
         self._bullets(box, [
             tr("Engine and model are downloaded now — nothing is left "
                "for the first video."),
-            tr("Experimental: use it together with Whisper, not "
-               "instead of it."),
+            tr("Works together with Whisper: a typical plan is "
+               "GigaAM ×2 → Whisper."),
         ])
         box.addWidget(SelectCard(
             self.gigaam_check, tr("Install GigaAM"),
             tr("{} including the model").format(fmt_mb(total))))
 
     def _page_review(self, box):
-        self._head(box, tr("Review"), tr("What will be downloaded now"),
-                   None, None)
+        self._title(box, tr("Check before installing"))
+        sub = QLabel(tr("Everything here can be changed later in "
+                        "Settings → Components."))
+        sub.setObjectName("page_sub")
+        sub.setWordWrap(True)
+        box.addWidget(sub)
+
+        card = QFrame()
+        card.setObjectName("review_card")
+        card_box = QVBoxLayout(card)
+        card_box.setContentsMargins(0, 0, 0, 0)
+        card_box.setSpacing(0)
         self.review_box = QVBoxLayout()
-        self.review_box.setSpacing(6)
-        box.addLayout(self.review_box)
+        self.review_box.setContentsMargins(0, 0, 0, 0)
+        self.review_box.setSpacing(0)
+        card_box.addLayout(self.review_box)
+        total_row = QWidget()
+        total_row.setObjectName("review_total_row")
+        total_line = QHBoxLayout(total_row)
+        total_line.setContentsMargins(14, 10, 14, 10)
+        label = QLabel(tr("Downloading now"))
+        label.setObjectName("review_total_label")
+        total_line.addWidget(label)
+        total_line.addStretch()
         self.review_total = QLabel()
         self.review_total.setObjectName("review_total_value")
-        box.addWidget(self.review_total)
-        folder = QLabel(tr("Install folder: {}").format(
-            runtime_env.runtime_dir()))
-        folder.setObjectName("folder_path")
-        folder.setWordWrap(True)
-        box.addWidget(folder)
+        total_line.addWidget(self.review_total)
+        card_box.addWidget(total_row)
+        box.addWidget(card)
+
+        info_row = QHBoxLayout()
+        self.review_later = QLabel()
+        self.review_later.setObjectName("review_later")
+        info_row.addWidget(self.review_later)
+        info_row.addStretch()
+        self.review_disk = QLabel()
+        self.review_disk.setObjectName("review_disk")
+        info_row.addWidget(self.review_disk)
+        box.addLayout(info_row)
+
+        folder_row = QFrame()
+        folder_row.setObjectName("folder_row")
+        folder_line = QHBoxLayout(folder_row)
+        folder_line.setContentsMargins(14, 10, 14, 10)
+        folder_line.setSpacing(10)
+        folder_label = QLabel(tr("Folder"))
+        folder_label.setObjectName("folder_label")
+        folder_line.addWidget(folder_label)
+        path = QLabel(str(runtime_env.runtime_dir()))
+        path.setObjectName("folder_path")
+        path.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        folder_line.addWidget(path, stretch=1)
+        box.addWidget(folder_row)
 
     def _refresh_review(self):
         while self.review_box.count():
             item = self.review_box.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        for _key, label, mb, on in self._plan():
+        for _key, label, sub, mb, on in self._plan():
             row = QFrame()
             row.setProperty("reviewRow", True)
             line = QHBoxLayout(row)
-            line.setContentsMargins(10, 6, 10, 6)
+            line.setContentsMargins(14, 9, 14, 9)
+            line.setSpacing(8)
+            icon = QLabel("✓" if on else "✕")
+            icon.setObjectName("row_icon")
+            icon.setFixedWidth(16)
+            line.addWidget(icon)
             name = QLabel(label)
             name.setObjectName("review_name")
+            if not on:
+                name.setProperty("state", "skip")
             line.addWidget(name)
+            if sub:
+                dot = QLabel("·")
+                dot.setObjectName("review_sub")
+                line.addWidget(dot)
+                sub_label = QLabel(sub)
+                sub_label.setObjectName("review_sub")
+                line.addWidget(sub_label)
             line.addStretch()
             size = QLabel(fmt_mb(mb) if on else tr("skipped"))
             size.setObjectName("review_size")
             if not on:
-                size.setProperty("muted", True)
+                size.setProperty("state", "skip")
             line.addWidget(size)
             self.review_box.addWidget(row)
-        self.review_total.setText(
-            tr("Total download: {}").format(fmt_mb(self.total_mb())))
+        self.review_total.setText(fmt_mb(self.total_mb()))
+        # nothing is deferred any more — say so instead of "later: 0"
+        self.review_later.setText(
+            tr("Nothing is downloaded later — the app is ready right "
+               "after setup."))
+        self.review_disk.setText(
+            tr("Free on disk: {}").format(self._free_disk()))
+
+    def _free_disk(self) -> str:
+        import shutil
+        try:
+            target = runtime_env.runtime_dir()
+            while not target.exists() and target.parent != target:
+                target = target.parent
+            free = shutil.disk_usage(target).free
+        except OSError:
+            return "—"
+        return models.fmt_size(free)
 
     def _page_install(self, box):
+        head = QHBoxLayout()
+        titles = QVBoxLayout()
+        titles.setSpacing(2)
         title = QLabel(tr("Installing"))
         title.setObjectName("install_title")
-        box.addWidget(title)
+        titles.addWidget(title)
         self.install_sub = QLabel(tr("Do not close the window."))
         self.install_sub.setObjectName("install_sub")
         self.install_sub.setWordWrap(True)
-        box.addWidget(self.install_sub)
+        titles.addWidget(self.install_sub)
+        head.addLayout(titles, stretch=1)
+        self.install_percent = QLabel("0%")
+        self.install_percent.setObjectName("install_percent")
+        head.addWidget(self.install_percent, alignment=Qt.AlignTop)
+        box.addLayout(head)
         self.total_progress = QProgressBar()
         self.total_progress.setObjectName("total_progress")
+        self.total_progress.setTextVisible(False)
         self.total_progress.setRange(0, 0)
         box.addWidget(self.total_progress)
         self.rows_box = QVBoxLayout()
-        self.rows_box.setSpacing(4)
+        self.rows_box.setSpacing(7)
         box.addLayout(self.rows_box)
-        self.log_toggle = QPushButton(tr("Details"))
+        self.log_toggle = QToolButton()
         self.log_toggle.setObjectName("log_toggle")
+        self.log_toggle.setText(tr("Installation log"))
         self.log_toggle.setCheckable(True)
+        self.log_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.log_toggle.setArrowType(Qt.RightArrow)
+        self.log_toggle.toggled.connect(
+            lambda on: self.log_toggle.setArrowType(
+                Qt.DownArrow if on else Qt.RightArrow))
         box.addWidget(self.log_toggle, alignment=Qt.AlignLeft)
         self.log = QPlainTextEdit()
         self.log.setObjectName("setup_log")
@@ -629,8 +765,7 @@ class SetupDialog(QDialog):
         self.log.setVisible(False)
         self.log_toggle.toggled.connect(self.log.setVisible)
         box.addWidget(self.log, stretch=1)
-        self.install_note = self._note(box, "", "info")
-        self.install_note.parentWidget()
+        self.install_note = self._note(box, "", "error")
         self.install_note.setVisible(False)
 
     def _refresh_install_rows(self):
@@ -639,36 +774,60 @@ class SetupDialog(QDialog):
             if item.widget():
                 item.widget().deleteLater()
         self._rows = {}
-        for key, label, _mb, on in self._plan():
+        for key, label, _sub, _mb, on in self._plan():
             row = QFrame()
             row.setProperty("installRow", True)
             row.setProperty("state", "todo" if on else "skipped")
             line = QHBoxLayout(row)
-            line.setContentsMargins(10, 6, 10, 6)
-            line.setSpacing(8)
-            icon = QLabel("•")
+            line.setContentsMargins(12, 9, 12, 9)
+            line.setSpacing(10)
+            icon = QLabel("+" if on else "✕")
             icon.setObjectName("row_icon")
+            icon.setFixedWidth(16)
             line.addWidget(icon)
             name = QLabel(label)
             name.setObjectName("row_name")
+            name.setFixedWidth(190)
+            if not on:
+                name.setProperty("state", "skip")
             line.addWidget(name)
-            line.addStretch()
+            bar = QProgressBar()
+            bar.setObjectName("row_progress")
+            bar.setTextVisible(False)
+            bar.setRange(0, 100)
+            bar.setValue(0)
+            line.addWidget(bar, stretch=1)
             state = QLabel(tr("waiting") if on else tr("skipped"))
             state.setObjectName("row_state")
+            state.setFixedWidth(132)
+            state.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             line.addWidget(state)
             self.rows_box.addWidget(row)
-            self._rows[key] = (row, icon, state)
+            self._rows[key] = (row, icon, bar, state)
 
     def _set_row_state(self, key: str, state: str, text: str):
         entry = self._rows.get(key)
         if not entry:
             return
-        row, icon, label = entry
+        row, icon, bar, label = entry
         row.setProperty("state", state)
         row.style().unpolish(row)
         row.style().polish(row)
-        icon.setText({"done": "✓", "err": "✕", "run": "›"}.get(state, "•"))
+        icon.setText({"done": "✓", "err": "✕", "run": "›"}.get(state, "+"))
+        if state == "run":
+            bar.setRange(0, 0)               # indeterminate while busy
+        elif state == "done":
+            bar.setRange(0, 100)
+            bar.setValue(100)
+            bar.setProperty("state", "ok")
+            bar.style().unpolish(bar)
+            bar.style().polish(bar)
+        elif state == "err":
+            bar.setRange(0, 100)
         label.setText(text)
+        label.setProperty("state", "err" if state == "err" else None)
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     # -------------------------------------------------------- navigation
     def set_step(self, index: int):
@@ -681,7 +840,7 @@ class SetupDialog(QDialog):
         total = len(self._steps)
         self.step_counter.setText(
             tr("Step {} of {}").format(index + 1, total))
-        self.step_chip.setText(tr(STEP_NAMES[key]))
+        self.step_chip.setText("· " + tr(STEP_NAMES[key]))
         left = total - 1 - index
         self.step_remaining.setText(
             tr("last step") if left <= 0 else tr("{} left").format(left))
@@ -734,7 +893,8 @@ class SetupDialog(QDialog):
 
     def _sync_lang_button(self):
         code = current_language()
-        self.lang_button.setText("RU" if code == "ru" else "EN")
+        # native language name, as the design specifies
+        self.lang_button.setText("Русский" if code == "ru" else "English")
         for act in self.lang_button.menu().actions():
             act.setChecked(act.text() == ("Русский" if code == "ru"
                                           else "English"))
@@ -814,8 +974,10 @@ class SetupDialog(QDialog):
 
     def _on_progress(self, done: int, total: int):
         if total:
+            pct = int(done / total * 100)
             self.total_progress.setRange(0, 100)
-            self.total_progress.setValue(int(done / total * 100))
+            self.total_progress.setValue(pct)
+            self.install_percent.setText(f"{pct}%")
         else:
             self.total_progress.setRange(0, 0)
 
@@ -826,13 +988,13 @@ class SetupDialog(QDialog):
             self._done = True
             self.total_progress.setRange(0, 100)
             self.total_progress.setValue(100)
+            self.install_percent.setText("100%")
             self.install_sub.setText(
                 tr("Done — everything is installed and ready."))
             self.install_note.setVisible(False)
         else:
-            self.install_note.setText(
+            self.install_note.label.setText(
                 tr("Setup failed: {}").format(message))
-            self.install_note.setProperty("severity", "error")
             self.install_note.setVisible(True)
             self.log.appendPlainText(message)
             for key, entry in self._rows.items():

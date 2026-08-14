@@ -97,6 +97,18 @@ def _svg_pixmap(svg_text: str, size: int = 36) -> QPixmap:
     return QPixmap.fromImage(image)
 
 
+def ui_icon(name: str, size: int = 14, color: str = None) -> QIcon:
+    """A flat icon from resources/theme/icons, stroke retinted to the
+    given color (defaults to the theme's muted tone)."""
+    path = theme_dir() / "icons" / f"{name}.svg"
+    if not path.exists():
+        return QIcon()
+    svg = path.read_text(encoding="utf-8")
+    tint = color or ("#9397ab" if _current_theme == "dark" else "#595d6c")
+    svg = svg.replace("#9397ab", tint).replace("currentColor", tint)
+    return QIcon(_svg_pixmap(svg, size))
+
+
 def nav_icon(name: str) -> QIcon:
     """Sidebar icon: muted stroke normally, accent when selected (the
     design recolors the same SVG rather than shipping two)."""

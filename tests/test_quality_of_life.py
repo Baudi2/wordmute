@@ -366,9 +366,9 @@ def test_gigaam_downloads_its_model_during_setup(wizard):
     # ... and the whisper weights too, so no run stalls on a download
     assert "whisper_model" in keys
 
-    # the model page advertises the full size, not just the package
-    _key, label, mb, on = [row for row in wizard._plan()
-                           if row[0] == "gigaam"][0]
+    # the page advertises the full size, not just the package
+    _key, _label, _sub, mb, on = [row for row in wizard._plan()
+                                  if row[0] == "gigaam"][0]
     assert on and mb >= runtime_env_gigaam_size()
 
     wizard.gigaam_check.setChecked(False)
@@ -416,10 +416,15 @@ def test_wizard_language_switch_keeps_selections(wizard):
 
 def test_review_totals_track_choices(wizard):
     wizard.set_step(STEP_INDEX("review"))
-    base = wizard.total_mb()
+    # GigaAM is on by default now — unchecking must lower the total
+    assert wizard.gigaam_check.isChecked()
+    with_gigaam = wizard.total_mb()
+    wizard.gigaam_check.setChecked(False)
+    wizard._refresh_review()
+    assert wizard.total_mb() < with_gigaam
     wizard.gigaam_check.setChecked(True)
     wizard._refresh_review()
-    assert wizard.total_mb() > base
+    assert wizard.total_mb() == with_gigaam
     assert "GB" in wizard.review_total.text() \
         or "ГБ" in wizard.review_total.text()
 

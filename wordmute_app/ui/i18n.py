@@ -384,6 +384,40 @@ RU = {
     "audio only (smallest)": "только аудио (самое лёгкое)",
     # setup wizard (8 steps)
     "component setup": "установка компонентов",
+    "first-run setup": "первичная настройка",
+    "Let's get WordMute ready": "Подготовим WordMute к работе",
+    "downloaded once": "скачивается один раз",
+    "engine and model": "движок и модель",
+    "In Russia python.org, PyPI and Hugging Face may be blocked or "
+    "throttled. If a download stalls — turn on a VPN and press "
+    "«Retry».":
+        "В России python.org, PyPI и Hugging Face могут быть "
+        "заблокированы или замедлены. Если загрузка не идёт — "
+        "включите VPN и нажмите «Повторить».",
+    "Check before installing": "Проверьте перед установкой",
+    "Everything here can be changed later in Settings → Components.":
+        "Позже всё это можно изменить в Настройках → Компоненты.",
+    "Downloading now": "Скачиваем сейчас",
+    "Nothing is downloaded later — the app is ready right after setup.":
+        "Ничего не докачивается позже — приложение готово сразу "
+        "после установки.",
+    "Free on disk: {}": "Свободно на диске: {}",
+    "Folder": "Папка",
+    "runtime environment": "среда исполнения",
+    "downloads by link": "загрузка по ссылке",
+    "audio and video": "обработка аудио и видео",
+    "Russian speech": "русская речь",
+    "Installation log": "Журнал установки",
+    "A second engine from Sber that reads Russian speech more "
+    "accurately than Whisper. Runs fast even without a "
+    "graphics card, and needs no accounts or tokens.":
+        "Второй движок от Сбера: разбирает русскую речь точнее, чем "
+        "Whisper. Быстро работает даже без видеокарты, аккаунты и "
+        "токены не нужны.",
+    "Works together with Whisper: a typical plan is "
+    "GigaAM ×2 → Whisper.":
+        "Работает вместе с Whisper: типичный план — "
+        "GigaAM ×2 → Whisper.",
     "What you need": "Что понадобится",
     "Review": "Проверка",
     "Installing": "Установка",
@@ -407,6 +441,18 @@ RU = {
         "пользовательскую папку, права администратора не нужны.",
     "A stable internet connection and free disk space.":
         "Стабильный интернет и свободное место на диске.",
+    "Next: one step per component — what it is, how big it "
+    "is, whether you need it.":
+        "Дальше — по одному шагу на компонент: что это, сколько "
+        "весит, нужен ли он вам.",
+    "Required components are marked; optional ones can be "
+    "skipped and added later in Settings.":
+        "Обязательные компоненты отмечены; необязательные можно "
+        "пропустить и добавить позже в Настройках.",
+    "A stable connection and free disk space are needed. "
+    "Setup can be interrupted and resumed later.":
+        "Нужен стабильный интернет и свободное место на диске. "
+        "Настройку можно прервать и продолжить позже.",
     "In Russia python.org / PyPI / Hugging Face may be "
     "blocked or throttled — turn on a VPN for the setup.":
         "В России python.org / PyPI / Hugging Face могут быть "

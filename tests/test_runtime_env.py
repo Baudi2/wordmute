@@ -206,5 +206,9 @@ def test_setup_dialog_defaults(qapp, fake_runtime, monkeypatch):
     assert not d.ytdlp_check.isChecked()
     assert d.ffmpeg_check.isChecked()
     assert d.gpu_radio.isChecked()  # GPU detected
+    # GigaAM defaults ON (verified backend, no account needed) and
+    # brings its model with it; python already exists so it is skipped
+    assert d.gigaam_check.isChecked()
     steps = d._build_steps()
-    assert [name for name, _ in steps] == ["ffmpeg"]  # python exists
+    assert [name for name, _ in steps] == ["ffmpeg", "gigaam",
+                                           "gigaam_model"]
