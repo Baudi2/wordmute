@@ -17,7 +17,9 @@ ROOT = Path(SPECPATH).parent
 
 datas = [(str(ROOT / "wordmute_app" / "resources"), "wordmute_app/resources")]
 binaries = []
-hiddenimports = ["winsound"]
+# toasts are imported lazily inside methods; name them explicitly so a
+# missing wheel fails the BUILD instead of silently at first use
+hiddenimports = ["winsound", "pyqttoast", "qtpy"]
 
 # Bundle the COMPLETE stdlib, not just what the app imports: runtime
 # packages (yt-dlp especially) need stdlib modules the app never
@@ -49,7 +51,9 @@ a = Analysis(
     excludes=[
         # runtime-environment packages — never freeze these
         "faster_whisper", "ctranslate2", "av", "tokenizers",
-        "onnxruntime", "yt_dlp", "numpy",
+        # onnx_asr is imported inside the engine's GigaAM path, so
+        # PyInstaller WOULD bundle it and shadow the runtime copy
+        "onnxruntime", "onnx_asr", "yt_dlp", "numpy",
         "torch", "torchaudio", "torchcodec", "gigaam", "pyannote",
         "lightning", "pytorch_lightning", "matplotlib", "tkinter",
         "IPython", "pytest",
