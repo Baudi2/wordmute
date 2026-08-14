@@ -39,6 +39,9 @@ DEFAULT_SETTINGS = {
     "output_mode": "beside",   # "beside" = next to input, or "folder"
     "output_dir": "",
     "download_dir": "",        # empty = default (Downloads\WordMute)
+    # quality cap for multi-link (batch) adds — see downloader
+    # QUALITY_PRESETS; single links still use the format table
+    "batch_quality": "1080",
     "beep_hz": 0,              # 0 = mute with silence
     # interface language: en | ru. On a FIRST run with no settings
     # file the OS language decides (see detect_ui_language) — the

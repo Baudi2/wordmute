@@ -9,6 +9,30 @@ from pathlib import Path
 BEST_SPEC = "bv*+ba/b"
 BEST_LABEL = "best quality"
 
+# Batch adds (several links at once) can't show a format table per
+# link, so the user picks ONE cap for the whole batch. Height caps
+# fall back to the best available below the cap, then to any single
+# stream, so a link that has nothing that small still downloads.
+QUALITY_PRESETS = (
+    ("best", "best quality", BEST_SPEC),
+    ("1080", "up to 1080p",
+     "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
+    ("720", "up to 720p",
+     "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b"),
+    ("480", "up to 480p",
+     "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b"),
+    ("audio", "audio only (smallest)", "ba/b"),
+)
+DEFAULT_QUALITY = "1080"   # sane default: HD without 4K-sized files
+
+
+def quality_spec(key: str) -> tuple:
+    """(format spec, label) for a batch quality preset key."""
+    for name, label, spec in QUALITY_PRESETS:
+        if name == key:
+            return spec, label
+    return BEST_SPEC, BEST_LABEL
+
 
 class DownloadCancelled(Exception):
     pass

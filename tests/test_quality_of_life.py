@@ -851,10 +851,44 @@ def test_url_dialog_multi_mode(qapp):
     assert d._multi_urls == ["https://a.com/1", "https://b.com/2",
                              "https://c.com/3"]
     assert "3" in d.best_button.text()
+    # the quality selector appears only in batch mode, defaulting to
+    # the cap (NOT best) so nobody silently pulls 4K files
+    assert d.quality_row.isVisibleTo(d)
+    assert d.quality() == downloader.DEFAULT_QUALITY == "1080"
     items = (d._accept_best(), d.result_items())[1]
     assert [i.url for i in items] == ["https://a.com/1",
                                       "https://b.com/2", "https://c.com/3"]
-    assert all(i.format_spec == downloader.BEST_SPEC for i in items)
+    spec, label = downloader.quality_spec("1080")
+    assert all(i.format_spec == spec for i in items)
+    assert all("1080" in i.format_spec for i in items)
+    assert all(i.format_label == label for i in items)
+
+
+def test_batch_quality_presets_and_selection(qapp):
+    from wordmute_app.core import downloader
+    from wordmute_app.ui.url_dialog import AddUrlDialog
+
+    # every preset resolves, and caps fall back to "any" so a link
+    # without a small enough stream still downloads
+    for key, _label, spec in downloader.QUALITY_PRESETS:
+        got_spec, _got_label = downloader.quality_spec(key)
+        assert got_spec == spec
+        if key not in ("best", "audio"):
+            assert spec.endswith("/bv*+ba/b")
+    assert downloader.quality_spec("nonsense")[0] == downloader.BEST_SPEC
+
+    # a remembered choice is preselected and honoured
+    d = AddUrlDialog(auto_fetch=False, quality="480")
+    d.url_edit.setText("https://a.com/1 https://b.com/2")
+    assert d.quality() == "480"
+    assert "480" in d.status.text() or "480" in d.result_items()[0].format_spec
+    d.quality_combo.setCurrentIndex(d.quality_combo.findData("audio"))
+    assert d.result_items()[0].format_spec == "ba/b"
+
+    # single-link mode never shows the batch selector
+    single = AddUrlDialog(auto_fetch=False)
+    single.url_edit.setText("https://only.com/1")
+    assert not single.quality_row.isVisibleTo(single)
 
     # back to a single link: normal mode, single result
     d2 = AddUrlDialog(auto_fetch=False)

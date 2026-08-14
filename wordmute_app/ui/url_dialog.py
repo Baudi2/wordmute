@@ -8,6 +8,7 @@ import re
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..core import downloader
@@ -67,7 +69,7 @@ class AddUrlDialog(QDialog):
     COLUMNS = ["Quality", "Size", "Note", "Ext", "FPS", "Type"]
 
     def __init__(self, parent=None, url: str = "", cookies=None,
-                 auto_fetch: bool = True):
+                 auto_fetch: bool = True, quality: str = None):
         super().__init__(parent)
         self.setWindowTitle(tr("Add URL"))
         self.resize(780, 560)
@@ -101,6 +103,28 @@ class AddUrlDialog(QDialog):
         self.loading_bar.setTextVisible(False)
         self.loading_bar.setVisible(False)
         layout.addWidget(self.loading_bar)
+
+        # batch mode has no per-link format table — one quality cap for
+        # the whole batch instead of silently grabbing 4K
+        self.quality_row = QWidget()
+        quality_layout = QHBoxLayout(self.quality_row)
+        quality_layout.setContentsMargins(0, 0, 0, 0)
+        quality_layout.setSpacing(8)
+        quality_layout.addWidget(QLabel(tr("Quality for all links:")))
+        self.quality_combo = QComboBox()
+        for key, label, _spec in downloader.QUALITY_PRESETS:
+            self.quality_combo.addItem(tr(label), key)
+        preset = (quality if quality in
+                  [k for k, _, _ in downloader.QUALITY_PRESETS]
+                  else downloader.DEFAULT_QUALITY)
+        self.quality_combo.setCurrentIndex(
+            self.quality_combo.findData(preset))
+        self.quality_combo.currentIndexChanged.connect(
+            lambda _: self._update_multi_labels())
+        quality_layout.addWidget(self.quality_combo)
+        quality_layout.addStretch()
+        self.quality_row.setVisible(False)
+        layout.addWidget(self.quality_row)
 
         if not self._cookies:
             cookies_row = QHBoxLayout()
@@ -179,21 +203,33 @@ class AddUrlDialog(QDialog):
             self._fetch_timer.stop()
 
     def _enter_multi_mode(self, urls):
-        """Several links pasted: no per-link format picking — everything
-        is added at best quality in one click."""
+        """Several links pasted: no per-link format table — one quality
+        cap applies to the whole batch."""
         self._fetch_timer.stop()
         self._multi_urls = urls
         self.loading_bar.setVisible(False)
         self.table.setRowCount(0)
         self._info = None
-        self.status.setText(
-            tr("{} links — each will be added at best quality.")
-            .format(len(urls)))
-        self.best_button.setText(tr("Add {} links").format(len(urls)))
+        self.quality_row.setVisible(True)
+        self._update_multi_labels()
         self._update_ok()
+
+    def _update_multi_labels(self):
+        if not self._multi_urls:
+            return
+        _spec, label = downloader.quality_spec(self.quality())
+        self.status.setText(
+            tr("{} links · quality: {}").format(
+                len(self._multi_urls), tr(label)))
+        self.best_button.setText(
+            tr("Add {} links").format(len(self._multi_urls)))
+
+    def quality(self) -> str:
+        return self.quality_combo.currentData()
 
     def _leave_multi_mode(self):
         self._multi_urls = []
+        self.quality_row.setVisible(False)
         self.best_button.setText(tr("Add (best quality)"))
         self.status.setText(tr("Paste a video URL — the format list "
                                "loads automatically."))
@@ -301,11 +337,11 @@ class AddUrlDialog(QDialog):
         )
 
     def result_items(self) -> list:
-        """Batch mode: one best-quality item per pasted link; otherwise
-        the single (possibly format-picked) item."""
+        """Batch mode: one item per pasted link at the chosen quality
+        cap; otherwise the single (possibly format-picked) item."""
         if self._multi_urls:
-            return [QueueItem(kind="url", url=u,
-                              format_spec=downloader.BEST_SPEC,
-                              format_label=downloader.BEST_LABEL)
+            spec, label = downloader.quality_spec(self.quality())
+            return [QueueItem(kind="url", url=u, format_spec=spec,
+                              format_label=label)
                     for u in self._multi_urls]
         return [self.result_item()]

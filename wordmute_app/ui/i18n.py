@@ -374,9 +374,14 @@ RU = {
     "WordMute {} → {} — download: {}":
         "WordMute {} → {} — скачать: {}",
     # add-url batch mode
-    "{} links — each will be added at best quality.":
-        "Ссылок: {} — каждая будет добавлена в лучшем качестве.",
+    "{} links · quality: {}": "Ссылок: {} · качество: {}",
     "Add {} links": "Добавить ссылок: {}",
+    "Quality for all links:": "Качество для всех ссылок:",
+    "best quality": "лучшее качество",
+    "up to 1080p": "до 1080p",
+    "up to 720p": "до 720p",
+    "up to 480p": "до 480p",
+    "audio only (smallest)": "только аудио (самое лёгкое)",
     # setup dialog: model-size choice
     "Recognition model (downloads on first use; "
     "changeable later in Settings):":

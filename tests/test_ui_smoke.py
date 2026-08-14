@@ -95,7 +95,8 @@ def test_add_url_button_click_opens_dialog_with_empty_url(qapp, tmp_path,
     opened = []
 
     class FakeDialog:
-        def __init__(self, parent=None, url="", cookies=None):
+        def __init__(self, parent=None, url="", cookies=None,
+                     quality=None):
             assert isinstance(url, str), f"url must be str, got {url!r}"
             opened.append(url)
 

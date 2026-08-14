@@ -712,10 +712,16 @@ class MainWindow(QMainWindow):
             url = ""
         dialog = AddUrlDialog(self, url=url,
                               cookies=self._settings.get("cookies_file")
-                              or None)
+                              or None,
+                              quality=self._settings.get("batch_quality"))
         if dialog.exec():
             for item in dialog.result_items():
                 self._add_url_row(item)
+            # remember the batch quality cap for next time
+            chosen = dialog.quality()
+            if chosen and chosen != self._settings.get("batch_quality"):
+                self._settings["batch_quality"] = chosen
+                config.save_settings(self._settings)
 
     def _pick_files(self):
         from ..engine.wordmute import MEDIA_EXTS
@@ -759,13 +765,16 @@ class MainWindow(QMainWindow):
             from .url_dialog import extract_urls
             web = extract_urls(mime.text())
         if len(web) > 1:
-            # several links dropped: queue them all at best quality
+            # several links dropped: queue them all at the remembered
+            # batch quality cap (same rule as the Add URL dialog)
             from ..core import downloader
+            spec, label = downloader.quality_spec(
+                self._settings.get("batch_quality",
+                                   downloader.DEFAULT_QUALITY))
             for u in web:
                 self._add_url_row(QueueItem(
-                    kind="url", url=u,
-                    format_spec=downloader.BEST_SPEC,
-                    format_label=downloader.BEST_LABEL))
+                    kind="url", url=u, format_spec=spec,
+                    format_label=label))
         elif web:
             self._add_url(web[0])
 
