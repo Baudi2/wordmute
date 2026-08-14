@@ -545,6 +545,33 @@ def test_waveform_strip_paints(qapp):
     strip.hide()
 
 
+# ------------------------------------------------ first-run language
+def test_first_run_follows_os_language(tmp_path, monkeypatch):
+    """Tester report: the Windows installer was Russian but the app's
+    first-run window was English. With no settings file the OS
+    language decides; a stored choice always wins."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from wordmute_app.core import config
+
+    monkeypatch.setattr(config, "detect_ui_language", lambda: "ru")
+    assert config.load_settings()["ui_language"] == "ru"
+
+    monkeypatch.setattr(config, "detect_ui_language", lambda: "en")
+    assert config.load_settings()["ui_language"] == "en"
+
+    # once saved, the user's choice is never overridden by the OS
+    settings = config.load_settings()
+    settings["ui_language"] = "ru"
+    config.save_settings(settings)
+    monkeypatch.setattr(config, "detect_ui_language", lambda: "en")
+    assert config.load_settings()["ui_language"] == "ru"
+
+
+def test_detect_ui_language_returns_supported_code():
+    from wordmute_app.core import config
+    assert config.detect_ui_language() in ("en", "ru")
+
+
 # ------------------------------------------- gigaam backend routing
 def test_gigaam_backend_choice(window, monkeypatch):
     """Regression: installing onnx-asr silently moved GigaAM off the

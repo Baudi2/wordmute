@@ -40,7 +40,11 @@ DEFAULT_SETTINGS = {
     "output_dir": "",
     "download_dir": "",        # empty = default (Downloads\WordMute)
     "beep_hz": 0,              # 0 = mute with silence
-    "ui_language": "en",       # interface language: en | ru
+    # interface language: en | ru. On a FIRST run with no settings
+    # file the OS language decides (see detect_ui_language) — the
+    # installer is localized by Windows, so an English first-run
+    # window on a Russian system was a jarring mismatch.
+    "ui_language": "en",
     "watch_dir": "",           # last used watch folder
     "cookies_file": "",        # Netscape cookie file for logged-in sites
     "theme": "dark",           # dark | light
@@ -108,6 +112,24 @@ def _settings_path() -> Path:
     return data_dir() / "settings.json"
 
 
+def detect_ui_language() -> str:
+    """OS interface language -> our ui_language code. Windows first
+    (GetUserDefaultUILanguage is what the installer follows too), then
+    the standard locale, so the app and the installer agree."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            if (lang_id & 0x3FF) == 0x19:      # LANG_RUSSIAN
+                return "ru"
+            return "en"
+        import locale
+        code = (locale.getlocale()[0] or "")
+        return "ru" if code.lower().startswith(("ru", "russian")) else "en"
+    except Exception:
+        return "en"
+
+
 def load_settings() -> dict:
     settings = dict(DEFAULT_SETTINGS)
     try:
@@ -115,7 +137,10 @@ def load_settings() -> dict:
         if isinstance(stored, dict):
             settings.update(stored)
     except (FileNotFoundError, json.JSONDecodeError):
-        pass
+        # first run: follow the OS language instead of defaulting to
+        # English (the component-setup window is the very first thing
+        # a new user sees)
+        settings["ui_language"] = detect_ui_language()
     return settings
 
 

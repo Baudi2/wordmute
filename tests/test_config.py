@@ -23,7 +23,10 @@ def test_user_edits_never_overwritten(tmp_path, monkeypatch):
 def test_settings_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     s = config.load_settings()
-    assert s == config.DEFAULT_SETTINGS
+    # identical to the defaults except ui_language, which follows the
+    # OS on a first run (installer and app must agree)
+    assert s == {**config.DEFAULT_SETTINGS,
+                 "ui_language": config.detect_ui_language()}
     s["model"] = "small"
     s["use_english"] = True
     config.save_settings(s)
@@ -36,4 +39,6 @@ def test_corrupt_settings_fall_back_to_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     config.data_dir()
     config._settings_path().write_text("{not json", encoding="utf-8")
-    assert config.load_settings() == config.DEFAULT_SETTINGS
+    assert config.load_settings() == {
+        **config.DEFAULT_SETTINGS,
+        "ui_language": config.detect_ui_language()}
