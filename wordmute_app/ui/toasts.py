@@ -22,7 +22,7 @@ _LIGHT = {"bg": "#f3f5fe", "text": "#292b31", "muted": "#5c5f6a",
 def show_toast(parent, title: str, text: str = "",
                duration_ms: int = 4500) -> None:
     """Fire-and-forget; Toast instances are single-show by design."""
-    from PySide6.QtGui import QColor
+    from PySide6.QtGui import QColor, QFont
 
     palette = (_DARK if config.load_settings().get("theme", "dark")
                == "dark" else _LIGHT)
@@ -34,6 +34,16 @@ def show_toast(parent, title: str, text: str = "",
     if text:
         toast.setText(text)
     toast.setShowIcon(False)
+    # pyqttoast measures the label widths with the fonts set here and
+    # then fixes their size — they must be the font the QSS actually
+    # renders with (Inter 13px), or long Russian lines get cut off
+    text_font = QFont()
+    text_font.setFamilies(["Inter", "Segoe UI", "sans-serif"])
+    text_font.setPixelSize(13)
+    title_font = QFont(text_font)
+    title_font.setBold(True)
+    toast.setTitleFont(title_font)
+    toast.setTextFont(text_font)
     toast.setBorderRadius(8)
     toast.setBackgroundColor(QColor(palette["bg"]))
     toast.setTitleColor(QColor(palette["text"]))

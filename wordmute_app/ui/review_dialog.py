@@ -105,8 +105,8 @@ class ReviewDialog(QDialog):
 
         self.table = HoverRowTable(0, 6)
         self.table.setHorizontalHeaderLabels(
-            [tr("Mute"), "Start", "End", tr("Pass"), tr("Engine"),
-             tr("Words")])
+            [tr("Mute"), tr("Interval start"), tr("Interval end"),
+             tr("Pass"), tr("Engine"), tr("Words")])
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)

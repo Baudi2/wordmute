@@ -80,9 +80,13 @@ class WordListsTab(QWidget):
                 "starting point. Edit freely; it's your list."))
             note_text.setProperty("muted", True)
             note_text.setWordWrap(True)
-            dismiss = QPushButton("✕")
+            dismiss = QPushButton("×")
             dismiss.setFlat(True)
-            dismiss.setFixedWidth(28)
+            dismiss.setFixedSize(28, 28)
+            # the themed QPushButton has 18px side padding: inside a
+            # 28px square it eats the glyph and leaves an empty box
+            dismiss.setStyleSheet("padding: 0; border: none;")
+            dismiss.setToolTip(tr("Hide this note"))
             dismiss.clicked.connect(self._dismiss_note)
             note_layout.addWidget(note_text, stretch=1)
             note_layout.addWidget(dismiss)
@@ -289,7 +293,7 @@ class WordListsTab(QWidget):
             if entries:
                 lines.append(f"{word}  ←  " + ", ".join(entries))
             else:
-                lines.append(f"{word}  —  (no match)")
+                lines.append(f"{word}  —  " + tr("(no match)"))
         for ph in phrase_hits:
-            lines.append(f'phrase "{ph}"  ←  matched')
+            lines.append(tr('phrase "{}"  ←  matched').format(ph))
         self.tester_results.setPlainText("\n".join(lines))

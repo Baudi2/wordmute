@@ -804,9 +804,10 @@ class MainWindow(QMainWindow):
         self._apply_status(row, tr("queued"))
         card.set_actions()
 
-    def _card_menu(self, row: int, global_pos):
-        if row < 0:
-            return
+    def _build_card_menu(self, row: int):
+        """(menu, actions) for the card ⋯ menu — split out of
+        _card_menu so it can be built without exec()ing it (tests and
+        the screenshot script)."""
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
         out = self._output_path_for_row(row)
@@ -823,6 +824,9 @@ class MainWindow(QMainWindow):
         row_item = self.queue.item(row)
         queue_obj = row_item.data(ITEM_ROLE) if row_item else None
         lang_menu = menu.addMenu(tr("Processing language"))
+        # addMenu(str) hands ownership to Python: without a reference
+        # the submenu is collected as soon as the builder returns
+        menu._lang_menu = lang_menu
         current = getattr(queue_obj, "lang_profile", "auto") or "auto"
         for key, label in (("auto", tr("Auto (main setup)")),
                            ("ru", tr("Russian")),
@@ -844,6 +848,20 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         act_remove = menu.addAction(tr("Remove"))
         act_remove.setEnabled(deletable)
+        return menu, {"open": act_open, "show": act_show,
+                      "review": act_review, "del_src": act_del_src,
+                      "del_all": act_del_all, "remove": act_remove,
+                      "out": out, "rev": rev}
+
+    def _card_menu(self, row: int, global_pos):
+        if row < 0:
+            return
+        menu, acts = self._build_card_menu(row)
+        act_open, act_show = acts["open"], acts["show"]
+        act_review = acts["review"]
+        act_del_src, act_del_all = acts["del_src"], acts["del_all"]
+        act_remove = acts["remove"]
+        out, rev = acts["out"], acts["rev"]
         chosen = menu.exec(global_pos)
         if chosen is act_open:
             os.startfile(out)

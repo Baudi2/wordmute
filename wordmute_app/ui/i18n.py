@@ -134,6 +134,9 @@ RU = {
     "plus the other saved list.":
         "Проверка по текущим правкам (даже несохраненным) "
         "плюс другой сохраненный список.",
+    "Hide this note": "Скрыть эту подсказку",
+    "(no match)": "(нет совпадений)",
+    'phrase "{}"  ←  matched': 'фраза «{}»  ←  совпала',
     # history
     "Copy error": "Копировать ошибку",
     "Processed files will appear here.":
@@ -739,8 +742,11 @@ RU = {
     "Beep frequency:": "Частота писка:",
     "Interface language:": "Язык интерфейса:",
     "(takes effect after restart)": "(вступит в силу после перезапуска)",
-    # review
+    # review — the columns need their own keys: plain "Start" is
+    # already taken by the run button ("Старт")
     "Mute": "Глушить",
+    "Interval start": "Начало",
+    "Interval end": "Конец",
     "Words": "Слова",
     "Pass": "Проход",
     "Engine": "Движок",
