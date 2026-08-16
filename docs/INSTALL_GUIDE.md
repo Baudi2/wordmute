@@ -100,7 +100,7 @@ updates or new model downloads.
 | First transcription stuck at "Загрузка модели" | The ~3 GB model download from huggingface.co is slow/blocked | Wait, or enable VPN; progress is visible in the app log («Подробности»). |
 | Video download fails for a specific site | yt-dlp needs updating (sites change constantly) | Модели tab → «Проверить обновления» → «Обновить все», then restart the app. |
 | Boosty/member-only videos fail | Cookies needed | Настройки → «Файл cookies»: export cookies from the browser (a "cookies.txt" extension) and select that file. |
-| GigaAM errors about Hugging Face token / pyannote | Only affects OLD installs using the legacy torch backend | Current versions run GigaAM via onnx-asr and need no account. If this appears: Модели → «Починить компоненты» to reinstall the current component set. The «Настройка GigaAM» wizard remains only for the legacy path. |
+| GigaAM errors about Hugging Face token / pyannote | Only possible on an OLD install that still uses the legacy torch backend | Current versions run GigaAM via onnx-asr: no account, no token, and the setup wizard has no token step at all. Fix: Модели → «Починить компоненты» to reinstall the current component set. |
 | Everything broken, want a clean retry | — | In the app: Модели → **«Починить компоненты»** — deletes the runtime and reruns the component setup in one click (restart the app afterwards). If the app itself won't start: delete `%LOCALAPPDATA%\WordMute\runtime` manually and launch again — the setup dialog reappears. App settings/word lists are elsewhere and survive. |
 
 ### Diagnostics

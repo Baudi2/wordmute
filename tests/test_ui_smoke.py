@@ -68,8 +68,15 @@ def test_warning_bar_reflects_plan_and_device(qapp, tmp_path, monkeypatch):
     w = MainWindow()
     assert not w.warnings_label.isVisible()  # whisper plan fits, no gigaam
 
-    w.plan.add_pass("gigaam")  # no token saved -> setup hint appears
-    assert "GigaAM Setup" in w.warnings_label.text()
+    # a GigaAM pass warns only when GigaAM is missing entirely — no
+    # Hugging Face token is involved any more
+    w.plan.add_pass("gigaam")
+    import importlib.util
+    installed = importlib.util.find_spec("onnx_asr") is not None
+    if installed:
+        assert "GigaAM" not in w.warnings_label.text()
+    else:
+        assert "not installed" in w.warnings_label.text()
 
     w._settings["device"] = "cpu"
     w._refresh_warnings()

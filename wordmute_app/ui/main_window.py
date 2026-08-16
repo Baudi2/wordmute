@@ -32,7 +32,6 @@ from ..core.jobs import (JobOptions, QueueItem, build_plan, expand_inputs,
 from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .events import format_event
-from .gigaam_wizard import GigaamWizard
 from .history_tab import HistoryTab
 from .i18n import tr
 from .models_tab import ModelsTab
@@ -235,7 +234,8 @@ class MainWindow(QMainWindow):
         self.more_button.setText("⋯ " + tr("More"))
         self.more_button.setPopupMode(QToolButton.InstantPopup)
         more_menu = QMenu(self.more_button)
-        more_menu.addAction(tr("GigaAM Setup"), self._open_gigaam_setup)
+        # (the GigaAM/Hugging-Face wizard is gone: setup installs GigaAM
+        #  via onnx-asr, which needs no account)
         self.watch_action = more_menu.addAction(tr("Watch Folder"),
                                                 self._toggle_watch)
         more_menu.addSeparator()
@@ -929,20 +929,15 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "WordMute",
                                     f"Could not open review file: {exc}")
 
-    # ---------------------------------------------------------- settings
-    def _open_gigaam_setup(self):
-        GigaamWizard(self).exec()
-        self._refresh_warnings()
-
     # ---------------------------------------------------------- warnings
-    def _gigaam_ready(self) -> bool:
-        return bool(config.load_hf_token() or os.environ.get("HF_TOKEN"))
-
     @staticmethod
     def _gigaam_installed() -> bool:
+        """Either backend counts: onnx-asr (what setup installs) or the
+        legacy torch gigaam package."""
         import importlib.util
         try:
-            return importlib.util.find_spec("gigaam") is not None
+            return any(importlib.util.find_spec(name) is not None
+                       for name in ("onnx_asr", "gigaam"))
         except (ImportError, ValueError):
             return False
 
@@ -953,12 +948,8 @@ class MainWindow(QMainWindow):
         warnings = gpu.plan_warnings(plan, s["device"], self._gpus)
         if "gigaam" in engines and not self._gigaam_installed():
             warnings.append(
-                tr("GigaAM support is not installed in this build — "
-                   "GigaAM passes will fail. Use Whisper passes instead."))
-        elif "gigaam" in engines and not self._gigaam_ready():
-            warnings.append(
-                tr("GigaAM passes need a one-time Hugging Face setup — "
-                   "click 'GigaAM Setup'."))
+                tr("GigaAM is not installed — add it in Models → "
+                   "Components, or use Whisper passes instead."))
         return warnings
 
     def _refresh_warnings(self):
@@ -1059,21 +1050,12 @@ class MainWindow(QMainWindow):
                     tr("Add at least one pass to the plan."))
             return
         gigaam_backend = self._pick_gigaam_backend(self._settings)
-        if (not auto and "gigaam" in engines
-                and gigaam_backend == "torch"
-                and not self._gigaam_ready()):
-            answer = QMessageBox.question(
-                self, "WordMute",
-                tr("The plan includes GigaAM passes, but the one-time "
-                   "Hugging Face setup hasn't been completed — they will "
-                   "likely fail.\n\nOpen the setup wizard now? (Choose No "
-                   "to try running anyway, e.g. if the models are already "
-                   "cached.)"))
-            if answer == QMessageBox.StandardButton.Yes:
-                self._open_gigaam_setup()
-                return
+        # No Hugging Face account is needed any more: setup installs
+        # GigaAM through onnx-asr. A token file left over from the old
+        # torch path is still honoured, since that path (dev installs
+        # with the gigaam package) reads it for the gated pyannote VAD.
         saved_token = config.load_hf_token()
-        if saved_token:  # validated via the wizard; GigaAM reads the env
+        if saved_token:
             os.environ["HF_TOKEN"] = saved_token
 
         wordlist = merge_wordlists(lists)
