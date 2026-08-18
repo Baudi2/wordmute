@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from ..core import gpu, models, updates
 from .dialogs import confirm, inform
+from .formats import fmt_bytes
 from .hover_table import HoverRowTable
 from .i18n import tr
 
@@ -212,7 +213,7 @@ class ModelsTab(QWidget):
             self.table.setItem(row, COL_STATUS,
                                QTableWidgetItem(status_text))
             self.table.setItem(row, COL_SIZE, QTableWidgetItem(
-                models.fmt_size(st["size_bytes"]) if st["downloaded"]
+                fmt_bytes(st["size_bytes"]) if st["downloaded"]
                 else ""))
             button = QPushButton(
                 tr("Delete") if st["downloaded"] else tr("Download"))
@@ -241,7 +242,7 @@ class ModelsTab(QWidget):
             self.gigaam_label.setText(
                 "<b>GigaAM</b>: "
                 + tr("{} cached (models download automatically on "
-                     "first use).").format(models.fmt_size(total)))
+                     "first use).").format(fmt_bytes(total)))
             self.gigaam_delete_button.setEnabled(True)
         else:
             total = 0
@@ -257,16 +258,16 @@ class ModelsTab(QWidget):
         self._update_disk_label()
 
     def _update_disk_label(self):
-        runtime = (models.fmt_size(self._runtime_bytes)
+        runtime = (fmt_bytes(self._runtime_bytes)
                    if self._runtime_bytes is not None else "…")
         known = ((self._runtime_bytes or 0) + self._whisper_bytes
                  + self._gigaam_bytes)
         self.disk_label.setText(
             tr("Disk usage: components {} · Whisper models {} · "
                "GigaAM {} · total {}").format(
-                runtime, models.fmt_size(self._whisper_bytes),
-                models.fmt_size(self._gigaam_bytes),
-                models.fmt_size(known)))
+                runtime, fmt_bytes(self._whisper_bytes),
+                fmt_bytes(self._gigaam_bytes),
+                fmt_bytes(known)))
 
     def _refresh_disk(self):
         if self._disk_worker is not None:

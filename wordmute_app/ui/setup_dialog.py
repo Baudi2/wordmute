@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 
 from ..core import config, gpu, models, runtime_env
 from .dialogs import confirm
+from .formats import fmt_bytes
 from .i18n import current_language, set_language, tr
 
 STEP_KEYS = ("intro", "python", "whisper", "ytdlp", "ffmpeg", "gigaam",
@@ -733,7 +734,7 @@ class SetupDialog(QDialog):
             free = shutil.disk_usage(target).free
         except OSError:
             return "—"
-        return models.fmt_size(free)
+        return fmt_bytes(free)
 
     def _page_install(self, box):
         head = QHBoxLayout()

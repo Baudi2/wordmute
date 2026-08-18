@@ -32,6 +32,7 @@ from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .dialogs import confirm, inform, mark_danger, themed_menu
 from .events import format_event
+from .formats import fmt_rate
 from .history_tab import HistoryTab
 from .i18n import tr
 from .models_tab import ModelsTab
@@ -96,10 +97,9 @@ def _initial_size(avail_w: int, avail_h: int) -> tuple:
 
 
 def fmt_speed(bps) -> str:
-    if not bps:
-        return ""
-    mbps = bps / (1024 * 1024)
-    return f"{mbps:.1f} MB/s" if mbps >= 1 else f"{bps / 1024:.0f} KB/s"
+    """Kept as a thin alias: the queue cards and the download pump both
+    call it, the units and decimal comma now come from the locale."""
+    return fmt_rate(bps)
 
 
 class AppUpdateWorker(QThread):

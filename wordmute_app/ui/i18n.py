@@ -435,6 +435,13 @@ RU = {
     "optional": "по желанию",
     "GB": "ГБ",
     "MB": "МБ",
+    "kB": "КБ",
+    "MB/s": "МБ/с",
+    "kB/s": "КБ/с",
+    "today {}": "сегодня {}",
+    "yesterday {}": "вчера {}",
+    "ms": "мс",
+    "Hz": "Гц",
     "Install": "Установить",
     "WordMute installs the app itself; the recognition engines "
     "are downloaded once, right now. Everything lands in your "

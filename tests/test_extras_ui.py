@@ -106,19 +106,25 @@ def test_history_tab_populates(qapp, tmp_path, monkeypatch):
                             "error": "boom", "muted": 0,
                             "plan": "gigaam(v3) -> gigaam(v3) -> whisper(s)"})
     tab = HistoryTab()
+    from wordmute_app.ui.history_tab import (FILE_COL, MUTED_COL,
+                                             TIME_ROLE)
     assert tab.table.rowCount() == 2
-    # most recent first; status is a ✓/✗ glyph, plan is compacted
-    assert tab.table.item(0, 1).text() == "b.mp4"
-    assert tab.table.item(0, 2).text() == "✕"
-    assert tab.table.item(0, 2).toolTip() == "boom"
-    assert tab.table.item(0, 4).text() == "GigaAM ×2 → Whisper"
-    assert tab.table.item(1, 2).text() == "✓"
-    assert tab.table.item(1, 3).text() == "5"
-    assert tab.table.item(1, 4).text() == "Whisper"
+    # most recent first; a failure says so in the Muted cell (the old
+    # ✓/✗ column is gone), plan is compacted
+    assert tab.table.item(0, FILE_COL).text() == "b.mp4"
+    assert tab.table.item(0, MUTED_COL).text() == "failed"
+    assert tab.table.item(0, MUTED_COL).toolTip() == "boom"
+    assert tab.table.item(0, 3).text() == "GigaAM ×2 → Whisper"
+    assert tab.table.item(1, MUTED_COL).text() == "5"
+    assert tab.table.item(1, 3).text() == "Whisper"
+    # the time cell keeps the ISO stamp for sorting and the full stamp
+    # as its tooltip, while showing «today HH:MM»
+    assert tab.table.item(0, 0).data(TIME_ROLE)
+    assert tab.table.item(0, 0).text().startswith("today ")
     # width diet: no row-number gutter, File stretches, no Output column
-    # (5 data columns + the 28px files-on-disk glyph)
+    # (4 data columns + the 28px files-on-disk glyph)
     assert not tab.table.verticalHeader().isVisible()
-    assert tab.table.columnCount() == 6
+    assert tab.table.columnCount() == 5
     assert tab.folder_button.text()
 
 

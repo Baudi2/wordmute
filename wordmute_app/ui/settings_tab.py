@@ -98,7 +98,6 @@ class SettingsTab(QWidget):
         self.pad_spin = QSpinBox()
         self.pad_spin.setRange(0, 1000)
         self.pad_spin.setSingleStep(10)
-        self.pad_spin.setSuffix(" ms")
         self.pad_spin.setValue(settings["pad_ms"])
         self.pad_spin.setToolTip(
             tr("Extra silence around each muted word; never bleeds into "
@@ -117,7 +116,6 @@ class SettingsTab(QWidget):
         self.beep_spin = QSpinBox()
         self.beep_spin.setRange(200, 4000)
         self.beep_spin.setSingleStep(100)
-        self.beep_spin.setSuffix(" Hz")
         self.beep_spin.setValue(settings.get("beep_hz", 0) or 1000)
         self.beep_spin.setEnabled(self.beep_check.isChecked())
         self.beep_check.toggled.connect(self.beep_spin.setEnabled)
@@ -215,6 +213,7 @@ class SettingsTab(QWidget):
         self._saved_timer.timeout.connect(
             lambda: self.saved_label.setText(""))
 
+        self.retranslate_ui()
         self._loading = False
         for signal in (
             self.model_combo.currentTextChanged,
@@ -234,6 +233,16 @@ class SettingsTab(QWidget):
             self.output_dir_edit.textChanged,
         ):
             signal.connect(self._apply)
+
+    def retranslate_ui(self):
+        """Unit suffixes belong here, never in the constructor: set once
+        at build time they survive a language switch as «100 ms» in a
+        Russian window. NBSP keeps value and unit on one line, and the
+        group separator is off so 1000 Hz is not «1 000 Гц»."""
+        self.pad_spin.setSuffix("\u00A0" + tr("ms"))
+        self.pad_spin.setGroupSeparatorShown(False)
+        self.beep_spin.setSuffix("\u00A0" + tr("Hz"))
+        self.beep_spin.setGroupSeparatorShown(False)
 
     # ---------------------------------------------------------- browsing
     def _browse_download_dir(self):
