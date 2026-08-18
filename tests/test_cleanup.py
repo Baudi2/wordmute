@@ -78,6 +78,60 @@ def test_source_protected_when_no_clean_copy(tmp_path):
     assert "v.mp4" in {f.name for f in keep}
 
 
+def test_related_files_takes_output_side_caches(processed, tmp_path):
+    """A multi-pass run transcribes the OUTPUT, so a cache can sit next
+    to the clean file too. «Удалить исходник и JSON-файлы» has to take
+    it — leaving it behind is what users saw as "the JSONs stayed"."""
+    src, out = processed
+    (tmp_path / "v.clean.mp4.words.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "v.clean.mp4.gigaam.words.json").write_text(
+        "[]", encoding="utf-8")
+
+    keep = cleanup.related_files(source=src, output=out,
+                                 include_output=False)
+    assert {f.name for f in keep} == {
+        "v.mp4", "v.mp4.words.json", "v.mp4.gigaam.words.json",
+        "v.clean.mp4.wordmute.json", "v.clean.mp4.words.json",
+        "v.clean.mp4.gigaam.words.json"}
+    assert "v.clean.mp4" not in {f.name for f in keep}
+
+
+def test_process_file_leaves_no_cache_next_to_output(tmp_path, monkeypatch):
+    """Pass 2 transcribes the OUTPUT; when it finds nothing the run used
+    to end right there, leaving <out>.gigaam.words.json on disk."""
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from wordmute_app.engine import wordmute as wm
+
+    inp = tmp_path / "v.mp4"
+    inp.write_bytes(b"x")
+    out = tmp_path / "v.clean.mp4"
+
+    def fake_transcribe(media, engine, model_name, device, language,
+                        force=False, vad=True):
+        # the real transcribe always writes its cache next to the media
+        words = ([{"w": "бог", "s": 1.0, "e": 1.5}]
+                 if Path(media) == inp else [])
+        wm._cache_path(Path(media), engine).write_text(
+            json.dumps(words), encoding="utf-8")
+        return words
+
+    monkeypatch.setattr(wm, "transcribe", fake_transcribe)
+    monkeypatch.setattr(wm, "mute",
+                        lambda media, intervals, dest, beep_hz=None:
+                        Path(dest).write_bytes(b"x"))
+    args = SimpleNamespace(device="cpu", language="ru", pad=100,
+                           list_only=False, retranscribe=False,
+                           force_passes=False, no_vad=False, beep_hz=None)
+    wm.process_file(inp, out, ({"бог"}, [], [], []), args,
+                    [("whisper", "small"), ("gigaam", "v3_rnnt")])
+
+    assert (tmp_path / "v.mp4.words.json").exists()   # source cache: keep
+    assert [p.name for p in tmp_path.glob("v.clean.mp4*.json")] == []
+
+
 def test_related_files_skips_missing(tmp_path):
     # nothing on disk -> nothing to delete, menu stays disabled
     assert cleanup.related_files(source=tmp_path / "gone.mp4",

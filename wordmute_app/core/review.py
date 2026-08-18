@@ -87,10 +87,6 @@ def apply_review(data: dict) -> None:
     else:
         shutil.copyfile(source, tmp)
     os.replace(tmp, output)
-    # the output's cached transcripts (either engine) are now stale
-    for suffix in (".words.json", ".gigaam.words.json"):
-        stale = output.with_suffix(output.suffix + suffix)
-        if stale.exists():
-            stale.unlink()
+    engine.drop_output_caches(output)   # they describe the old output
     save_review(source, output, data.get("pad_ms", 100), data["intervals"],
                 beep_hz=data.get("beep_hz"))

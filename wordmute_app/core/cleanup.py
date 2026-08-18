@@ -29,9 +29,11 @@ def resolve_source(output=None, fallback=None):
 
 def related_files(source=None, output=None, include_output=False) -> list:
     """Every file the app knows around this video that exists right
-    now: the source and its transcript caches, plus the review sidecar
-    (useless once the source is gone). include_output adds the clean
-    video and its own transcript caches.
+    now: the source and its transcript caches, the review sidecar
+    (useless once the source is gone) and any transcript cache left
+    next to the OUTPUT — passes 2+ transcribe the output, and a run
+    that ended on a pass with no matches could leave one behind.
+    include_output adds the clean video itself.
 
     Safety rule: in keep-the-clean mode (include_output=False) the
     SOURCE is only listed when a clean copy actually exists on disk —
@@ -55,10 +57,10 @@ def related_files(source=None, output=None, include_output=False) -> list:
             add(str(source) + suffix)
     if output:
         add(review.review_path_for(output))
+        for suffix in CACHE_SUFFIXES:
+            add(str(output) + suffix)
         if include_output:
             add(output)
-            for suffix in CACHE_SUFFIXES:
-                add(str(output) + suffix)
     return files
 
 

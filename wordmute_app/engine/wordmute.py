@@ -645,8 +645,26 @@ def output_for(inp: Path, out_arg, multi: bool) -> Path:
     return out_arg  # single input, explicit file path
 
 
+def drop_output_caches(out: Path) -> None:
+    """Passes 2+ transcribe the OUTPUT, which writes a cache next to it.
+    That cache describes an intermediate state nothing ever reads again,
+    so it must not outlive the run — a final pass that finds nothing
+    used to leave a stray <out>.words.json sitting next to the video."""
+    for suffix in (".words.json", ".gigaam.words.json"):
+        stale = out.with_suffix(out.suffix + suffix)
+        if stale.exists():
+            stale.unlink()
+
+
 def process_file(inp: Path, out: Path, wordlist, args, plan) -> None:
     """plan: list of (engine, model_name) tuples, one entry per pass."""
+    try:
+        _run_passes(inp, out, wordlist, args, plan)
+    finally:
+        drop_output_caches(out)
+
+
+def _run_passes(inp: Path, out: Path, wordlist, args, plan) -> None:
     exact, stems, phrases, subs = wordlist
     current = inp
     n_passes = len(plan)
@@ -681,10 +699,7 @@ def process_file(inp: Path, out: Path, wordlist, args, plan) -> None:
         os.replace(tmp, out)
         # any cached transcript (from either engine) for the previous
         # version of the output is now stale
-        for suffix in (".words.json", ".gigaam.words.json"):
-            stale = out.with_suffix(out.suffix + suffix)
-            if stale.exists():
-                stale.unlink()
+        drop_output_caches(out)
         current = out
 
 
