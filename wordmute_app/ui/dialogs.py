@@ -14,6 +14,7 @@ Two things the base stylesheet could never reach:
 """
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -108,14 +109,26 @@ class ConfirmDialog(QDialog):
             body_label.setWordWrap(True)
             column.addWidget(body_label)
         if files:
-            listing = QPlainTextEdit("\n".join(str(f) for f in files))
+            listing = QPlainTextEdit()
             listing.setObjectName("wm_confirm_files")
             listing.setReadOnly(True)
-            lines = min(len(files), 6)
-            listing.setFixedHeight(20 + lines * 16)
+            # one row per file, middle-elided: real names (downloaded
+            # episodes) are long enough to wrap to three lines each,
+            # which turned the box into a wall of half-cut text
+            listing.setLineWrapMode(QPlainTextEdit.NoWrap)
+            listing.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            listing.setToolTip("\n".join(str(f) for f in files))
+            self._files_widget = listing
+            self._file_names = [str(f) for f in files]
+            metrics = QFontMetrics(listing.font())
+            rows = min(len(files), 6)
+            # frame + padding (9px top/bottom from the sheet) + rows
+            listing.setFixedHeight(2 * (9 + listing.frameWidth())
+                                   + rows * metrics.lineSpacing())
             if len(files) <= 6:
                 listing.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             column.addWidget(listing)
+            self._elide_files()
         content.addLayout(column, stretch=1)
         root.addLayout(content)
 
@@ -147,6 +160,30 @@ class ConfirmDialog(QDialog):
         # destructive dialogs default to Cancel; informational ones to OK
         (cancel if severity == "danger" else ok).setDefault(True)
         self.ok_button, self.cancel_button = ok, cancel
+
+    def _elide_files(self) -> None:
+        listing = getattr(self, "_files_widget", None)
+        if listing is None:
+            return
+        # measure with the font the sheet actually renders (mono 11px),
+        # which the widget only carries once polished — the same trap
+        # that clipped the toasts
+        listing.ensurePolished()
+        metrics = QFontMetrics(listing.font())
+        width = listing.viewport().width() or (listing.width() - 24)
+        # the document keeps a 4px margin on each side
+        width = max(width - 2 * int(listing.document().documentMargin()), 40)
+        listing.setPlainText("\n".join(
+            metrics.elidedText(name, Qt.ElideMiddle, width)
+            for name in self._file_names))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._elide_files()      # geometry and style are final now
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._elide_files()
 
 
 def confirm(parent, *, title: str, body: str = "", files=(),
