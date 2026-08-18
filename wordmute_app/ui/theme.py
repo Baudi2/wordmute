@@ -23,6 +23,12 @@ SETUP_THEMES = {
     "dark": "wordmute-setup.qss",
     "light": "wordmute-setup-light.qss",
 }
+# the 0.6.1 rework sheet must come LAST — it overrides rules from both
+# earlier sheets (menu frame, install rows, empty states)
+FIX_THEMES = {
+    "dark": "wordmute-0.6.1.qss",
+    "light": "wordmute-0.6.1-light.qss",
+}
 DEFAULT_THEME = "dark"
 
 _PLACEHOLDER = {"dark": "#75798c", "light": "#8b8fa3"}
@@ -37,7 +43,7 @@ def theme_dir():
 def load_stylesheet(name: str) -> str:
     name = name if name in THEMES else DEFAULT_THEME
     parts = []
-    for table in (THEMES, SETUP_THEMES):
+    for table in (THEMES, SETUP_THEMES, FIX_THEMES):
         path = theme_dir() / table[name]
         if path.exists():
             parts.append(path.read_text(encoding="utf-8"))

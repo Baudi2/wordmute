@@ -7,11 +7,11 @@ from PySide6.QtGui import QColor, QKeySequence, QShortcut, QTextCharFormat, \
     QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QTextEdit,
@@ -23,6 +23,7 @@ from ..core import config
 from ..engine import wordmute as engine
 from ..engine.wordlist_tidy import tidy_lines
 from ..core.wordlists import explain_matches
+from .dialogs import ConfirmDialog
 from .i18n import tr
 
 FORMAT_HINT = ("слово = exact ·  корень* = word starts with ·  "
@@ -212,17 +213,16 @@ class WordListsTab(QWidget):
         cancelled the operation that triggered this."""
         if not self.has_unsaved():
             return True
-        answer = QMessageBox.question(
-            self, "WordMute",
-            tr("The word list has unsaved changes. Save them?"),
-            QMessageBox.StandardButton.Save
-            | QMessageBox.StandardButton.Discard
-            | QMessageBox.StandardButton.Cancel)
-        if answer == QMessageBox.StandardButton.Cancel:
+        answer = ConfirmDialog(
+            self, title=tr("The word list has unsaved changes."),
+            body=tr("Saving also sorts the list and removes duplicates."),
+            ok_text=tr("Save"), alt_text=tr("Discard"),
+            severity="warn").exec()
+        if answer == QDialog.Rejected:      # Cancel
             return False
-        if answer == QMessageBox.StandardButton.Save:
+        if answer == QDialog.Accepted:      # Save
             self._save()
-        return True
+        return True                          # ALT = discard and continue
 
     def _on_list_switched(self):
         new_key = self.list_combo.currentData()

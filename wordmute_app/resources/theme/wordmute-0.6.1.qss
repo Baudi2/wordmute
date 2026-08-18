@@ -1,0 +1,325 @@
+/* ============================================================
+   WordMute 0.6.1 — rework sheet, DARK theme (QSS)
+   ------------------------------------------------------------
+   Fixes the seven weak points found in the 0.6.0 screen inventory.
+   ADDITIVE and LAST in the chain — it overrides rules from both
+   earlier sheets, so concatenate in this order:
+
+       base = read("wordmute.qss")            # app theme
+       wiz  = read("wordmute-setup.qss")      # first-run wizard
+       fix  = read("wordmute-0.6.1.qss")      # this file
+       app.setStyle("Fusion")
+       app.setStyleSheet("\n".join([base, wiz, fix]))
+
+   Light pair: wordmute-light.qss + wordmute-setup-light.qss +
+   wordmute-0.6.1-light.qss.
+
+   Reference mock: WordMute 0.6.1 Fixes.dc.html (ids 1a…1g).
+   Reasons, widget trees, metrics and the Python side (QLocale,
+   QTranslator, qtbase_ru, spin suffixes): 0.6.1-fixes-handoff.md.
+   Read that file — several of these fixes are 80% Python, 20% QSS.
+
+   QSS owns color / border / radius / font. Sizes, margins and
+   spacing marked "(code)" are set in Python.
+
+   Tokens (Nocturne dark):
+     bg #161826 · chrome #131522 · surface #1b1d2c · surface2 #232532
+     border #3f424d · border-hover #595d6c · rule #292b31 · log #111322
+     text #e9e9ed · muted #9397ab
+     accent #9184d9 · accent-300 #d2cefd · accent-800 #423a6a · accent-900 #2b2741
+     warning #cdb380 / text #e6d5ae · error #cd8484 / text #eab7b7 / border #6c4a4a
+   ============================================================ */
+
+
+/* ============================================================
+   1a — QMenu frame and sub-controls, themed confirmations
+   ------------------------------------------------------------
+   The base sheet DID reach QMenu; what leaked through was the
+   platform *frame* (a light rim + native shadow around our rounded
+   corners) and the sub-controls (native check glyph, native submenu
+   arrow). Both need code, not just QSS:
+
+       menu = QMenu(parent)
+       menu.setObjectName("card_menu")
+       menu.setWindowFlags(menu.windowFlags()
+                           | Qt.FramelessWindowHint
+                           | Qt.NoDropShadowWindowHint)
+       menu.setAttribute(Qt.WA_TranslucentBackground)
+
+   QMessageBox is NOT themable to this standard: its icon is a
+   platform pixmap and its buttons take their text from Qt's own
+   translation catalog (hence English Yes/No in a Russian UI).
+   Replace every confirmation with QDialog#wm_confirm below, and
+   still bundle qtbase_<lang>.qm for the native file dialogs.
+   ============================================================ */
+
+QMenu {
+  background: #1b1d2c;                       /* surface, not surface2 — menus sit above cards */
+  border: 1px solid #595d6c;
+  border-radius: 8px;
+  padding: 5px;
+}
+QMenu::item {
+  padding: 7px 14px 7px 12px;
+  border-radius: 4px;
+  min-height: 20px;                          /* 34px rows; Russian labels need the width, not the height */
+}
+QMenu::item:selected { background: #423a6a; }
+QMenu::item:disabled { color: rgba(233,233,237,0.40); background: transparent; }
+QMenu::separator { height: 1px; background: #292b31; margin: 5px 8px; }
+QMenu::icon { left: 10px; }
+/* Checkable actions: our glyph, left-aligned, no native indicator box */
+QMenu::indicator {
+  width: 13px; height: 13px;
+  left: 10px;
+  image: none;
+}
+QMenu::indicator:checked { image: url(icons/check.svg); }
+/* Submenu arrow (the «Язык обработки» row) */
+QMenu::right-arrow {
+  image: url(icons/chevron-right.svg);
+  width: 10px; height: 10px;
+  right: 10px;
+}
+/* Destructive actions: action.setProperty("danger", True) before adding */
+QMenu#card_menu::item[danger="true"] { color: #eab7b7; }
+QMenu#card_menu::item[danger="true"]:selected { background: rgba(205,132,132,0.16); color: #eab7b7; }
+/* The language submenu is narrower than the parent — let it size to content */
+QMenu#card_menu_language { min-width: 0; }
+
+/* ---- Own confirmation dialog (replaces QMessageBox) ------------
+   QDialog#wm_confirm, modal, fixed width 460, height by content (code).
+   Tree: icon tile 32 + (title / body / optional file list) , footer 58.
+   Buttons: #btn_confirm_cancel then #btn_confirm_ok — the primary
+   text is the VERB of the action («В Корзину», «Удалить», «Прервать»),
+   never Yes/No, and it is the one styled danger when destructive. */
+QDialog#wm_confirm { background: #161826; border: 1px solid #595d6c; border-radius: 10px; }
+QLabel#wm_confirm_icon {
+  min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
+  border-radius: 9px; qproperty-alignment: AlignCenter;
+  background: #1b1d2c; border: 1px solid #3f424d;
+}
+QLabel#wm_confirm_icon[severity="danger"] {
+  background: rgba(205,132,132,0.10); border-color: #6c4a4a;
+}
+QLabel#wm_confirm_icon[severity="warn"] {
+  background: rgba(205,179,128,0.10); border-color: rgba(205,179,128,0.45);
+}
+QLabel#wm_confirm_title { font-size: 15px; font-weight: 500; color: #e9e9ed; }
+QLabel#wm_confirm_body  { font-size: 12px; color: #9397ab; }      /* setWordWrap(True) */
+QPlainTextEdit#wm_confirm_files {                                  /* read-only, no scrollbar under 6 lines */
+  background: #111322; border: 1px solid #292b31; border-radius: 7px;
+  color: #9397ab; padding: 9px 11px;
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 11px;
+}
+QWidget#wm_confirm_footer { background: transparent; border-top: 1px solid #292b31; }
+QPushButton#btn_confirm_cancel { padding: 8px 16px; }
+QPushButton#btn_confirm_ok { padding: 8px 16px; }                  /* setProperty("primary", True) */
+QPushButton#btn_confirm_ok[danger="true"] {
+  border-color: #6c4a4a; color: #eab7b7; background: transparent;
+}
+QPushButton#btn_confirm_ok[danger="true"]:hover { background: rgba(205,132,132,0.10); border-color: #cd8484; }
+
+/* Fallback: any QMessageBox that survives (plugin errors, crash handler) */
+QMessageBox { background: #161826; }
+QMessageBox QLabel { color: #e9e9ed; font-size: 13px; }
+QMessageBox QPushButton { min-width: 92px; padding: 8px 14px; }
+
+
+/* ============================================================
+   1b — Install page: the log is docked, not in the scroll flow
+   ------------------------------------------------------------
+   The page is a QVBoxLayout, NOT a QScrollArea:
+     #install_head        fixed  (title + subtitle + percent)
+     #total_progress      fixed  6px
+     #install_rows_scroll stretch  ← the only scrolling part
+     #log_dock            fixed  (disclosure row 24 + pane 118)
+   With the log open the rows area still shows 5 of 6 rows; with it
+   closed the list gets those 142px back and nothing scrolls at all.
+   Rows shrink 44 → 30px, so per-row text drops to 12px — the moving
+   detail (file, size, speed) lives in #install_sub instead.
+   ============================================================ */
+
+QWidget#install_head { background: transparent; }
+QLabel#install_title { font-size: 19px; font-weight: 500; }
+QLabel#install_sub { font-size: 12px; color: #9397ab; }            /* file · size · speed, one line, elided in code */
+QLabel#install_percent { font-size: 24px; font-weight: 300; color: #d2cefd; }
+
+QScrollArea#install_rows_scroll { background: transparent; border: none; }
+QScrollArea#install_rows_scroll > QWidget > QWidget { background: transparent; }
+
+QFrame[installRow="true"] {                                        /* overrides the wizard sheet's 44px row */
+  background: #1b1d2c; border: 1px solid #3f424d; border-radius: 6px;
+  min-height: 30px; max-height: 30px;
+}
+QFrame[installRow="true"][state="run"] { border-color: #9184d9; }
+QFrame[installRow="true"][state="err"] { border-color: #6c4a4a; }
+QFrame[installRow="true"][state="skip"] { background: #191b28; border-color: #292b31; }
+QLabel#row_name { font-size: 12px; }                               /* fixed width 168 (code) */
+QLabel#row_state { font-size: 11px; color: #9397ab; }              /* fixed width 104, AlignRight (code) */
+QProgressBar#row_progress { max-height: 3px; border-radius: 2px; background: #292b31; }
+QProgressBar#row_progress::chunk { background: #9184d9; border-radius: 2px; }
+QProgressBar#row_progress[state="ok"]::chunk { background: #6f63ac; }
+
+QWidget#log_dock { background: transparent; }
+QToolButton#log_toggle { background: transparent; border: none; color: #9397ab; font-size: 11px; padding: 2px 0; }
+QToolButton#log_toggle:hover { color: #e9e9ed; }
+QToolButton#log_copy, QToolButton#log_open {                       /* the two reasons users open the log */
+  background: transparent; border: none; color: #9397ab; font-size: 11px; padding: 2px 4px;
+}
+QToolButton#log_copy:hover, QToolButton#log_open:hover { color: #e9e9ed; }
+QPlainTextEdit#setup_log {
+  background: #111322; border: 1px solid #292b31; border-radius: 7px;
+  color: #9397ab; padding: 9px 12px;
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 11px;
+  min-height: 118px; max-height: 118px;                            /* fixed: the dock must not grow */
+}
+
+
+/* ============================================================
+   1c — Add-URL, batch mode: input sized to content
+   ------------------------------------------------------------
+   #url_input height = clamp(3, line_count, 8) × line_height, recomputed
+   in textChanged; the dialog then adjustSize()s instead of holding a
+   fixed 640×720. Parsed links are summarised as domain chips, so four
+   links read as four links without scanning the text.
+   ============================================================ */
+
+QDialog#add_url_dialog { background: #161826; }
+QLabel#add_url_title { font-size: 15px; font-weight: 500; }
+QLabel#add_url_hint { font-size: 11px; color: #9397ab; }
+QPlainTextEdit#url_input {
+  background: #232532; border: 1px solid #3f424d; border-radius: 7px;
+  color: #e9e9ed; padding: 9px 11px;
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 11px;
+  min-height: 62px;                                                /* 3 lines; max set per-keystroke in code */
+}
+QPlainTextEdit#url_input:focus { border-color: #9184d9; }
+
+QLabel[urlChip="true"] {                                           /* one per host: "rutube.ru · 2" */
+  background: #1b1d2c; border: 1px solid #3f424d; border-radius: 13px;
+  color: #e9e9ed; padding: 4px 10px; font-size: 11px;
+}
+QLabel[urlChip="true"][state="warn"] {
+  background: rgba(205,179,128,0.10); border-color: rgba(205,179,128,0.45); color: #e6d5ae;
+}
+QWidget#url_options_row { background: transparent; }
+QLabel#url_quality_label { font-size: 12px; color: #9397ab; }
+QComboBox#url_quality { min-width: 168px; }
+QLabel#url_cookies_hint { font-size: 11px; color: #9397ab; }
+QToolButton#url_cookies_link {                                     /* inline "указать в настройках" */
+  background: transparent; border: none; color: #d2cefd; font-size: 11px; padding: 0;
+  text-decoration: underline;
+}
+QWidget#add_url_footer { background: transparent; border-top: 1px solid #292b31; }
+QLabel#add_url_summary { font-size: 12px; color: #9397ab; }        /* "4 ссылки · до 1080p" */
+QPushButton#btn_add_urls { padding: 8px 16px; }                    /* primary; text carries the count */
+
+
+/* ============================================================
+   1d / 1e — History dates and unit suffixes are PYTHON fixes
+   ------------------------------------------------------------
+   Nothing to style: both bugs are formatting, not painting.
+     dates  → QLocale(ui_lang).toString(dt, "d MMM HH:mm"),
+              today/yesterday branches through tr(), ISO in UserRole
+              so sorting follows the datetime and not the string;
+     units  → setSuffix("\u00A0" + tr("мс") / tr("Гц")) inside
+              retranslateUi(), setGroupSeparatorShown(False).
+   See the handoff. Only the two cosmetic side effects live here.
+   ============================================================ */
+
+QTableView#history_table { alternate-background-color: #191b28; }
+QLabel#history_footer { font-size: 12px; color: #9397ab; }
+QTableView#history_table::item { padding: 6px 10px; }              /* 40px rows at 12px text */
+
+
+/* ============================================================
+   1f — Word Lists: one toolbar row instead of three notes
+   ------------------------------------------------------------
+   Row 1 (32px): list picker · #wl_syntax_help («?») · count/edits ·
+                 stretch · Отменить правки · Сохранить
+   Row 2 (32px, optional): #wl_template_ribbon, single line, × dismisses
+                 for good (QSettings wordlists/templateNoteDismissed/<id>)
+   Row 3: the editor, now 88px higher than in 0.6.0
+   Row 4 (32px): #wl_tester_input (hint lives in its placeholder) +
+                 #wl_tester_result on the same line
+   The syntax legend moves into #wl_syntax_popover — a Popup QFrame,
+   not a QMenu, so it can hold a two-column grid.
+   ============================================================ */
+
+QWidget#wl_toolbar { background: transparent; }
+QComboBox#wl_list_picker { min-width: 200px; }
+QToolButton#wl_syntax_help {
+  background: transparent; border: 1px solid #3f424d; border-radius: 6px;
+  color: #9397ab; font-size: 12px;
+  min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px;
+}
+QToolButton#wl_syntax_help:hover { border-color: #9184d9; color: #d2cefd; }
+QToolButton#wl_syntax_help:checked { border-color: #9184d9; background: #2b2741; color: #d2cefd; }
+QLabel#wl_count { font-size: 12px; color: #9397ab; }
+
+QFrame#wl_syntax_popover {
+  background: #232532; border: 1px solid #595d6c; border-radius: 8px;
+}
+QFrame#wl_syntax_popover QLabel[syntaxToken="true"] {
+  color: #d2cefd; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px;
+}
+QFrame#wl_syntax_popover QLabel[syntaxDesc="true"] { color: #9397ab; font-size: 12px; }
+QLabel#wl_syntax_caption { color: #9397ab; font-size: 11px; letter-spacing: 1px; }
+
+QFrame#wl_template_ribbon {
+  background: #1b1d2c; border: 1px solid #3f424d; border-radius: 6px;
+  min-height: 32px; max-height: 32px;
+}
+QLabel#wl_template_text { font-size: 12px; color: #9397ab; }
+QToolButton#wl_template_dismiss {
+  background: transparent; border: none; color: #9397ab; font-size: 13px; padding: 0 4px;
+}
+QToolButton#wl_template_dismiss:hover { color: #e9e9ed; }
+
+QPlainTextEdit#wl_editor {
+  background: #232532; border: 1px solid #3f424d; border-radius: 7px;
+  padding: 11px 13px;
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px;
+}
+QLineEdit#wl_tester_input { font-size: 12px; }                      /* placeholder carries the old hint text */
+QLabel#wl_tester_result { font-size: 12px; color: #9397ab; }
+QLabel#wl_tester_result[state="hit"] { color: #e9e9ed; }
+
+
+/* ============================================================
+   1g — Empty states as drop targets
+   ------------------------------------------------------------
+   The queue list and its empty state are two pages of a
+   QStackedWidget, so #drop_zone occupies exactly the area files
+   land on. dragEnterEvent sets dragOver + the accepted-file count
+   in #empty_title; dragLeaveEvent / dropEvent clear it.
+   The transcript tab reuses the same objectNames with
+   accepts="false" (no drag affordance, 1px static border).
+   ============================================================ */
+
+QFrame#drop_zone {
+  background: transparent;
+  border: 2px dashed #423a6a;
+  border-radius: 10px;
+}
+QFrame#drop_zone:hover { border-color: #595d6c; }
+QFrame#drop_zone[dragOver="true"] {
+  border-color: #9184d9; background: #2b2741;
+}
+QFrame#drop_zone[accepts="false"] { border: 1px dashed #3f424d; }
+QFrame#drop_zone QLabel { background: transparent; }
+
+QLabel#empty_icon {
+  min-width: 44px; max-width: 44px; min-height: 44px; max-height: 44px;
+  border-radius: 12px; qproperty-alignment: AlignCenter;
+  background: #2b2741; border: 1px solid #423a6a;
+}
+QLabel#empty_icon[accepts="false"] { background: #1b1d2c; border-color: #3f424d; }
+QFrame#drop_zone[dragOver="true"] QLabel#empty_icon { background: #423a6a; border-color: #9184d9; }
+
+QLabel#empty_title { font-size: 15px; font-weight: 500; color: #e9e9ed; }
+QFrame#drop_zone[dragOver="true"] QLabel#empty_title { color: #d2cefd; }
+QLabel#empty_body { font-size: 12px; color: #9397ab; }             /* ONE line — see the handoff on the copy cut */
+QPushButton#btn_empty_primary { padding: 7px 14px; font-size: 12px; }
+QPushButton#btn_empty_secondary { padding: 7px 14px; font-size: 12px; }

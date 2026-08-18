@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -24,6 +23,7 @@ from ..core import review
 from ..core.probe import media_duration
 from ..engine import wordmute as engine
 from ..engine.wordmute import fmt_ts
+from .dialogs import confirm
 from .hover_table import HoverRowTable
 from .i18n import tr
 from .player import SnippetPlayer
@@ -326,12 +326,11 @@ class ReviewDialog(QDialog):
         if self._wave_worker is not None:
             self._wave_worker.wait(5000)
         if self._dirty:
-            if QMessageBox.question(
-                    self, "WordMute",
-                    tr("You changed the mute selection but didn't "
-                       "re-render, so the output file is unchanged. "
-                       "Close anyway?")) \
-                    != QMessageBox.StandardButton.Yes:
+            if not confirm(self, title=tr("Close without re-rendering?"),
+                           body=tr("You changed the mute selection but "
+                                   "didn't re-render, so the output file "
+                                   "stays as it is."),
+                           ok_text=tr("Close anyway")):
                 event.ignore()
                 return
         self._player.dispose()

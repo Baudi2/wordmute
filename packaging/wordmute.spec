@@ -42,6 +42,18 @@ for pkg in ("huggingface_hub",):
     binaries += b
     hiddenimports += h
 
+# Qt's own catalogs are NOT collected automatically: without them the
+# native dialogs keep their English labels in a Russian UI. Ship one .qm
+# per language the app offers (main.install_qt_translations looks here).
+import PySide6
+_qt_translations = Path(PySide6.__file__).parent / "translations"
+for _lang in ("ru",):
+    _qm = _qt_translations / f"qtbase_{_lang}.qm"
+    if _qm.exists():
+        datas.append((str(_qm), "PySide6/translations"))
+    else:
+        raise SystemExit(f"missing Qt translation: {_qm}")
+
 a = Analysis(
     [str(Path(SPECPATH) / "launch.py")],
     pathex=[str(ROOT)],

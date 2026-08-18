@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
-    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -31,6 +30,7 @@ from ..core.jobs import (JobOptions, QueueItem, build_plan, expand_inputs,
                          scan_watch_dir)
 from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
+from .dialogs import confirm, inform, mark_danger, themed_menu
 from .events import format_event
 from .history_tab import HistoryTab
 from .i18n import tr
@@ -808,8 +808,7 @@ class MainWindow(QMainWindow):
         """(menu, actions) for the card ⋯ menu — split out of
         _card_menu so it can be built without exec()ing it (tests and
         the screenshot script)."""
-        from PySide6.QtWidgets import QMenu
-        menu = QMenu(self)
+        menu = themed_menu(self, "card_menu")
         out = self._output_path_for_row(row)
         out_ok = bool(out and Path(out).exists())
         act_open = menu.addAction(tr("Open output"))
@@ -823,9 +822,11 @@ class MainWindow(QMainWindow):
         # per-item language: force the RU/EN list+plan for this video
         row_item = self.queue.item(row)
         queue_obj = row_item.data(ITEM_ROLE) if row_item else None
-        lang_menu = menu.addMenu(tr("Processing language"))
-        # addMenu(str) hands ownership to Python: without a reference
-        # the submenu is collected as soon as the builder returns
+        lang_menu = themed_menu(menu, "card_menu_language")
+        lang_menu.setTitle(tr("Processing language"))
+        menu.addMenu(lang_menu)
+        # addMenu hands ownership to Python: without a reference the
+        # submenu is collected as soon as the builder returns
         menu._lang_menu = lang_menu
         current = getattr(queue_obj, "lang_profile", "auto") or "auto"
         for key, label in (("auto", tr("Auto (main setup)")),
@@ -838,13 +839,15 @@ class MainWindow(QMainWindow):
                 lambda _=False, k=key, r=row: self._set_item_lang(r, k))
         menu.addSeparator()
         deletable = self._worker is None
-        act_del_src = menu.addAction(tr("Delete source video and JSONs"))
+        # short labels: the confirmation lists the exact files anyway
+        act_del_src = menu.addAction(tr("Delete source and JSONs"))
         act_del_src.setEnabled(
             deletable and bool(self._files_for_row(row, False)))
-        act_del_all = menu.addAction(
-            tr("Delete all files (source, clean, JSONs)"))
+        mark_danger(act_del_src)
+        act_del_all = menu.addAction(tr("Delete all files"))
         act_del_all.setEnabled(
             deletable and bool(self._files_for_row(row, True)))
+        mark_danger(act_del_all)
         menu.addSeparator()
         act_remove = menu.addAction(tr("Remove"))
         act_remove.setEnabled(deletable)
@@ -931,10 +934,9 @@ class MainWindow(QMainWindow):
         if path and Path(path).exists():
             self._open_review(path)
         else:
-            QMessageBox.information(
-                self, "WordMute",
-                tr("No review data for this row yet — it appears after "
-                   "the file has been processed and something was muted."))
+            inform(self, title=tr("Nothing to review yet"),
+                   body=tr("Review data appears after the file has been "
+                           "processed and something was muted."))
 
     def _pick_review(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -944,8 +946,8 @@ class MainWindow(QMainWindow):
             try:
                 self._open_review(path)
             except Exception as exc:
-                QMessageBox.warning(self, "WordMute",
-                                    f"Could not open review file: {exc}")
+                inform(self, title=tr("Could not open the review file"),
+                       body=str(exc))
 
     # ---------------------------------------------------------- warnings
     @staticmethod
@@ -1042,30 +1044,26 @@ class MainWindow(QMainWindow):
             self._clear_finished_rows()
         if not self.queue.count():
             if not auto:
-                QMessageBox.information(self, "WordMute",
-                                        tr("Add some files first."))
+                inform(self, title=tr("Add some files first."))
             return
         pending = self._pending_rows()
         if not pending:
             if not auto:
-                QMessageBox.information(
-                    self, "WordMute",
-                    tr("Everything in the queue is already processed — "
-                       "add new files or use Retry on a failed one."))
+                inform(self, title=tr("Everything is processed already"),
+                       body=tr("Add new files, or use Retry on a failed "
+                               "one."))
             return
         items = [self.queue.item(r).data(ITEM_ROLE) for r in pending]
         lists = self._selected_wordlists()
         if not lists:
             if not auto:
-                QMessageBox.information(
-                    self, "WordMute", tr("Select at least one word list."))
+                inform(self, title=tr("Select at least one word list."))
             return
         engines = self.plan.engines()
         if not engines:
             if not auto:
-                QMessageBox.information(
-                    self, "WordMute",
-                    tr("Add at least one pass to the plan."))
+                inform(self, title=tr("Add at least one pass to the "
+                                      "plan."))
             return
         gigaam_backend = self._pick_gigaam_backend(self._settings)
         # No Hugging Face account is needed any more: setup installs
@@ -1445,10 +1443,11 @@ class MainWindow(QMainWindow):
     # ---------------------------------------------------------- lifecycle
     def closeEvent(self, event):
         if self._worker is not None:
-            if QMessageBox.question(
-                    self, "WordMute",
-                    tr("Processing is still running. Cancel and quit?")) \
-                    != QMessageBox.StandardButton.Yes:
+            if not confirm(self,
+                           title=tr("Processing is still running."),
+                           body=tr("Quitting cancels the current file; "
+                                   "finished files are kept."),
+                           ok_text=tr("Cancel and quit")):
                 event.ignore()
                 return
             self._worker.cancel()

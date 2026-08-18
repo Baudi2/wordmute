@@ -18,6 +18,40 @@ def _use_bundled_ffmpeg():
             break
 
 
+def qt_translation_dirs() -> list:
+    """Where Qt's own .qm catalogs can live: the path Qt reports, plus
+    the two places a PyInstaller bundle puts them."""
+    from pathlib import Path
+
+    from PySide6.QtCore import QLibraryInfo
+    dirs = [Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))]
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        dirs += [Path(base) / "PySide6" / "translations",
+                 Path(base) / "PySide6" / "Qt" / "translations"]
+    import PySide6
+    dirs.append(Path(PySide6.__file__).parent / "translations")
+    return dirs
+
+
+def install_qt_translations(app, language: str):
+    """Qt's built-in dialogs (QFileDialog, and any QMessageBox that
+    survives) take their button labels from Qt's own catalog, not ours —
+    without qtbase_<lang>.qm a Russian UI shows English «Yes/No/Open»."""
+    from PySide6.QtCore import QTranslator
+    code = (language or "en").split("_")[0]
+    if code == "en":
+        return None                     # Qt's source language
+    for directory in qt_translation_dirs():
+        translator = QTranslator(app)
+        if translator.load(f"qtbase_{code}", str(directory)):
+            app.installTranslator(translator)
+            # keep a reference: a collected QTranslator stops translating
+            app._qt_translator = translator
+            return translator
+    return None
+
+
 APP_USER_MODEL_ID = "Baudi2.WordMute"
 
 
@@ -72,6 +106,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("WordMute")
+    install_qt_translations(app, settings.get("ui_language", "en"))
     apply_theme(app, settings.get("theme", "dark"))
     app.setWindowIcon(app_icon())
 

@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -18,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import gpu, models, updates
+from .dialogs import confirm, inform
 from .hover_table import HoverRowTable
 from .i18n import tr
 
@@ -307,21 +307,20 @@ class ModelsTab(QWidget):
         self.refresh()
 
     def _delete(self, model: str):
-        if QMessageBox.question(
-                self, "WordMute",
-                tr("Delete the downloaded '{}' model? It will be "
-                   "re-downloaded automatically the next time it's "
-                   "used.").format(model)) \
-                == QMessageBox.StandardButton.Yes:
+        if confirm(self,
+                   title=tr("Delete the downloaded '{}' model?")
+                   .format(model),
+                   body=tr("It is downloaded again the next time it is "
+                           "used."),
+                   ok_text=tr("Delete model")):
             models.delete_whisper_model(model)
             self.refresh()
 
     def _delete_gigaam(self):
-        if QMessageBox.question(
-                self, "WordMute",
-                tr("Delete all GigaAM model caches? They will be "
-                   "re-downloaded on the next GigaAM pass.")) \
-                == QMessageBox.StandardButton.Yes:
+        if confirm(self, title=tr("Delete all GigaAM model caches?"),
+                   body=tr("They are downloaded again on the next GigaAM "
+                           "pass."),
+                   ok_text=tr("Delete caches")):
             models.delete_gigaam_caches()
             self.refresh()
 
@@ -337,21 +336,19 @@ class ModelsTab(QWidget):
     def _repair_components(self):
         """The standard clean retry from INSTALL_GUIDE, as a button:
         delete the managed runtime, then run the component setup."""
-        if QMessageBox.question(
-                self, "WordMute",
-                tr("Delete the downloaded components and install them "
-                   "again? Word lists, settings and models are not "
-                   "affected. Best done right after starting the app, "
-                   "before any processing.")) \
-                != QMessageBox.StandardButton.Yes:
+        if not confirm(self,
+                       title=tr("Reinstall the downloaded components?"),
+                       body=tr("Word lists, settings and models are not "
+                               "affected. Best done right after starting "
+                               "the app, before any processing."),
+                       ok_text=tr("Reinstall")):
             return
         import shutil
         from ..core import runtime_env
         shutil.rmtree(runtime_env.runtime_dir(), ignore_errors=True)
         self._open_components()
-        QMessageBox.information(
-            self, "WordMute",
-            tr("Restart the app to use the reinstalled components."))
+        inform(self, title=tr("Restart the app to use the reinstalled "
+                              "components."))
 
     # ---------------------------------------------------------- updates
     def _check_updates(self):

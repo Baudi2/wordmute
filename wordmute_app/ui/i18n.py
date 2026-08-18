@@ -714,8 +714,64 @@ RU = {
         "Проходы идут сверху вниз; каждый перепроверяет результат "
         "предыдущего и останавливается, когда нового ничего не "
         "найдено. Разные движки ловят то, что пропустил другой.",
-    # dialogs (shared)
+    # dialogs (shared) — confirmations name the action, never Yes/No
     "Close": "Закрыть",
+    "Got it": "Понятно",
+    "Save": "Сохранить",
+    "Discard": "Не сохранять",
+    "They can be restored from the Recycle Bin.":
+        "Их можно вернуть из Корзины.",
+    "To Recycle Bin": "В Корзину",
+    "Delete failed": "Не удалось удалить",
+    "Nothing to review yet": "Проверять пока нечего",
+    "Review data appears after the file has been processed and "
+    "something was muted.":
+        "Данные проверки появляются после обработки файла, если "
+        "что-то было заглушено.",
+    "Could not open the review file":
+        "Не удалось открыть файл проверки",
+    "Everything is processed already": "Всё уже обработано",
+    "Add new files, or use Retry on a failed one.":
+        "Добавьте новые файлы или нажмите «Повторить» на неудачном.",
+    "Processing is still running.": "Обработка ещё идёт.",
+    "Quitting cancels the current file; finished files are kept.":
+        "При выходе текущий файл отменяется, готовые остаются.",
+    "Cancel and quit": "Отменить и выйти",
+    "Delete source and JSONs": "Удалить исходник и JSON",
+    "Delete all files": "Удалить все файлы",
+    "Clear history": "Очистить историю",
+    "Only the list is cleared — no video file is touched.":
+        "Очищается только список — сами видео не затрагиваются.",
+    "Delete the downloaded '{}' model?":
+        "Удалить скачанную модель «{}»?",
+    "It is downloaded again the next time it is used.":
+        "Она скачается заново при следующем использовании.",
+    "Delete model": "Удалить модель",
+    "Delete all GigaAM model caches?": "Удалить все кэши моделей GigaAM?",
+    "They are downloaded again on the next GigaAM pass.":
+        "Они скачаются заново на следующем проходе GigaAM.",
+    "Delete caches": "Удалить кэши",
+    "Reinstall the downloaded components?":
+        "Переустановить скачанные компоненты?",
+    "Word lists, settings and models are not affected. Best done right "
+    "after starting the app, before any processing.":
+        "Списки слов, настройки и модели не затрагиваются. Лучше делать "
+        "сразу после запуска, до обработки.",
+    "Reinstall": "Переустановить",
+    "Close without re-rendering?": "Закрыть без пересборки?",
+    "You changed the mute selection but didn't re-render, so the "
+    "output file stays as it is.":
+        "Вы изменили набор заглушек, но не пересобрали результат — "
+        "файл останется прежним.",
+    "Close anyway": "Всё равно закрыть",
+    "Stop the installation?": "Прервать установку?",
+    "Downloaded parts are kept and setup resumes next time.":
+        "Скачанное сохранится, установка продолжится в следующий раз.",
+    "Stop installing": "Прервать",
+    "The word list has unsaved changes.":
+        "В списке слов есть несохранённые правки.",
+    "Saving also sorts the list and removes duplicates.":
+        "При сохранении список сортируется, дубликаты убираются.",
     "Browse…": "Обзор…",
     "Delete": "Удалить",
     "Download": "Скачать",

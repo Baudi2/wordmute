@@ -345,10 +345,21 @@ def write_report(dest) -> None:
             imports[module] = True
         except Exception as exc:
             imports[module] = f"{type(exc).__name__}: {exc}"[:200]
+    # Qt's own catalogs: the RU labels of the native dialogs come from
+    # here, and a frozen build only has them if the spec shipped them
+    qt_translations = {}
+    try:
+        from ..main import qt_translation_dirs
+        for directory in qt_translation_dirs():
+            qt_translations[str(directory)] = (
+                directory / "qtbase_ru.qm").exists()
+    except Exception as exc:                              # noqa: BLE001
+        qt_translations["error"] = f"{type(exc).__name__}: {exc}"[:200]
     Path(dest).write_text(
         json.dumps({"runtime_dir": str(runtime_dir()),
                     "status": status(),
                     "imports": imports,
+                    "qt_translations": qt_translations,
                     "frozen": bool(getattr(sys, "frozen", False))},
                    indent=1),
         encoding="utf-8")

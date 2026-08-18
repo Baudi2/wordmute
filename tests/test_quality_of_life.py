@@ -128,9 +128,8 @@ def test_disk_label_combines_components(models_tab):
 
 
 def test_repair_deletes_runtime_and_reopens_setup(models_tab, monkeypatch,
-                                                  tmp_path):
+                                                  tmp_path, confirm_yes):
     from wordmute_app.core import runtime_env
-    from PySide6.QtWidgets import QMessageBox
 
     marker = runtime_env.runtime_dir() / "python" / "python.exe"
     marker.parent.mkdir(parents=True)
@@ -138,21 +137,16 @@ def test_repair_deletes_runtime_and_reopens_setup(models_tab, monkeypatch,
     opened = []
     monkeypatch.setattr(models_tab, "_open_components",
                         lambda: opened.append(True))
-    monkeypatch.setattr(QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.StandardButton.Yes)
-    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
     models_tab._repair_components()
     assert not runtime_env.runtime_dir().exists()
     assert opened == [True]
 
 
 def test_repair_declined_keeps_runtime(models_tab, monkeypatch):
+    """no_modal_dialogs answers Cancel by default."""
     from wordmute_app.core import runtime_env
-    from PySide6.QtWidgets import QMessageBox
 
     runtime_env.runtime_dir().mkdir(parents=True)
-    monkeypatch.setattr(QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.StandardButton.No)
     models_tab._repair_components()
     assert runtime_env.runtime_dir().exists()
 

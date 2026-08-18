@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
-    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -36,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config, gpu, models, runtime_env
+from .dialogs import confirm
 from .i18n import current_language, set_language, tr
 
 STEP_KEYS = ("intro", "python", "whisper", "ytdlp", "ffmpeg", "gigaam",
@@ -1033,11 +1033,10 @@ class SetupDialog(QDialog):
 
     def _cancel_clicked(self):
         if self._worker is not None:
-            if QMessageBox.question(
-                    self, "WordMute",
-                    tr("Stop the installation? Downloaded parts are "
-                       "kept and setup resumes next time.")) \
-                    != QMessageBox.StandardButton.Yes:
+            if not confirm(self, title=tr("Stop the installation?"),
+                           body=tr("Downloaded parts are kept and setup "
+                                   "resumes next time."),
+                           ok_text=tr("Stop installing")):
                 return
             self._worker.cancel()
             self.install_sub.setText(tr("Cancelling…"))

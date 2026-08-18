@@ -12,8 +12,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMenu,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -22,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import cleanup, config, history
+from .dialogs import confirm, inform, mark_danger, themed_menu
 from .file_delete import confirm_and_recycle
 from .hover_table import HoverRowTable
 from .i18n import tr
@@ -223,7 +222,7 @@ class HistoryTab(QWidget):
         r = self._record_for_row(row)
         if r is None:
             return
-        menu = QMenu(self)
+        menu = themed_menu(self, "history_menu")
         out = r.get("output", "")
         out_ok = bool(out and Path(out).exists())
         act_open = menu.addAction(tr("Open output"))
@@ -233,11 +232,12 @@ class HistoryTab(QWidget):
         act_copy = menu.addAction(tr("Copy error"))
         act_copy.setEnabled(bool(r.get("error")))
         menu.addSeparator()
-        act_del_src = menu.addAction(tr("Delete source video and JSONs"))
+        act_del_src = menu.addAction(tr("Delete source and JSONs"))
         act_del_src.setEnabled(bool(self._files_for_row(row, False)))
-        act_del_all = menu.addAction(
-            tr("Delete all files (source, clean, JSONs)"))
+        mark_danger(act_del_src)
+        act_del_all = menu.addAction(tr("Delete all files"))
         act_del_all.setEnabled(bool(self._files_for_row(row, True)))
+        mark_danger(act_del_all)
         chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
         if chosen is act_open:
             os.startfile(out)
@@ -285,12 +285,12 @@ class HistoryTab(QWidget):
                 else:
                     os.startfile(str(Path(out).parent))
                 return
-        QMessageBox.information(self, "WordMute",
-                                tr("Processed files will appear here."))
+        inform(self, title=tr("Processed files will appear here."))
 
     def _clear(self):
-        if QMessageBox.question(self, "WordMute",
-                                tr("Clear the whole processing history?")) \
-                == QMessageBox.StandardButton.Yes:
+        if confirm(self, title=tr("Clear the whole processing history?"),
+                   body=tr("Only the list is cleared — no video file is "
+                           "touched."),
+                   ok_text=tr("Clear history")):
             history.clear_history()
             self.refresh()
