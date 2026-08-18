@@ -13,7 +13,7 @@
 <script>
   const GITHUB_USER = "Baudi2";
   const GITHUB_REPO = "wordmute";
-  const INSTALLER_NAME = "WordMute-Setup-0.5.0.exe"; // запасной вариант: актуальный .exe подбирается из релиза автоматически
+  const INSTALLER_NAME = "WordMute-Setup-0.6.0.exe"; // запасной вариант: актуальный .exe подбирается из релиза автоматически
 </script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -416,7 +416,7 @@
           </div>
           <div>
             <h3>GigaAM для русской речи</h3>
-            <p>По умолчанию работает faster-whisper — настраивать ничего не нужно. GigaAM — опциональный компонент (экспериментальный) для более точного русского распознавания: около 1 ГБ вместе с моделью, быстро работает даже без видеокарты, никаких аккаунтов и токенов не требуется.</p>
+            <p>По умолчанию работает faster-whisper — настраивать ничего не нужно. GigaAM — второй движок для более точного русского распознавания: около 1 ГБ вместе с моделью, быстро работает даже без видеокарты, никаких аккаунтов и токенов не требуется. Он предлагается прямо в мастере настройки и скачивается целиком сразу.</p>
           </div>
         </div>
         <div class="feature">
@@ -427,7 +427,7 @@
           </div>
           <div>
             <h3>Русский и английский</h3>
-            <p>Интерфейс и готовые словари на обоих языках. Словари уже включают словоформы, и их можно редактировать под себя.</p>
+            <p>Интерфейс и готовые словари на обоих языках. Словари уже включают словоформы, и их можно редактировать под себя. Язык можно задать и отдельному видео в очереди — русские и английские ролики обрабатываются одной пачкой.</p>
           </div>
         </div>
         <div class="feature">
@@ -543,7 +543,7 @@
       <div class="download-card">
         <span class="mono">Установка</span>
         <h2>Скачайте WordMute</h2>
-        <p>Установщик лёгкий — около 150 МБ. При первом запуске приложение само скачает нужные компоненты (Python-окружение, распознавание Whisper, yt-dlp, ffmpeg): от ~0,4 ГБ для работы на процессоре до ~2,5 ГБ для GPU. При первой обработке дополнительно загрузится модель распознавания — её размер выбирается при установке (от ~0,5 до ~3 ГБ).</p>
+        <p>Установщик лёгкий — около 160 МБ. При первом запуске откроется мастер настройки: он объяснит каждый компонент (Python-окружение, распознавание Whisper, yt-dlp, ffmpeg, по желанию GigaAM) и скачает всё сразу — от ~0,4 ГБ для работы на процессоре до ~2,5 ГБ для GPU, плюс модель распознавания на выбор (от ~0,5 до ~3 ГБ). После настройки программа готова к работе: первое видео уже ничего не догружает.</p>
         <a class="btn btn-primary" data-download href="#">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M8 1v9m0 0L4.5 6.5M8 10l3.5-3.5M2 13h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -604,25 +604,29 @@
    SmartScreen («Система Windows защитила ваш компьютер») — нажмите
    **«Подробнее» → «Выполнить в любом случае»**. Это нормально:
    установщик просто не подписан платным сертификатом.
-2. Установщик маленький (~150 МБ) и ставит только само приложение.
+2. Установщик маленький (~160 МБ) и ставит только само приложение.
    Права администратора НЕ нужны.
-3. При первом запуске WordMute откроет окно **«Компоненты»** и скачает
-   недостающее: Python-окружение, распознавание речи Whisper, yt-dlp
-   (загрузка видео) и ffmpeg. Выберите вариант GPU, если у вас
-   видеокарта NVIDIA, иначе CPU. Там же выбирается размер модели
-   распознавания: large-v3 (~3 ГБ, лучшее качество), medium (~1,5 ГБ)
-   или small (~0,5 ГБ) — сама модель скачается при первой обработке.
+3. При первом запуске WordMute откроет **мастер настройки** из 8 шагов
+   и объяснит каждый компонент: Python-окружение, распознавание речи
+   Whisper (выбор GPU/CPU и размер модели: large-v3 ~3 ГБ — лучшее
+   качество, large-v3-turbo ~1,5 ГБ, medium ~1,5 ГБ, small ~0,5 ГБ),
+   yt-dlp (загрузка видео по ссылкам), ffmpeg (обязателен) и
+   опциональный GigaAM. Предпоследний шаг показывает итоговый размер
+   загрузки, последний — ход установки.
+   **Всё скачивается сразу во время настройки** — после неё программа
+   готова к работе, первое видео не тянет ничего дополнительно.
 4. **Что понадобится:**
-   - свободное место: ~1 ГБ (CPU) / ~2.5 ГБ (GPU) для компонентов
-     + ~3 ГБ для модели распознавания при первом запуске обработки;
+   - свободное место: ~1 ГБ (CPU) / ~2,5 ГБ (GPU) для компонентов
+     + модель распознавания (0,5–3 ГБ по выбору)
+     + ~0,9 ГБ, если оставить GigaAM;
    - стабильный интернет;
    - **в России**: сайты python.org, pypi.org и huggingface.co могут
      быть заблокированы или замедлены — включите VPN на время
-     установки и первого запуска.
-5. Опциональный компонент **GigaAM** (лучше распознаёт русскую речь,
-   ~60 МБ + модель ~850 МБ при первом использовании, аккаунт не
-   нужен, экспериментальный) можно доустановить позже: вкладка
-   «Модели» → «Компоненты…».
+     установки.
+5. **GigaAM** (движок Сбера, точнее распознаёт русскую речь; ~60 МБ
+   движок + ~850 МБ модель, аккаунт и токен не нужны) отмечен в
+   мастере галочкой по умолчанию. Если снять её, его можно
+   доустановить позже: вкладка «Модели» → «Компоненты…».
 
 ---
 
@@ -637,13 +641,17 @@ screen. Answer in the user's language.
 
 ### Architecture facts
 
-- The installer (`{{INSTALLER}}`, Inno Setup, ~150 MB)
+- The installer (`{{INSTALLER}}`, Inno Setup, ~160 MB)
   installs ONLY the application, per-user (no admin rights), default
   location `%LOCALAPPDATA%\Programs\WordMute`. It creates a Start-menu
   entry, an optional desktop icon, and an uninstaller in Windows
   Settings → Apps.
-- On first launch the app shows a **component setup dialog** which
-  downloads, into `%LOCALAPPDATA%\WordMute\runtime`:
+- On first launch the app shows an **8-step setup wizard** (intro →
+  Python → Whisper → yt-dlp → ffmpeg → GigaAM → review → installing).
+  It follows the Windows display language on that first run and
+  downloads EVERYTHING the user selected before finishing — nothing is
+  deferred to the first video. It writes into
+  `%LOCALAPPDATA%\WordMute\runtime`:
   1. **Python runtime**: embeddable CPython 3.12 from
      `python.org/ftp/python/...` (~11 MB) + pip from
      `bootstrap.pypa.io/get-pip.py`;
@@ -656,14 +664,14 @@ screen. Answer in the user's language.
        normal driver, nothing else;
      - Whisper CPU flavor: `faster-whisper` only (~0.3 GB);
      - `yt-dlp` (~10 MB);
-     - optional GigaAM via `onnx-asr[cpu,hub]` (~60 MB; the ~850 MB
-       model downloads from huggingface.co on first use — CPU
-       inference, NO Hugging Face account or token required).
-- On the first actual transcription the app additionally downloads
-  the Whisper model chosen during setup (`large-v3` ~3 GB default,
-  `medium` ~1.5 GB, `small` ~0.5 GB) from `huggingface.co` into
-  `%USERPROFILE%\.cache\huggingface`. The model can be changed later
-  in Настройки and pre-downloaded in the Модели tab.
+     - optional GigaAM via `onnx-asr[cpu,hub]` (~60 MB) — CPU
+       inference, NO Hugging Face account or token required;
+  4. **models**, from `huggingface.co` into
+     `%USERPROFILE%\.cache\huggingface`: the chosen Whisper model
+     (`large-v3` ~3 GB default, `large-v3-turbo` / `medium` ~1.5 GB,
+     `small` ~0.5 GB) and, when GigaAM is kept, its ~850 MB ONNX model
+     plus the silero VAD. The Whisper model can be changed later in
+     Настройки; other sizes can be pre-downloaded in the Модели tab.
 - The app checks GitHub for new WordMute versions shortly after
   startup and may show a tray notification offering the download
   page — this is normal behavior, not malware.
@@ -675,11 +683,12 @@ screen. Answer in the user's language.
 The setup needs these hosts reachable: `python.org`, `pypi.org` and
 `files.pythonhosted.org`, `bootstrap.pypa.io`, `gyan.dev`,
 `huggingface.co` and `cas-bridge.xethub.hf.co` (model downloads),
-plus the video sites the user downloads from. Several of these are
-blocked or throttled in Russia — the standard fix is enabling a VPN
-for the duration of setup and the first model download. Processing
+`github.com` (ffmpeg mirror + update check), plus the video sites the
+user downloads from. Several of these are blocked or throttled in
+Russia — the standard fix is enabling a VPN for the duration of the
+setup wizard, which is where every download now happens. Processing
 itself is fully offline afterwards; the VPN is only needed again for
-updates or new model downloads.
+updates or extra model downloads.
 
 ### Troubleshooting map
 
@@ -690,7 +699,8 @@ updates or new model downloads.
 | pip errors mentioning "No space left" / диск | Not enough free disk | Free ~5 GB on drive C: and re-run the component setup. |
 | Antivirus deletes/quarantines files during setup | AV false positive on downloaded exes | Add `%LOCALAPPDATA%\WordMute` to AV exclusions, re-run setup. |
 | App starts but transcription fails with CUDA/DLL errors | GPU flavor installed without an NVIDIA GPU or with a very old driver | Re-open Модели → «Компоненты…», install the CPU flavor (it overwrites), or update the NVIDIA driver. |
-| First transcription stuck at "Загрузка модели" | The ~3 GB model download from huggingface.co is slow/blocked | Wait, or enable VPN; progress is visible in the app log («Подробности»). |
+| Setup sits on «Модель распознавания» for a long time | That step downloads the whole ~3 GB Whisper model (and ~850 MB for GigaAM) from huggingface.co — slow or throttled links make it look stuck | Wait, or enable VPN and press «Установить» again; the per-component progress and the «Журнал установки» show what is happening. |
+| ffmpeg step fails with a timeout | gyan.dev is unreachable | Nothing to do: the app retries and falls back to a GitHub mirror on its own; if both fail, enable VPN and re-run the setup. |
 | Video download fails for a specific site | yt-dlp needs updating (sites change constantly) | Модели tab → «Проверить обновления» → «Обновить все», then restart the app. |
 | Boosty/member-only videos fail | Cookies needed | Настройки → «Файл cookies»: export cookies from the browser (a "cookies.txt" extension) and select that file. |
 | GigaAM errors about Hugging Face token / pyannote | Only possible on an OLD install that still uses the legacy torch backend | Current versions run GigaAM via onnx-asr: no account, no token, and the setup wizard has no token step at all. Fix: Модели → «Починить компоненты» to reinstall the current component set. |

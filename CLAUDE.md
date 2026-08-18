@@ -147,14 +147,28 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   verified). The in-app update check was confirmed LIVE: a simulated
   0.4.0 detects 0.5.0 with the correct release URL. Still pending:
   A/B of «быстрый режим» on a real RU video (user).
-- Post-0.5.0 fixes from the user's real 5-video night batch (all on
-  master, unreleased — 0.5.1 material): continuous download pump
-  (was one-ahead), per-item language profiles «Язык обработки» in
-  the card ⋮ menu (mixed RU/EN queues; auto language detection
-  deliberately rejected — mixed-speech videos), delete-source
-  protected when no .clean copy exists, batch-added links get real
-  video names (worker backfills title from the downloaded file;
-  История repairs old URL-named rows at display time).
+- v0.6.0 SHIPPED 2026-08-18 (19 commits since 0.5.0). Night-batch
+  fixes: continuous download pump (was one-ahead), per-item language
+  profiles «Язык обработки» in the card ⋯ menu (mixed RU/EN queues;
+  auto detection deliberately rejected — mixed-speech videos),
+  delete-source protected when no .clean copy exists, batch links get
+  real video names. Tester round: first run follows the OS language,
+  batch adds take a quality cap instead of forced best, multi-URL
+  input is one link per line, ffmpeg download retries + GitHub
+  mirror, GigaAM back on the GPU when torch+CUDA are there, GigaAM
+  onnx sentence-splitting fixed (SentencePiece «▁» token shape).
+  Setup became the 8-step wizard (everything downloads during setup,
+  ffmpeg has no checkbox, GigaAM pre-checked and no longer labelled
+  experimental, HF-token wizard deleted). Plus the full screenshot
+  set (docs/design + SCREENS.md) and the leftover-JSON fix
+  (drop_output_caches). Installer 160 MB, frozen report all green,
+  smoke ok.
+- Weak points queued for the design round (docs/design/SCREENS.md):
+  unthemed QMenu/QMessageBox with English Yes/No in a RU UI (needs
+  qtbase_ru bundled), install page overflows with the log open,
+  batch Add-URL is mostly empty space, History dates use the C
+  locale, «100 ms»/«1000 Hz» suffixes untranslated, Word Lists tab
+  dense, empty states have no anchor.
 - Other open items: LICENSE file decision (repo is public with no
   license = all-rights-reserved; user undecided), GigaAM frozen-build
   end-to-end still untested (install channel now fixed; torch is

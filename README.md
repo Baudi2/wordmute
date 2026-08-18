@@ -27,6 +27,10 @@
   секунды, без повторного распознавания.
 - **Загрузка по ссылке** — YouTube, VK Видео и другие площадки, выбор
   качества; закрытые видео по подписке (Boosty) — через файл cookies.
+  Несколько ссылок добавляются пачкой с общим ограничением качества, а
+  пока одно видео обрабатывается, следующее уже скачивается.
+- **Язык для каждого видео** — русские и английские ролики можно
+  обработать одной очередью: язык задаётся в меню карточки.
 - **Свои списки слов** — редактируйте словари под себя прямо в
   приложении, с проверкой «почему это слово заглушится».
 - **Ускорение на GPU** — с видеокартой NVIDIA распознавание в разы
@@ -40,9 +44,11 @@
 
 Скачайте установщик с [сайта](https://baudi2.github.io/wordmute/) или
 из [релизов](https://github.com/Baudi2/wordmute/releases/latest) и
-запустите. Установщик лёгкий (~160 МБ); при первом запуске приложение
-само скачает нужные компоненты (0,4–2,5 ГБ), а при первой обработке —
-модель распознавания (0,5–3 ГБ, размер выбирается при установке).
+запустите. Установщик лёгкий (~160 МБ); при первом запуске откроется
+мастер настройки, который объяснит каждый компонент и скачает всё
+сразу: окружение и движки (0,4–2,5 ГБ), модель распознавания на выбор
+(0,5–3 ГБ) и, если оставить галочку, GigaAM (~0,9 ГБ). После настройки
+первое видео уже ничего не догружает.
 
 Перед установкой:
 
@@ -87,8 +93,10 @@ available in English and Russian.
 
 Download from the [website](https://baudi2.github.io/wordmute/) or
 [releases](https://github.com/Baudi2/wordmute/releases/latest). The
-installer is small (~160 MB) and downloads its components (0.4–2.5 GB
-plus a ~3 GB speech model) on first run. If anything goes wrong, paste
+installer is small (~160 MB); on first run an 8-step wizard explains
+every component and downloads all of them at once (0.4–2.5 GB of
+runtime plus the speech model you pick, 0.5–3 GB), so the first video
+needs no further downloads. If anything goes wrong, paste
 [docs/INSTALL_GUIDE.md](docs/INSTALL_GUIDE.md) into any AI assistant —
 it is written to walk you through the installation. Developer notes:
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
