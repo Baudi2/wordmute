@@ -337,9 +337,11 @@ QPlainTextEdit#url_input { min-height: 0; }
    the end-of-list line fades at the edges, and the current pick is
    pinned at the bottom */
 QFrame#format_area {
-  border: 1px solid #292b31; border-radius: 8px; background: #1b1d2c;
+  border: 1px solid #292b31; border-radius: 8px; background: #161826;
 }
-QFrame#format_area QTableWidget { border: none; background: #1b1d2c; }
+/* only the border goes: setting a background here silenced the row
+   striping — the table's alternate color IS #1b1d2c */
+QFrame#format_area QTableWidget { border: none; }
 QWidget#format_tail { background: #111322; }
 QFrame#format_end_line {
   border: none;
@@ -349,7 +351,7 @@ QFrame#format_end_line {
 QLabel#format_tail_title { color: #9397ab; font-size: 12px; }
 QLabel#format_tail_hint { color: #75798c; font-size: 11px; }
 QWidget#format_selected {
-  background: #1b1d2c; border-top: 1px solid #292b31;
+  background: #161826; border-top: 1px solid #292b31;
   border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;
 }
 QLabel#format_selected_label { font-size: 12px; color: #e9e9ed; }

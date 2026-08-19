@@ -198,9 +198,10 @@ QPushButton#btn_empty_secondary { padding: 7px 14px; font-size: 12px; }
 QPlainTextEdit#url_input { min-height: 0; }
 
 QFrame#format_area {
-  border: 1px solid #d5d8e6; border-radius: 8px; background: #f7f8fd;
+  border: 1px solid #d5d8e6; border-radius: 8px; background: #f3f5fe;
 }
-QFrame#format_area QTableWidget { border: none; background: #f7f8fd; }
+/* only the border goes — the base background/alternate pair stripes */
+QFrame#format_area QTableWidget { border: none; }
 QWidget#format_tail { background: #e9ecf7; }
 QFrame#format_end_line {
   border: none;
@@ -210,7 +211,7 @@ QFrame#format_end_line {
 QLabel#format_tail_title { color: #595d6c; font-size: 12px; }
 QLabel#format_tail_hint { color: #8b8fa3; font-size: 11px; }
 QWidget#format_selected {
-  background: #f7f8fd; border-top: 1px solid #d5d8e6;
+  background: #f3f5fe; border-top: 1px solid #d5d8e6;
   border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;
 }
 QLabel#format_selected_label { font-size: 12px; color: #292b31; }
