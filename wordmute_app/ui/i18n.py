@@ -135,6 +135,52 @@ RU = {
         "Проверка по текущим правкам (даже несохраненным) "
         "плюс другой сохраненный список.",
     "Hide this note": "Скрыть эту подсказку",
+    # add URL, batch mode
+    "{} links · {}": "ссылок: {} · {}",
+    "Add {} to the queue": "Добавить {} в очередь",
+    "{} line(s) are not links — they will be skipped":
+        "строк не похожи на ссылки: {} — будут пропущены",
+    # setup: the install page's moving detail line and log dock
+    "Now: {}": "Сейчас: {}",
+    "{} of {}": "{} из {}",
+    "Copy": "Копировать",
+    "Copied": "Скопировано",
+    "Open file": "Открыть файл",
+    "Setup stopped — see the log.":
+        "Установка остановлена — подробности в журнале.",
+    # empty states as drop targets (design 1g)
+    "Drop video or audio here": "Перетащите сюда видео или аудио",
+    "Or paste a link. Everything runs on this computer.":
+        "Или вставьте ссылку. Всё считается на этом компьютере.",
+    "Release — {} file(s) join the queue":
+        "Отпустите — в очередь попадёт файлов: {}",
+    "mp4 · mkv · mp3 — anything else is skipped":
+        "mp4 · mkv · mp3 — остальное будет пропущено",
+    "The transcript will appear here": "Здесь появится расшифровка",
+    "Processed files open from here — or from History with a double "
+    "click.":
+        "Обработанные файлы открываются отсюда — или из истории "
+        "двойным щелчком.",
+    "Open History": "Открыть историю",
+    "Words from your lists are muted in the audio; the video itself is "
+    "copied untouched.":
+        "Слова из ваших списков заглушаются в звуке; сам видеоряд "
+        "копируется без изменений.",
+    # word lists: one toolbar row + the syntax popover (design 1f)
+    "Entry syntax": "Синтаксис записей",
+    "ENTRY SYNTAX": "СИНТАКСИС ЗАПИСЕЙ",
+    "exact word": "точное слово",
+    "word starts with": "слово начинается с",
+    "anywhere in the word": "в любом месте слова",
+    "phrase": "фраза",
+    "comment": "комментарий",
+    "Saving sorts the list, lowercases it and removes duplicates.":
+        "При сохранении список сортируется, приводится к нижнему "
+        "регистру, дубликаты убираются.",
+    "This is the shipped template — edit it freely, it's your list.":
+        "Это стартовый шаблон — правьте свободно, это ваш список.",
+    "Why would this be muted? — type a word or phrase":
+        "Почему это заглушится? — введите слово или фразу",
     "(no match)": "(нет совпадений)",
     'phrase "{}"  ←  matched': 'фраза «{}»  ←  совпала',
     # history

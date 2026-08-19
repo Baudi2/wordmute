@@ -1027,12 +1027,19 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
     # pasted on one line -> rewritten one per line, no text lost
     assert d.url_edit.toPlainText() == \
         "https://a.com/1\nhttps://b.com/2\nhttps://c.com/3"
-    # the table's space goes to the input; table + "add selected" gone
+    # design 1c: the input is sized to its content instead of taking
+    # the table's whole space; table + "add selected" gone
     assert not d.table.isVisibleTo(d)
     assert not d.buttons.button(QDialogButtonBox.Ok).isVisibleTo(d)
     assert d.url_edit.maximumHeight() > single_h
-    assert d.layout().stretch(
-        d.layout().indexOf(d.url_edit)) == 1
+    assert d.layout().stretch(d.layout().indexOf(d.url_edit)) == 0
+    # one chip per host, and the button carries the count
+    assert d.chips_row.isVisibleTo(d)
+    chips = [d._chips_layout.itemAt(i).widget().text()
+             for i in range(d._chips_layout.count())
+             if d._chips_layout.itemAt(i).widget()]
+    assert chips == ["a.com", "b.com", "c.com"]
+    assert "3" in d.best_button.text()
 
     # editing the list further must not fight the caret or re-wrap
     d.url_edit.setPlainText("https://a.com/1\nhttps://b.com/2")

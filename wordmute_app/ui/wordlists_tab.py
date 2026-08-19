@@ -2,19 +2,21 @@
 tidying (lowercase, ё→е, dedupe, sort — the sortwords behavior), and
 test any word/phrase against the CURRENT edits (unsaved included)."""
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QKeySequence, QShortcut, QTextCharFormat, \
     QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
-    QGroupBox,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -23,12 +25,17 @@ from ..core import config
 from ..engine import wordmute as engine
 from ..engine.wordlist_tidy import tidy_lines
 from ..core.wordlists import explain_matches
-from .dialogs import ConfirmDialog
+from .dialogs import ConfirmDialog, repolish
 from .i18n import tr
 
-FORMAT_HINT = ("слово = exact ·  корень* = word starts with ·  "
-               "*корень* = anywhere in word ·  слово слово = phrase ·  "
-               "# comment")
+# the legend the «?» popover shows as a two-column grid (design 1f)
+SYNTAX_ROWS = (
+    ("слово", "exact word"),
+    ("корень*", "word starts with"),
+    ("*корень*", "anywhere in the word"),
+    ("слово слово", "phrase"),
+    ("# …", "comment"),
+)
 
 
 class WordListsTab(QWidget):
@@ -40,56 +47,68 @@ class WordListsTab(QWidget):
         self._paths = wordlist_paths  # {"russian": Path, "english": Path}
         self._settings = settings if settings is not None else {}
         self._loading = False
+        self._current_key = "russian"   # the ribbon check needs it
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(12)
 
-        top = QHBoxLayout()
+        # design 1f: ONE toolbar row instead of three explanatory rows —
+        # the syntax legend moves into a popover behind the «?» button
+        toolbar = QWidget()
+        toolbar.setObjectName("wl_toolbar")
+        top = QHBoxLayout(toolbar)
+        top.setContentsMargins(0, 0, 0, 0)
         top.setSpacing(8)
         self.list_combo = QComboBox()
+        self.list_combo.setObjectName("wl_list_picker")
         self.list_combo.addItem(tr("Russian list"), "russian")
         self.list_combo.addItem(tr("English list"), "english")
         self.list_combo.currentIndexChanged.connect(self._on_list_switched)
         top.addWidget(self.list_combo)
+        self.syntax_help = QToolButton()
+        self.syntax_help.setObjectName("wl_syntax_help")
+        self.syntax_help.setText("?")
+        self.syntax_help.setCheckable(True)
+        self.syntax_help.setToolTip(tr("Entry syntax"))
+        self.syntax_help.toggled.connect(self._toggle_syntax_popover)
+        top.addWidget(self.syntax_help)
         self.count_label = QLabel("")
-        self.count_label.setObjectName("entries_count")
+        self.count_label.setObjectName("wl_count")
         top.addWidget(self.count_label)
         top.addStretch()
         self.revert_button = QPushButton(tr("Revert"))
         self.revert_button.clicked.connect(self._load)
-        self.save_button = QPushButton(tr("Save (auto-sort)"))
+        self.save_button = QPushButton(tr("Save"))
         self.save_button.setProperty("primary", True)
         self.save_button.setEnabled(False)
+        self.save_button.setToolTip(
+            tr("Saving sorts the list, lowercases it and removes "
+               "duplicates."))
         self.save_button.clicked.connect(self._save)
         top.addWidget(self.revert_button)
         top.addWidget(self.save_button)
-        layout.addLayout(top)
+        layout.addWidget(toolbar)
+        self._syntax_popover = None
 
-        hint = QLabel(tr(FORMAT_HINT))
-        hint.setObjectName("syntax_hint")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-
-        # first-run framing: shipped lists are a template, not policy
-        if not self._settings.get("wordlists_note_dismissed"):
-            self.template_note = QWidget()
+        # first-run framing: shipped lists are a template, not policy.
+        # One 32px line now, dismissed per list (not globally)
+        if not self._note_dismissed():
+            self.template_note = QFrame()
+            self.template_note.setObjectName("wl_template_ribbon")
             note_layout = QHBoxLayout(self.template_note)
-            note_layout.setContentsMargins(0, 0, 0, 0)
+            note_layout.setContentsMargins(12, 0, 8, 0)
+            note_layout.setSpacing(8)
             note_text = QLabel(tr(
-                "This is the shipped template — one person's curated "
-                "starting point. Edit freely; it's your list."))
-            note_text.setProperty("muted", True)
-            note_text.setWordWrap(True)
-            dismiss = QPushButton("×")
-            dismiss.setFlat(True)
-            dismiss.setFixedSize(28, 28)
-            # the themed QPushButton has 18px side padding: inside a
-            # 28px square it eats the glyph and leaves an empty box
-            dismiss.setStyleSheet("padding: 0; border: none;")
+                "This is the shipped template — edit it freely, it's "
+                "your list."))
+            note_text.setObjectName("wl_template_text")
+            note_layout.addWidget(note_text, stretch=1)
+            dismiss = QToolButton()
+            dismiss.setObjectName("wl_template_dismiss")
+            dismiss.setText("×")
             dismiss.setToolTip(tr("Hide this note"))
             dismiss.clicked.connect(self._dismiss_note)
-            note_layout.addWidget(note_text, stretch=1)
             note_layout.addWidget(dismiss)
             layout.addWidget(self.template_note)
         else:
@@ -102,7 +121,7 @@ class WordListsTab(QWidget):
         layout.addWidget(self.find_bar)
 
         self.editor = QPlainTextEdit()
-        self.editor.setObjectName("wordlist_editor")
+        self.editor.setObjectName("wl_editor")
         self.editor.textChanged.connect(self._on_text_changed)
         self.editor.document().modificationChanged.connect(
             self._on_modified_changed)
@@ -118,26 +137,21 @@ class WordListsTab(QWidget):
         self.status_label.setProperty("muted", True)
         layout.addWidget(self.status_label)
 
-        tester_box = QGroupBox(tr("Why would this be muted?"))
-        tester_layout = QVBoxLayout(tester_box)
-        caption = QLabel(tr("Testing your current edits (saved or not) "
-                            "plus the other saved list."))
-        caption.setProperty("muted", True)
-        tester_layout.addWidget(caption)
-        row = QHBoxLayout()
-        row.addWidget(QLabel(tr("Word or phrase:")))
+        # the tester is one line too: hint in the placeholder, the first
+        # hit inline, the full per-word breakdown in the tooltip
+        tester_row = QHBoxLayout()
+        tester_row.setSpacing(8)
         self.tester_input = QLineEdit()
+        self.tester_input.setObjectName("wl_tester_input")
+        self.tester_input.setPlaceholderText(
+            tr("Why would this be muted? — type a word or phrase"))
         self.tester_input.textChanged.connect(self._run_tester)
-        row.addWidget(self.tester_input, stretch=1)
-        tester_layout.addLayout(row)
-        self.tester_results = QPlainTextEdit()
-        self.tester_results.setObjectName("tester_results")
-        self.tester_results.setReadOnly(True)
-        self.tester_results.setMaximumHeight(110)
-        tester_layout.addWidget(self.tester_results)
-        layout.addWidget(tester_box, stretch=1)
+        tester_row.addWidget(self.tester_input, stretch=1)
+        self.tester_result = QLabel("")
+        self.tester_result.setObjectName("wl_tester_result")
+        tester_row.addWidget(self.tester_result, stretch=1)
+        layout.addLayout(tester_row)
 
-        self._current_key = "russian"
         self._load()
 
     # ---------------------------------------------------------- editing
@@ -238,10 +252,22 @@ class WordListsTab(QWidget):
         self._current_key = new_key
         self._load()
 
+    def _note_dismissed(self) -> bool:
+        """Per list: dismissing it on the Russian list should not hide
+        the framing on the English one (design 1f)."""
+        dismissed = self._settings.get("wordlists_note_dismissed")
+        if dismissed is True:            # pre-0.6.1: dismissed globally
+            return True
+        return self._current_key in (dismissed or [])
+
     def _dismiss_note(self):
         if self.template_note is not None:
             self.template_note.setVisible(False)
-        self._settings["wordlists_note_dismissed"] = True
+        dismissed = self._settings.get("wordlists_note_dismissed")
+        dismissed = [] if dismissed is True else list(dismissed or [])
+        if self._current_key not in dismissed:
+            dismissed.append(self._current_key)
+        self._settings["wordlists_note_dismissed"] = dismissed
         try:
             config.save_settings(self._settings)
         except OSError:
@@ -284,7 +310,10 @@ class WordListsTab(QWidget):
     def _run_tester(self, text: str):
         text = text.strip()
         if not text:
-            self.tester_results.setPlainText("")
+            self.tester_result.setText("")
+            self.tester_result.setToolTip("")
+            self.tester_result.setProperty("state", None)
+            repolish(self.tester_result)
             return
         per_word, phrase_hits = explain_matches(text,
                                                 self._current_wordlist())
@@ -296,4 +325,51 @@ class WordListsTab(QWidget):
                 lines.append(f"{word}  —  " + tr("(no match)"))
         for ph in phrase_hits:
             lines.append(tr('phrase "{}"  ←  matched').format(ph))
-        self.tester_results.setPlainText("\n".join(lines))
+        # inline: the first hit — the whole breakdown is one hover away
+        hits = [line for line in lines if "←" in line]
+        self.tester_result.setText(hits[0] if hits else tr("(no match)"))
+        self.tester_result.setProperty("state", "hit" if hits else None)
+        repolish(self.tester_result)
+        self.tester_result.setToolTip("\n".join(lines))
+
+    # ------------------------------------------------------ syntax help
+    def _toggle_syntax_popover(self, show: bool):
+        """A Popup QFrame, not a QMenu: the legend is a two-column grid,
+        which a menu cannot lay out."""
+        if not show:
+            if self._syntax_popover is not None:
+                self._syntax_popover.hide()
+            return
+        if self._syntax_popover is None:
+            self._syntax_popover = self._build_syntax_popover()
+        popover = self._syntax_popover
+        popover.adjustSize()
+        below = self.syntax_help.mapToGlobal(
+            self.syntax_help.rect().bottomLeft())
+        popover.move(below.x(), below.y() + 6)
+        popover.show()
+
+    def _build_syntax_popover(self) -> QFrame:
+        popover = QFrame(self, Qt.Popup)
+        popover.setObjectName("wl_syntax_popover")
+        grid = QGridLayout(popover)
+        grid.setContentsMargins(14, 12, 16, 12)
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(7)
+        caption = QLabel(tr("ENTRY SYNTAX"))
+        caption.setObjectName("wl_syntax_caption")
+        grid.addWidget(caption, 0, 0, 1, 2)
+        for row, (token, desc) in enumerate(SYNTAX_ROWS, start=1):
+            token_label = QLabel(token)
+            token_label.setProperty("syntaxToken", True)
+            desc_label = QLabel(tr(desc))
+            desc_label.setProperty("syntaxDesc", True)
+            grid.addWidget(token_label, row, 0)
+            grid.addWidget(desc_label, row, 1)
+        popover.installEventFilter(self)
+        return popover
+
+    def eventFilter(self, obj, event):
+        if obj is self._syntax_popover and event.type() == QEvent.Hide:
+            self.syntax_help.setChecked(False)
+        return super().eventFilter(obj, event)

@@ -38,14 +38,19 @@ def test_wordlists_switch_lists(qapp, tmp_path):
 
 
 def test_wordlists_tester_inline(qapp, tmp_path):
+    """design 1f: the first hit shows inline, the full per-word
+    breakdown moved into the tooltip."""
     tab, _, _ = make_wordlists_tab(qapp, tmp_path)
     tab.tester_input.setText("колдовать и демонстрация")
-    text = tab.tester_results.toPlainText()
+    assert "колд*" in tab.tester_result.text()
+    text = tab.tester_result.toolTip()
     assert "колд*" in text
     assert "*монстр*" in text
     assert "(no match)" in text  # "и"
     tab.tester_input.setText("боже мой")
-    assert 'phrase "боже мой"' in tab.tester_results.toPlainText()
+    assert 'phrase "боже мой"' in tab.tester_result.toolTip()
+    tab.tester_input.setText("ничего")
+    assert tab.tester_result.text() == "(no match)"
 
 
 def test_transcript_tab_search_and_load(qapp, tmp_path):

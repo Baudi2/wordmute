@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -30,7 +31,8 @@ from ..core.jobs import (JobOptions, QueueItem, build_plan, expand_inputs,
                          scan_watch_dir)
 from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
-from .dialogs import confirm, inform, mark_danger, themed_menu
+from .dialogs import (confirm, inform, mark_danger, repolish,
+                      themed_menu)
 from .events import format_event
 from .formats import fmt_rate
 from .history_tab import HistoryTab
@@ -135,6 +137,43 @@ class MediaProbeWorker(QThread):
             duration = media_duration(item.path)
             thumb = thumbs.thumbnail_path(item.path)
             self.ready.emit(item, duration, str(thumb) if thumb else "")
+
+
+class DropZone(QFrame):
+    """The empty queue as a drop target (design 1g): the dashed frame
+    sits exactly where files land, and a hovering drag says how many
+    of them will be taken. The window feeds it the events — a QFrame
+    under a stacked page never sees the drag itself."""
+
+    def __init__(self, describe, parent=None):
+        super().__init__(parent)
+        self._describe = describe        # mime -> (title, body) | None
+        self._resting = None             # (title, body) before the drag
+
+    def begin_drag(self, mime):
+        described = self._describe(mime)
+        if described is None:
+            return
+        window = self.window()
+        if self._resting is None:
+            self._resting = (window.empty_title.text(),
+                             window.empty_body.text())
+        window.empty_title.setText(described[0])
+        window.empty_body.setText(described[1])
+        self.setProperty("dragOver", True)
+        repolish(self)
+        repolish(window.empty_icon)
+
+    def end_drag(self):
+        if self._resting is None:
+            return
+        window = self.window()
+        window.empty_title.setText(self._resting[0])
+        window.empty_body.setText(self._resting[1])
+        self._resting = None
+        self.setProperty("dragOver", False)
+        repolish(self)
+        repolish(window.empty_icon)
 
 
 class MainWindow(QMainWindow):
@@ -264,28 +303,45 @@ class MainWindow(QMainWindow):
                 self.queue.row(self.queue.itemAt(pos)),
                 self.queue.viewport().mapToGlobal(pos)))
 
-        # empty state shown until the first item is queued
+        # empty state shown until the first item is queued — design 1g:
+        # a real drop zone, occupying exactly where files land, with
+        # live feedback while a drag hovers
         empty = QWidget()
-        empty_layout = QVBoxLayout(empty)
+        empty_outer = QVBoxLayout(empty)
+        empty_outer.setContentsMargins(0, 0, 0, 0)
+        self.drop_zone = DropZone(self._describe_drag)
+        self.drop_zone.setObjectName("drop_zone")
+        empty_outer.addWidget(self.drop_zone)
+        empty_layout = QVBoxLayout(self.drop_zone)
         empty_layout.addStretch()
-        empty_title = QLabel(tr("Drop video or audio files here"))
-        empty_title.setObjectName("empty_state_title")
-        empty_title.setAlignment(Qt.AlignCenter)
-        empty_body = QLabel(tr(
-            "…or paste a link with Add URL. Matched words from your word "
-            "lists are muted; the video stays untouched.\n"
-            "Everything runs on this computer — nothing is uploaded."))
-        empty_body.setObjectName("empty_state_body")
-        empty_body.setAlignment(Qt.AlignCenter)
-        empty_body.setWordWrap(True)
-        empty_layout.addWidget(empty_title)
-        empty_layout.addWidget(empty_body)
+        self.empty_icon = QLabel("＋")
+        self.empty_icon.setObjectName("empty_icon")
+        self.empty_icon.setAlignment(Qt.AlignCenter)
+        icon_row = QHBoxLayout()
+        icon_row.addStretch()
+        icon_row.addWidget(self.empty_icon)
+        icon_row.addStretch()
+        empty_layout.addLayout(icon_row)
+        empty_layout.addSpacing(12)
+        self.empty_title = QLabel(tr("Drop video or audio here"))
+        self.empty_title.setObjectName("empty_title")
+        self.empty_title.setAlignment(Qt.AlignCenter)
+        # ONE line: the muting explanation moved to the Start tooltip
+        self.empty_body = QLabel(tr(
+            "Or paste a link. Everything runs on this computer."))
+        self.empty_body.setObjectName("empty_body")
+        self.empty_body.setAlignment(Qt.AlignCenter)
+        self.empty_body.setWordWrap(True)
+        empty_layout.addWidget(self.empty_title)
+        empty_layout.addWidget(self.empty_body)
         empty_buttons = QHBoxLayout()
         empty_buttons.addStretch()
         empty_add = QPushButton(tr("Add Files"))
+        empty_add.setObjectName("btn_empty_primary")
         empty_add.setProperty("primary", True)
         empty_add.clicked.connect(self._pick_files)
         empty_view_lists = QPushButton(tr("View word lists"))
+        empty_view_lists.setObjectName("btn_empty_secondary")
         empty_view_lists.clicked.connect(
             lambda: self.tabs.setCurrentWidget(self.wordlists_tab))
         empty_buttons.addWidget(empty_add)
@@ -368,6 +424,10 @@ class MainWindow(QMainWindow):
         run_row.setSpacing(8)
         self.start_button = QPushButton(tr("Start"))
         self.start_button.setProperty("primary", True)
+        # the explanation the empty state used to carry (design 1g)
+        self.start_button.setToolTip(
+            tr("Words from your lists are muted in the audio; the video "
+               "itself is copied untouched."))
         self.start_button.clicked.connect(lambda: self._start())
         self.cancel_button = QPushButton(tr("Cancel"))
         self.cancel_button.clicked.connect(self._cancel)
@@ -751,11 +811,40 @@ class MainWindow(QMainWindow):
             if card:
                 card.set_selected(self.queue.item(row).isSelected())
 
+    def _accepted_media(self, mime) -> int:
+        """How many dropped entries the queue would actually take —
+        media files and folders; links count too."""
+        from ..core.jobs import expand_inputs
+        paths = [Path(u.toLocalFile()) for u in mime.urls()
+                 if u.isLocalFile()]
+        count = len(expand_inputs(paths)) if paths else 0
+        count += sum(1 for u in mime.urls()
+                     if u.scheme() in ("http", "https"))
+        if not count and mime.hasText():
+            from .url_dialog import extract_urls
+            count = len(extract_urls(mime.text()))
+        return count
+
+    def _describe_drag(self, mime):
+        """(title, body) shown on the drop zone while a drag hovers, or
+        None when nothing in it can be queued."""
+        count = self._accepted_media(mime)
+        if not count:
+            return None
+        return (tr("Release — {} file(s) join the queue").format(count),
+                tr("mp4 · mkv · mp3 — anything else is skipped"))
+
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls() or event.mimeData().hasText():
+            self.drop_zone.begin_drag(event.mimeData())
             event.acceptProposedAction()
 
+    def dragLeaveEvent(self, event):
+        self.drop_zone.end_drag()
+        super().dragLeaveEvent(event)
+
     def dropEvent(self, event):
+        self.drop_zone.end_drag()
         mime = event.mimeData()
         self._add_files(u.toLocalFile() for u in mime.urls()
                         if u.isLocalFile())

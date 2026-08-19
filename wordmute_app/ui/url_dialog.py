@@ -6,6 +6,7 @@ added at best quality in one go."""
 import re
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -86,6 +88,7 @@ class AddUrlDialog(QDialog):
     def __init__(self, parent=None, url: str = "", cookies=None,
                  auto_fetch: bool = True, quality: str = None):
         super().__init__(parent)
+        self.setObjectName("add_url_dialog")
         self.setWindowTitle(tr("Add URL"))
         self.resize(780, 560)
         self.setMinimumWidth(720)
@@ -94,11 +97,13 @@ class AddUrlDialog(QDialog):
         self._cookies = cookies
         self._fetch_generation = 0
         self._multi_urls = []
+        self._skipped_lines = 0
 
         self._reformatting = False   # guard: setPlainText re-enters
 
         layout = QVBoxLayout(self)
         self.url_edit = _UrlEdit()
+        self.url_edit.setObjectName("url_input")
         self.url_edit.setPlainText(url)
         self.url_edit.setPlaceholderText("https://…")
         self.url_edit.setLineWrapMode(QPlainTextEdit.NoWrap)
@@ -121,6 +126,17 @@ class AddUrlDialog(QDialog):
         self.status.setProperty("muted", True)
         layout.addWidget(self.status)
 
+        # one chip per host, so four links read as four links without
+        # scanning the text; a warn chip counts lines that are not URLs
+        self.chips_row = QWidget()
+        self.chips_row.setObjectName("url_chips_row")
+        self._chips_layout = QHBoxLayout(self.chips_row)
+        self._chips_layout.setContentsMargins(0, 0, 0, 0)
+        self._chips_layout.setSpacing(6)
+        self._chips_layout.addStretch()
+        self.chips_row.setVisible(False)
+        layout.addWidget(self.chips_row)
+
         self.loading_bar = QProgressBar()
         self.loading_bar.setRange(0, 0)  # indeterminate
         self.loading_bar.setTextVisible(False)
@@ -130,11 +146,15 @@ class AddUrlDialog(QDialog):
         # batch mode has no per-link format table — one quality cap for
         # the whole batch instead of silently grabbing 4K
         self.quality_row = QWidget()
+        self.quality_row.setObjectName("url_options_row")
         quality_layout = QHBoxLayout(self.quality_row)
         quality_layout.setContentsMargins(0, 0, 0, 0)
         quality_layout.setSpacing(8)
-        quality_layout.addWidget(QLabel(tr("Quality for all links:")))
+        quality_label = QLabel(tr("Quality for all links:"))
+        quality_label.setObjectName("url_quality_label")
+        quality_layout.addWidget(quality_label)
         self.quality_combo = QComboBox()
+        self.quality_combo.setObjectName("url_quality")
         for key, label, _spec in downloader.QUALITY_PRESETS:
             self.quality_combo.addItem(tr(label), key)
         preset = (quality if quality in
@@ -154,9 +174,11 @@ class AddUrlDialog(QDialog):
             self.cookies_hint = QLabel(tr(
                 "Members-only sites (e.g. Boosty) may need your cookies "
                 "file —"))
+            self.cookies_hint.setObjectName("url_cookies_hint")
             self.cookies_hint.setProperty("muted", True)
-            cookies_link = QPushButton(tr("set it in Settings"))
-            cookies_link.setFlat(True)
+            cookies_link = QToolButton()
+            cookies_link.setObjectName("url_cookies_link")
+            cookies_link.setText(tr("set it in Settings"))
             cookies_link.clicked.connect(self._goto_settings)
             cookies_row.addWidget(self.cookies_hint)
             cookies_row.addWidget(cookies_link)
@@ -178,8 +200,16 @@ class AddUrlDialog(QDialog):
         self.table.itemSelectionChanged.connect(self._update_ok)
         layout.addWidget(self.table, stretch=1)
 
-        buttons_row = QHBoxLayout()
+        footer = QWidget()
+        footer.setObjectName("add_url_footer")
+        buttons_row = QHBoxLayout(footer)
+        buttons_row.setContentsMargins(0, 8, 0, 0)
+        self.summary_label = QLabel("")
+        self.summary_label.setObjectName("add_url_summary")
+        self.summary_label.setVisible(False)
+        buttons_row.addWidget(self.summary_label)
         self.best_button = QPushButton(tr("Add (best quality)"))
+        self.best_button.setObjectName("btn_add_urls")
         self.best_button.setProperty("primary", True)
         self.best_button.setToolTip(
             tr("Skip the format list and download best video+audio."))
@@ -193,7 +223,7 @@ class AddUrlDialog(QDialog):
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         buttons_row.addWidget(self.buttons)
-        layout.addLayout(buttons_row)
+        layout.addWidget(footer)
         self._update_ok()
         if auto_fetch and self._looks_like_url(url):
             QTimer.singleShot(0, self._fetch)
@@ -234,6 +264,11 @@ class AddUrlDialog(QDialog):
         self._fetch_timer.stop()
         first_time = not self._multi_urls
         self._multi_urls = urls
+        # count what the rewrite below is about to drop: afterwards the
+        # text holds URLs only, so a stray line could never be reported
+        self._skipped_lines = sum(
+            1 for line in self.url_edit.toPlainText().splitlines()
+            if line.strip() and not self._looks_like_url(line.strip()))
         self.loading_bar.setVisible(False)
         self.table.setRowCount(0)
         self.table.setVisible(False)      # useless without a fetch
@@ -251,41 +286,105 @@ class AddUrlDialog(QDialog):
             finally:
                 self._reformatting = False
         if first_time:
-            self.url_edit.setMinimumHeight(self._single_height)
-            self.url_edit.setMaximumHeight(16777215)
             self._url_stretch(True)
             # nothing to select without the table
             self.buttons.button(QDialogButtonBox.Ok).setVisible(False)
+        self._resize_input()
         self._update_multi_labels()
         self._update_ok()
 
     def _url_stretch(self, on: bool):
-        """Give the input the table's vertical space in batch mode."""
+        """Batch mode sizes the input to its content instead of eating
+        the whole dialog (design 1c) — the quality row and the button
+        stay within reach of the eye."""
         layout = self.layout()
-        layout.setStretchFactor(self.url_edit, 1 if on else 0)
+        layout.setStretchFactor(self.url_edit, 0)
+        if on:
+            self._resize_input()
+
+    def _resize_input(self):
+        """3 lines minimum, 8 maximum, then it scrolls. Measured after
+        ensurePolished: the QSS font (mono) is taller than the default
+        one, and measuring too early cuts the last link off."""
+        self.url_edit.ensurePolished()
+        edit = self.url_edit
+        blocks = max(edit.document().blockCount(), 1)
+        lines = max(3, min(8, blocks))
+        chrome = max(edit.height() - edit.viewport().height(), 4)
+        # cursorRect is the painted line box of the sheet's mono face —
+        # QFontMetrics of the widget font and the document layout (which
+        # measures in lines, not pixels) both got this wrong
+        line = (edit.cursorRect().height()
+                or QFontMetrics(edit.font()).lineSpacing()) + 2
+        edit.setMinimumHeight(0)
+        # +6: with exactly lines*line the viewport clips the last line
+        # by a hair and QPlainTextEdit starts scrolling
+        edit.setFixedHeight(int(lines * line) + chrome + 6)
+        self.adjustSize()
+
+    def _host_counts(self):
+        """[(host, count), …] in first-seen order, plus the number of
+        non-empty lines that are not links at all."""
+        from urllib.parse import urlparse
+        hosts, bad = {}, 0
+        for line in self.url_edit.toPlainText().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if not self._looks_like_url(line):
+                bad += 1
+                continue
+            host = urlparse(line).netloc.removeprefix("www.")
+            hosts[host] = hosts.get(host, 0) + 1
+        return list(hosts.items()), bad
+
+    def _rebuild_chips(self):
+        while self._chips_layout.count() > 1:      # keep the stretch
+            item = self._chips_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        hosts, bad = self._host_counts()
+        bad = max(bad, self._skipped_lines)
+        for index, (host, count) in enumerate(hosts):
+            chip = QLabel(f"{host} · {count}" if count > 1 else host)
+            chip.setProperty("urlChip", True)
+            self._chips_layout.insertWidget(index, chip)
+        if bad:
+            warn = QLabel(tr("{} line(s) are not links — they will be "
+                             "skipped").format(bad))
+            warn.setProperty("urlChip", True)
+            warn.setProperty("state", "warn")
+            self._chips_layout.insertWidget(len(hosts), warn)
+        self.chips_row.setVisible(bool(hosts))
 
     def _update_multi_labels(self):
         if not self._multi_urls:
             return
         _spec, label = downloader.quality_spec(self.quality())
-        self.status.setText(
-            tr("{} links · quality: {}").format(
-                len(self._multi_urls), tr(label)))
-        self.best_button.setText(
-            tr("Add {} links").format(len(self._multi_urls)))
+        count = len(self._multi_urls)
+        self.status.setVisible(False)
+        self.summary_label.setVisible(True)
+        self.summary_label.setText(
+            tr("{} links · {}").format(count, tr(label)))
+        self.best_button.setText(tr("Add {} to the queue").format(count))
+        self._rebuild_chips()
 
     def quality(self) -> str:
         return self.quality_combo.currentData()
 
     def _leave_multi_mode(self):
         self._multi_urls = []
+        self._skipped_lines = 0
         self.quality_row.setVisible(False)
+        self.chips_row.setVisible(False)
+        self.summary_label.setVisible(False)
         self.table.setVisible(True)
         self.buttons.button(QDialogButtonBox.Ok).setVisible(True)
         self._url_stretch(False)
         self.url_edit.setMinimumHeight(0)
         self.url_edit.setFixedHeight(self._single_height)
         self.best_button.setText(tr("Add (best quality)"))
+        self.status.setVisible(True)
         self.status.setText(tr("Paste a video URL — the format list "
                                "loads automatically."))
 
