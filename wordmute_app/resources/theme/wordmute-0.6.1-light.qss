@@ -215,3 +215,7 @@ QWidget#format_selected {
 }
 QLabel#format_selected_label { font-size: 12px; color: #292b31; }
 QLabel#format_selected_detail { font-size: 12px; color: #595d6c; }
+
+/* local merge: the 2b list scrolls as one (table + tail) */
+QScrollArea#format_scroll { background: transparent; border: none; }
+QScrollArea#format_scroll > QWidget > QWidget { background: transparent; }

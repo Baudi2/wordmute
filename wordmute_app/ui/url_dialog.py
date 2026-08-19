@@ -210,8 +210,10 @@ class AddUrlDialog(QDialog):
             layout.addLayout(cookies_row)
 
         # design 2b: the format list lives in one frame with a darker
-        # "tail" under the last row (so a short list stops looking cut
-        # off) and a pinned «Selected: …» bar at the bottom
+        # "tail" AFTER the last row and a pinned «Selected: …» bar. The
+        # table and the tail scroll together inside one scroll area —
+        # a pinned tail read as "stuck to the window" on long lists,
+        # where it belongs after format #24, not under format #10
         self.format_area = QFrame()
         self.format_area.setObjectName("format_area")
         area_box = QVBoxLayout(self.format_area)
@@ -230,11 +232,26 @@ class AddUrlDialog(QDialog):
         self.table.setAlternatingRowColors(True)
         self.table.itemDoubleClicked.connect(lambda _: self.accept())
         self.table.itemSelectionChanged.connect(self._on_selection)
-        # the TABLE is the stretching element (capped at its content
-        # height once formats arrive): with the stretch on the tail, a
-        # 27-format list was squeezed to the table's default size hint
-        # — four visible rows and a giant "end of list" area
-        area_box.addWidget(self.table, stretch=1)
+        # the OUTER area scrolls; the table itself never does (it is
+        # sized to its full content once formats arrive). The table
+        # still swallows wheel events even with nothing to scroll, so
+        # they are forwarded (eventFilter below) or the list would
+        # freeze under the cursor
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.table.viewport().installEventFilter(self)
+        from PySide6.QtWidgets import QScrollArea
+        self.format_scroll = QScrollArea()
+        self.format_scroll.setObjectName("format_scroll")
+        self.format_scroll.setWidgetResizable(True)
+        self.format_scroll.setFrameShape(QFrame.NoFrame)
+        scroll_body = QWidget()
+        scroll_box = QVBoxLayout(scroll_body)
+        scroll_box.setContentsMargins(0, 0, 0, 0)
+        scroll_box.setSpacing(0)
+        # pre-fetch the (empty, hint-sized) table stretches to fill;
+        # once its height is fixed to the content, the visible tail
+        # takes any leftover instead (the short-list deep look)
+        scroll_box.addWidget(self.table, stretch=1)
 
         self.format_tail = QWidget()
         self.format_tail.setObjectName("format_tail")
@@ -256,7 +273,11 @@ class AddUrlDialog(QDialog):
         self.tail_hint.setAlignment(Qt.AlignCenter)
         tail_box.addWidget(self.tail_hint)
         tail_box.addStretch()
-        area_box.addWidget(self.format_tail)
+        # roomy even on long lists, where it sits right after the rows
+        self.format_tail.setMinimumHeight(96)
+        scroll_box.addWidget(self.format_tail, stretch=1)
+        self.format_scroll.setWidget(scroll_body)
+        area_box.addWidget(self.format_scroll, stretch=1)
 
         self.selected_bar = QWidget()
         self.selected_bar.setObjectName("format_selected")
@@ -305,6 +326,15 @@ class AddUrlDialog(QDialog):
         self._update_ok()
         if auto_fetch and self._looks_like_url(url):
             QTimer.singleShot(0, self._fetch)
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent
+        if obj is self.table.viewport() and event.type() == QEvent.Wheel:
+            bar = self.format_scroll.verticalScrollBar()
+            delta = event.pixelDelta().y() or event.angleDelta().y() // 2
+            bar.setValue(bar.value() - delta)
+            return True
+        return super().eventFilter(obj, event)
 
     def _goto_settings(self):
         parent = self.parent()
@@ -531,6 +561,7 @@ class AddUrlDialog(QDialog):
         self.status.setText(tr("Fetching format list…"))
         self.loading_bar.setVisible(True)
         self.table.setRowCount(0)
+        self.table.setMinimumHeight(0)
         self.table.setMaximumHeight(16777215)
         self.format_tail.setVisible(False)
         self.selected_bar.setVisible(False)
@@ -574,7 +605,7 @@ class AddUrlDialog(QDialog):
         header_h = self.table.horizontalHeader().height()
         content = header_h + 2 * self.table.frameWidth() + sum(
             self.table.rowHeight(r) for r in range(self.table.rowCount()))
-        self.table.setMaximumHeight(content)
+        self.table.setFixedHeight(content)   # the OUTER area scrolls
         self.tail_title.setText(
             tr("That's every format this site offered — {}")
             .format(len(info["formats"])))

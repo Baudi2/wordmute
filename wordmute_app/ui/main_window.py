@@ -169,6 +169,7 @@ class UrlProbeWorker(QThread):
                 info = downloader.probe_url(item.url,
                                             cookies=self._cookies)
             except Exception:      # site down, bad link — card stays
+                self.ready.emit(item, "", None, "")   # stop the shimmer
                 continue
             thumb = thumbs.remote_thumbnail_path(
                 item.url, info.get("thumbnail_url", ""))
@@ -808,6 +809,11 @@ class MainWindow(QMainWindow):
     def _add_url_row(self, item: QueueItem):
         self._insert_row(item,
                          status=f"{tr('queued')} ({item.format_label})")
+        # pulse the thumbnail while the title/poster probe runs — with
+        # nothing moving, a fresh link card looked stuck
+        card = self._card(self.queue.count() - 1)
+        if card:
+            card.set_loading(True)
         self._probe_url_in_background(item)
 
     def _probe_url_in_background(self, item: QueueItem):
@@ -819,6 +825,7 @@ class MainWindow(QMainWindow):
                     item.url, cookies=self._settings.get("cookies_file")
                     or None)
             except Exception:
+                self._on_url_probed(item, "", None, "")
                 return
             thumb = thumbs.remote_thumbnail_path(
                 item.url, info.get("thumbnail_url", ""))
@@ -854,6 +861,7 @@ class MainWindow(QMainWindow):
             list_item.setData(THUMB_ROLE, thumb)
         card = self._card(row)
         if card:
+            card.set_loading(False)
             card.set_title(list_item.data(TITLE_ROLE))
             card.set_meta(self._card_meta(item))
             if thumb:
