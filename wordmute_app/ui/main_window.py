@@ -139,6 +139,44 @@ class MediaProbeWorker(QThread):
             self.ready.emit(item, duration, str(thumb) if thumb else "")
 
 
+class UrlProbeWorker(QThread):
+    """Batch-added links used to sit as bare URLs with no thumbnail
+    until their download finished — with mixed RU/EN queues there was
+    no way to tell which video to give a language profile to. This
+    fetches the real title, duration and poster image right after the
+    card appears (one yt-dlp metadata call per link, no download)."""
+    ready = Signal(object, str, object, str)  # item, title, dur, thumb
+
+    def __init__(self, cookies=None, parent=None):
+        super().__init__(parent)
+        from queue import SimpleQueue
+        self._jobs = SimpleQueue()
+        self._cookies = cookies
+
+    def enqueue(self, item):
+        self._jobs.put(item)
+
+    def stop(self):
+        self._jobs.put(None)
+
+    def run(self):
+        from ..core import downloader, thumbs
+        while True:
+            item = self._jobs.get()
+            if item is None:
+                return
+            try:
+                info = downloader.probe_url(item.url,
+                                            cookies=self._cookies)
+            except Exception:      # site down, bad link — card stays
+                continue
+            thumb = thumbs.remote_thumbnail_path(
+                item.url, info.get("thumbnail_url", ""))
+            self.ready.emit(item, info.get("title") or "",
+                            info.get("duration"),
+                            str(thumb) if thumb else "")
+
+
 class DropZone(QFrame):
     """The empty queue as a drop target (design 1g): the dashed frame
     sits exactly where files land, and a hovering drag says how many
@@ -207,6 +245,7 @@ class MainWindow(QMainWindow):
         self._update_url = None
         QTimer.singleShot(3000, self._start_update_check)
         self._probe_worker = None  # lazy: bulk-add duration/thumb jobs
+        self._url_probe_worker = None  # lazy: link title/poster fetches
         self._wordlist_paths = config.ensure_user_wordlists()
         self._settings = config.load_settings()
         self._gpus = gpu.detect_gpus()
@@ -769,6 +808,56 @@ class MainWindow(QMainWindow):
     def _add_url_row(self, item: QueueItem):
         self._insert_row(item,
                          status=f"{tr('queued')} ({item.format_label})")
+        self._probe_url_in_background(item)
+
+    def _probe_url_in_background(self, item: QueueItem):
+        """Real title + poster for a link card, without downloading."""
+        if os.environ.get("WORDMUTE_SYNC_PROBE"):  # tests: no threads
+            from ..core import downloader
+            try:
+                info = downloader.probe_url(
+                    item.url, cookies=self._settings.get("cookies_file")
+                    or None)
+            except Exception:
+                return
+            thumb = thumbs.remote_thumbnail_path(
+                item.url, info.get("thumbnail_url", ""))
+            self._on_url_probed(item, info.get("title") or "",
+                                info.get("duration"),
+                                str(thumb) if thumb else "")
+            return
+        if self._url_probe_worker is None:
+            self._url_probe_worker = UrlProbeWorker(
+                cookies=self._settings.get("cookies_file") or None,
+                parent=self)
+            self._url_probe_worker.ready.connect(self._on_url_probed)
+            self._url_probe_worker.start()
+        self._url_probe_worker.enqueue(item)
+
+    def _on_url_probed(self, item: QueueItem, title: str, duration,
+                       thumb: str):
+        row = self._row_of_item(item)
+        if row < 0:
+            return          # removed from the queue meanwhile
+        if title and not item.title:
+            item.title = title
+        if duration and not item.duration:
+            item.duration = duration
+        list_item = self.queue.item(row)
+        # the download's own backfill may already have written the real
+        # local file name — never overwrite it with the probe's title
+        if title and list_item.data(TITLE_ROLE) in (item.url, "", None):
+            list_item.setData(TITLE_ROLE, title)
+        list_item.setData(DURATION_ROLE, item.duration)
+        list_item.setData(META_ROLE, self._card_meta(item))
+        if thumb and not list_item.data(THUMB_ROLE):
+            list_item.setData(THUMB_ROLE, thumb)
+        card = self._card(row)
+        if card:
+            card.set_title(list_item.data(TITLE_ROLE))
+            card.set_meta(self._card_meta(item))
+            if thumb:
+                card.set_thumb(thumb)
 
     def _add_url(self, url: str = ""):
         if not isinstance(url, str):  # a stray signal bool must never win
@@ -1553,6 +1642,9 @@ class MainWindow(QMainWindow):
         if self._probe_worker is not None:
             self._probe_worker.stop()
             self._probe_worker.wait(10000)
+        if self._url_probe_worker is not None:
+            self._url_probe_worker.stop()
+            self._url_probe_worker.wait(10000)
         self._settings.update({
             "use_russian": self.russian_check.isChecked(),
             "use_english": self.english_check.isChecked(),

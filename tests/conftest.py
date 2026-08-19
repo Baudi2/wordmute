@@ -29,6 +29,20 @@ def no_modal_dialogs(monkeypatch):
                         lambda self: QDialog.Rejected, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def no_url_probe(monkeypatch):
+    """URL cards now fetch their title/poster via yt-dlp right after
+    being added; under WORDMUTE_SYNC_PROBE that call would run inline
+    and hit the network. Tests get an empty probe by default; a test
+    exercising the feature re-patches probe_url itself."""
+    from wordmute_app.core import downloader
+    monkeypatch.setattr(
+        downloader, "probe_url",
+        lambda url, cookies=None: {"title": "", "duration": None,
+                                   "thumbnail_url": ""},
+        raising=False)
+
+
 @pytest.fixture
 def confirm_yes(monkeypatch):
     """Answer every confirmation with its primary (accept) button."""

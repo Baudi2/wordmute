@@ -88,6 +88,21 @@ def list_formats(url: str, cookies=None) -> dict:
             "formats": sort_formats(formats)}
 
 
+def probe_url(url: str, cookies=None) -> dict:
+    """Lightweight metadata for a queued link: real title, duration and
+    a thumbnail URL — so batch-added cards stop reading as bare URLs
+    until the download finishes. One extract_info call, no download."""
+    import yt_dlp
+    with yt_dlp.YoutubeDL(_with_cookies(_base_opts(), cookies)) as ydl:
+        info = ydl.extract_info(url, download=False)
+    if info.get("_type") == "playlist":
+        entries = info.get("entries") or [{}]
+        info = entries[0] or {}
+    return {"title": info.get("title") or "",
+            "duration": info.get("duration"),
+            "thumbnail_url": info.get("thumbnail") or ""}
+
+
 def spec_for_format(f) -> str:
     """yt-dlp format selector for one row of the format table. Video-only
     streams get paired with the best audio (falling back to the bare

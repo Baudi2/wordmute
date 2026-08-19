@@ -1075,3 +1075,62 @@ def test_initial_size_clamps_to_small_screens():
     assert _initial_size(0, 0) == (960, 720)         # unknown screen
     # the floor keeps the window usable even on absurd geometry
     assert _initial_size(300, 200) == (480, 360)
+
+
+# --------------------------------------------- URL cards: title + poster
+def test_url_card_gets_title_and_thumb_before_download(window, monkeypatch,
+                                                       tmp_path):
+    """Batch-added links must show the real video name (and poster)
+    right away — a queue of bare URLs made per-video language profiles
+    unusable on mixed RU/EN batches."""
+    from wordmute_app.core import downloader, thumbs
+    from wordmute_app.core.jobs import QueueItem
+    from wordmute_app.ui.main_window import THUMB_ROLE, TITLE_ROLE
+
+    fake_thumb = tmp_path / "poster.jpg"
+    fake_thumb.write_bytes(b"jpg")
+    monkeypatch.setattr(
+        downloader, "probe_url",
+        lambda url, cookies=None: {"title": "Настоящее имя видео",
+                                   "duration": 321,
+                                   "thumbnail_url": "https://x/p.jpg"})
+    monkeypatch.setattr(thumbs, "remote_thumbnail_path",
+                        lambda video_url, thumb_url: fake_thumb)
+
+    item = QueueItem(kind="url", url="https://e.com/v",
+                     format_spec="best", format_label="best")
+    window._add_url_row(item)          # WORDMUTE_SYNC_PROBE: runs inline
+    list_item = window.queue.item(0)
+    assert list_item.data(TITLE_ROLE) == "Настоящее имя видео"
+    assert item.title == "Настоящее имя видео"
+    assert item.duration == 321
+    assert list_item.data(THUMB_ROLE) == str(fake_thumb)
+
+
+def test_url_probe_failure_leaves_card_as_url(window, monkeypatch):
+    from wordmute_app.core import downloader
+    from wordmute_app.core.jobs import QueueItem
+    from wordmute_app.ui.main_window import TITLE_ROLE
+
+    def boom(url, cookies=None):
+        raise OSError("site is down")
+
+    monkeypatch.setattr(downloader, "probe_url", boom)
+    item = QueueItem(kind="url", url="https://e.com/v",
+                     format_spec="best", format_label="best")
+    window._add_url_row(item)
+    assert window.queue.item(0).data(TITLE_ROLE) == "https://e.com/v"
+
+
+def test_url_probe_never_overwrites_download_backfill(window, monkeypatch):
+    """A slow probe result must not clobber the real local file name
+    the finished download already wrote onto the card."""
+    from wordmute_app.core.jobs import QueueItem
+    from wordmute_app.ui.main_window import TITLE_ROLE
+
+    item = QueueItem(kind="url", url="https://e.com/v",
+                     format_spec="best", format_label="best")
+    window._insert_row(item)
+    window.queue.item(0).setData(TITLE_ROLE, "видео.mp4")  # backfilled
+    window._on_url_probed(item, "Позднее имя из пробы", 100, "")
+    assert window.queue.item(0).data(TITLE_ROLE) == "видео.mp4"
