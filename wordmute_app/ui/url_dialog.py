@@ -230,12 +230,16 @@ class AddUrlDialog(QDialog):
         self.table.setAlternatingRowColors(True)
         self.table.itemDoubleClicked.connect(lambda _: self.accept())
         self.table.itemSelectionChanged.connect(self._on_selection)
-        area_box.addWidget(self.table)
+        # the TABLE is the stretching element (capped at its content
+        # height once formats arrive): with the stretch on the tail, a
+        # 27-format list was squeezed to the table's default size hint
+        # — four visible rows and a giant "end of list" area
+        area_box.addWidget(self.table, stretch=1)
 
         self.format_tail = QWidget()
         self.format_tail.setObjectName("format_tail")
         tail_box = QVBoxLayout(self.format_tail)
-        tail_box.setContentsMargins(16, 0, 16, 0)
+        tail_box.setContentsMargins(16, 8, 16, 8)
         tail_box.setSpacing(4)
         tail_box.addStretch()
         end_line = QFrame()
@@ -252,7 +256,7 @@ class AddUrlDialog(QDialog):
         self.tail_hint.setAlignment(Qt.AlignCenter)
         tail_box.addWidget(self.tail_hint)
         tail_box.addStretch()
-        area_box.addWidget(self.format_tail, stretch=1)
+        area_box.addWidget(self.format_tail)
 
         self.selected_bar = QWidget()
         self.selected_bar.setObjectName("format_selected")
