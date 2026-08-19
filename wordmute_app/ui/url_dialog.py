@@ -601,6 +601,10 @@ class AddUrlDialog(QDialog):
                  d["ext"], str(int(d["fps"])) if d["fps"] else "",
                  tr(d["kind"])],
                 f)
+        # number only the real formats: with the «best» row counted,
+        # the last row read 25 against the tail's «— 24»
+        self.table.setVerticalHeaderLabels(
+            [""] + [str(i) for i in range(1, self.table.rowCount())])
         self.table.selectRow(0)
         header_h = self.table.horizontalHeader().height()
         content = header_h + 2 * self.table.frameWidth() + sum(
