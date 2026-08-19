@@ -5,7 +5,7 @@ added at best quality in one go."""
 
 import re
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -27,12 +27,19 @@ from PySide6.QtWidgets import (
 
 from ..core import downloader
 from ..core.jobs import QueueItem
+from .flow_layout import FlowLayout, make_chip
 from .hover_table import HoverRowTable
 from .i18n import tr
 
 # keep fetch threads alive if their dialog closes early; Qt drops the
 # signal connections with the dialog, so late emits are harmless
 _live_workers = set()
+
+# batch mode shows this many links without scrolling (design 1c asked
+# for 3..8; testing on real pastes wanted more room before the scroll)
+MIN_LINES, MAX_LINES = 5, 14
+CHIP_ACCENT = "#9184d9"
+CHIP_WARN = "#cdb380"
 
 # a URL runs until whitespace/comma/semicolon OR the next http(s)://
 # — QLineEdit may join pasted lines with nothing in between
@@ -90,14 +97,16 @@ class AddUrlDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("add_url_dialog")
         self.setWindowTitle(tr("Add URL"))
-        self.resize(780, 560)
+        # single mode needs room for the format table; batch mode sizes
+        # itself to its content and restores this on the way back
+        self._single_size = QSize(780, 640)
+        self.resize(self._single_size)
         self.setMinimumWidth(720)
         self._info = None
         self._use_best = False
         self._cookies = cookies
         self._fetch_generation = 0
         self._multi_urls = []
-        self._skipped_lines = 0
 
         self._reformatting = False   # guard: setPlainText re-enters
 
@@ -108,9 +117,7 @@ class AddUrlDialog(QDialog):
         self.url_edit.setPlaceholderText("https://…")
         self.url_edit.setLineWrapMode(QPlainTextEdit.NoWrap)
         self.url_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self._single_height = (self.url_edit.fontMetrics().height()
-                               + 20)   # one line + QSS padding
-        self.url_edit.setFixedHeight(self._single_height)
+        self._single_lines = 2      # a link plus room to paste another
         # formats load automatically: debounce typing, Enter = right now
         self._fetch_timer = QTimer(self)
         self._fetch_timer.setSingleShot(True)
@@ -130,10 +137,9 @@ class AddUrlDialog(QDialog):
         # scanning the text; a warn chip counts lines that are not URLs
         self.chips_row = QWidget()
         self.chips_row.setObjectName("url_chips_row")
-        self._chips_layout = QHBoxLayout(self.chips_row)
-        self._chips_layout.setContentsMargins(0, 0, 0, 0)
-        self._chips_layout.setSpacing(6)
-        self._chips_layout.addStretch()
+        # wrapping, not squeezing: five hosts plus the warning used to
+        # clip the last chip mid-word
+        self._chips_layout = FlowLayout(self.chips_row)
         self.chips_row.setVisible(False)
         layout.addWidget(self.chips_row)
 
@@ -198,6 +204,9 @@ class AddUrlDialog(QDialog):
         self.table.setAlternatingRowColors(True)
         self.table.itemDoubleClicked.connect(lambda _: self.accept())
         self.table.itemSelectionChanged.connect(self._update_ok)
+        # size the input once the sheet is applied: before that the mono
+        # face is not in place and the box comes out a third too short
+        QTimer.singleShot(0, self._apply_single_geometry)
         layout.addWidget(self.table, stretch=1)
 
         footer = QWidget()
@@ -264,27 +273,12 @@ class AddUrlDialog(QDialog):
         self._fetch_timer.stop()
         first_time = not self._multi_urls
         self._multi_urls = urls
-        # count what the rewrite below is about to drop: afterwards the
-        # text holds URLs only, so a stray line could never be reported
-        self._skipped_lines = sum(
-            1 for line in self.url_edit.toPlainText().splitlines()
-            if line.strip() and not self._looks_like_url(line.strip()))
         self.loading_bar.setVisible(False)
         self.table.setRowCount(0)
         self.table.setVisible(False)      # useless without a fetch
         self._info = None
         self.quality_row.setVisible(True)
-        # one URL per line; keep the caret at the end after rewriting
-        wanted = "\n".join(urls)
-        if self.url_edit.toPlainText().strip() != wanted:
-            self._reformatting = True
-            try:
-                self.url_edit.setPlainText(wanted)
-                cursor = self.url_edit.textCursor()
-                cursor.movePosition(cursor.MoveOperation.End)
-                self.url_edit.setTextCursor(cursor)
-            finally:
-                self._reformatting = False
+        self._normalize_text()
         if first_time:
             self._url_stretch(True)
             # nothing to select without the table
@@ -292,6 +286,52 @@ class AddUrlDialog(QDialog):
         self._resize_input()
         self._update_multi_labels()
         self._update_ok()
+
+    def _normalize_text(self):
+        """Split a paste that joined several links onto one line, drop
+        blank lines — and touch NOTHING else.
+
+        The old version rewrote the box to «the URLs we found», which
+        deleted every half-typed link the moment its first letter was
+        not yet a URL, and pushed the caret to the end after each paste.
+        Editing by hand has to survive this."""
+        text = self.url_edit.toPlainText()
+        cursor = self.url_edit.textCursor()
+        caret_block = cursor.blockNumber()
+        caret_column = cursor.positionInBlock()
+        # split("\n"), NOT splitlines(): the latter drops the trailing
+        # empty line, which is exactly the one the user just made by
+        # pressing Enter to type another link
+        source = text.split("\n")
+        lines, target_block = [], caret_block
+        for index, line in enumerate(source):
+            found = extract_urls(line)
+            if len(found) > 1:               # one paste, several links
+                if index < caret_block:
+                    target_block += len(found) - 1
+                lines.extend(found)
+            elif line.strip():
+                lines.append(line.strip())
+            elif index == caret_block and index == len(source) - 1:
+                # the empty line being typed on stays; stray blank lines
+                # anywhere else (a paste artifact) go
+                lines.append("")
+            elif index < caret_block:
+                target_block -= 1
+        wanted = "\n".join(lines)
+        if wanted == text:
+            return
+        self._reformatting = True
+        try:
+            self.url_edit.setPlainText(wanted)
+            cursor = self.url_edit.textCursor()
+            block = cursor.document().findBlockByNumber(
+                min(max(target_block, 0), max(len(lines) - 1, 0)))
+            cursor.setPosition(block.position()
+                               + min(caret_column, block.length() - 1))
+            self.url_edit.setTextCursor(cursor)
+        finally:
+            self._reformatting = False
 
     def _url_stretch(self, on: bool):
         """Batch mode sizes the input to its content instead of eating
@@ -302,24 +342,41 @@ class AddUrlDialog(QDialog):
         if on:
             self._resize_input()
 
-    def _resize_input(self):
-        """3 lines minimum, 8 maximum, then it scrolls. Measured after
-        ensurePolished: the QSS font (mono) is taller than the default
-        one, and measuring too early cuts the last link off."""
+    def _line_height(self) -> float:
+        """The painted line box of the sheet's mono face — QFontMetrics
+        of the widget font and the document layout (which measures in
+        LINES, not pixels) both under-report it."""
         self.url_edit.ensurePolished()
+        return (self.url_edit.cursorRect().height()
+                or QFontMetrics(self.url_edit.font()).lineSpacing()) + 2
+
+    def _set_input_lines(self, lines: int):
+        """Size the box to hold `lines` links without scrolling, never
+        below what the stylesheet asks for (its min-height used to win
+        over a smaller fixed height and the status line was painted on
+        top of the input's own border)."""
         edit = self.url_edit
-        blocks = max(edit.document().blockCount(), 1)
-        lines = max(3, min(8, blocks))
         chrome = max(edit.height() - edit.viewport().height(), 4)
-        # cursorRect is the painted line box of the sheet's mono face —
-        # QFontMetrics of the widget font and the document layout (which
-        # measures in lines, not pixels) both got this wrong
-        line = (edit.cursorRect().height()
-                or QFontMetrics(edit.font()).lineSpacing()) + 2
-        edit.setMinimumHeight(0)
         # +6: with exactly lines*line the viewport clips the last line
         # by a hair and QPlainTextEdit starts scrolling
-        edit.setFixedHeight(int(lines * line) + chrome + 6)
+        wanted = int(lines * self._line_height()) + chrome + 6
+        edit.setMinimumHeight(0)
+        edit.setMaximumHeight(16777215)
+        edit.setFixedHeight(max(wanted, edit.minimumSizeHint().height()))
+
+    def _apply_single_geometry(self):
+        """Single mode keeps a roomy window: the format table needs the
+        space, and after a batch the dialog must not stay the compact
+        stub batch mode shrank it to."""
+        if self._multi_urls:
+            return
+        self._set_input_lines(self._single_lines)
+        self.resize(self._single_size)
+
+    def _resize_input(self):
+        """Batch mode: MIN_LINES..MAX_LINES of links, then it scrolls."""
+        blocks = max(self.url_edit.document().blockCount(), 1)
+        self._set_input_lines(max(MIN_LINES, min(MAX_LINES, blocks)))
         self.adjustSize()
 
     def _host_counts(self):
@@ -339,23 +396,20 @@ class AddUrlDialog(QDialog):
         return list(hosts.items()), bad
 
     def _rebuild_chips(self):
-        while self._chips_layout.count() > 1:      # keep the stretch
+        while self._chips_layout.count():
             item = self._chips_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         hosts, bad = self._host_counts()
-        bad = max(bad, self._skipped_lines)
-        for index, (host, count) in enumerate(hosts):
-            chip = QLabel(f"{host} · {count}" if count > 1 else host)
-            chip.setProperty("urlChip", True)
-            self._chips_layout.insertWidget(index, chip)
+        for host, count in hosts:
+            self._chips_layout.addWidget(
+                make_chip(f"{host} · {count}", CHIP_ACCENT))
         if bad:
-            warn = QLabel(tr("{} line(s) are not links — they will be "
-                             "skipped").format(bad))
-            warn.setProperty("urlChip", True)
-            warn.setProperty("state", "warn")
-            self._chips_layout.insertWidget(len(hosts), warn)
+            self._chips_layout.addWidget(make_chip(
+                tr("{} line(s) are not links — they will be skipped")
+                .format(bad), CHIP_WARN, warn=True))
         self.chips_row.setVisible(bool(hosts))
+        self.chips_row.updateGeometry()
 
     def _update_multi_labels(self):
         if not self._multi_urls:
@@ -374,15 +428,13 @@ class AddUrlDialog(QDialog):
 
     def _leave_multi_mode(self):
         self._multi_urls = []
-        self._skipped_lines = 0
         self.quality_row.setVisible(False)
         self.chips_row.setVisible(False)
         self.summary_label.setVisible(False)
         self.table.setVisible(True)
         self.buttons.button(QDialogButtonBox.Ok).setVisible(True)
         self._url_stretch(False)
-        self.url_edit.setMinimumHeight(0)
-        self.url_edit.setFixedHeight(self._single_height)
+        self._apply_single_geometry()       # not the batch-sized stub
         self.best_button.setText(tr("Add (best quality)"))
         self.status.setVisible(True)
         self.status.setText(tr("Paste a video URL — the format list "

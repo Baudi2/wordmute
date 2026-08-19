@@ -1019,7 +1019,8 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
     from wordmute_app.ui.url_dialog import AddUrlDialog
 
     d = AddUrlDialog(auto_fetch=False)
-    single_h = d.url_edit.maximumHeight()
+    d._apply_single_geometry()          # normally a singleShot(0)
+    single_h = d.url_edit.height()
     assert d.table.isVisibleTo(d)
 
     d.url_edit.setPlainText(
@@ -1031,14 +1032,13 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
     # the table's whole space; table + "add selected" gone
     assert not d.table.isVisibleTo(d)
     assert not d.buttons.button(QDialogButtonBox.Ok).isVisibleTo(d)
-    assert d.url_edit.maximumHeight() > single_h
+    assert d.url_edit.height() > single_h
     assert d.layout().stretch(d.layout().indexOf(d.url_edit)) == 0
-    # one chip per host, and the button carries the count
+    # one chip per host (with its count), and the button carries the total
     assert d.chips_row.isVisibleTo(d)
     chips = [d._chips_layout.itemAt(i).widget().text()
-             for i in range(d._chips_layout.count())
-             if d._chips_layout.itemAt(i).widget()]
-    assert chips == ["a.com", "b.com", "c.com"]
+             for i in range(d._chips_layout.count())]
+    assert [c.split("</span> ")[-1] for c in chips] ==         ["a.com · 1", "b.com · 1", "c.com · 1"]
     assert "3" in d.best_button.text()
 
     # editing the list further must not fight the caret or re-wrap
@@ -1047,11 +1047,13 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
     assert d.url_edit.toPlainText() == \
         "https://a.com/1\nhttps://b.com/2"
 
-    # back to one link -> single-line layout restored
+    # back to one link -> single-mode layout and window size restored
     d.url_edit.setPlainText("https://only.com/1")
     assert d.table.isVisibleTo(d)
     assert d.buttons.button(QDialogButtonBox.Ok).isVisibleTo(d)
-    assert d.url_edit.maximumHeight() == single_h
+    assert d.url_edit.height() == single_h
+    assert d.size() == d._single_size
+    assert not d.chips_row.isVisibleTo(d)
 
     # back to a single link: normal mode, single result
     d2 = AddUrlDialog(auto_fetch=False)
