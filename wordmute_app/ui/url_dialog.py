@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -29,15 +30,16 @@ from ..core import downloader
 from ..core.jobs import QueueItem
 from .flow_layout import FlowLayout, make_chip
 from .hover_table import HoverRowTable
-from .i18n import tr
+from .i18n import tr, tr_plural
 
 # keep fetch threads alive if their dialog closes early; Qt drops the
 # signal connections with the dialog, so late emits are harmless
 _live_workers = set()
 
-# batch mode shows this many links without scrolling (design 1c asked
-# for 3..8; testing on real pastes wanted more room before the scroll)
-MIN_LINES, MAX_LINES = 5, 14
+# batch mode holds this many links without scrolling; the box opens at
+# this full height right away (tester: growth under the paste felt
+# broken, and 3 visible links was far too tight)
+MAX_LINES = 10
 CHIP_ACCENT = "#9184d9"
 CHIP_WARN = "#cdb380"
 
@@ -57,17 +59,33 @@ def extract_urls(text: str) -> list:
 
 class _UrlEdit(QPlainTextEdit):
     """URL input that grows: one line for a single link, a proper
-    multi-line list when several are pasted. Enter submits (Shift+
-    Enter always inserts a newline), so a single link still behaves
-    like the old one-line field."""
+    multi-line list when several are pasted.
+
+    Enter: submits in single mode (the old one-line behavior), inserts
+    a NEWLINE in batch mode — swallowing it there made hand-typing a
+    link into an existing list impossible. Shift+Enter always inserts.
+    Pastes land on their own line: dropping a URL with the caret at the
+    end of an existing link used to glue them together."""
     submitted = Signal()
+    allow_newline = False
 
     def keyPressEvent(self, event):
         if (event.key() in (Qt.Key_Return, Qt.Key_Enter)
-                and not (event.modifiers() & Qt.ShiftModifier)):
+                and not (event.modifiers() & Qt.ShiftModifier)
+                and not self.allow_newline):
             self.submitted.emit()
             return
         super().keyPressEvent(event)
+
+    def insertFromMimeData(self, source):
+        urls = extract_urls(source.text() if source.hasText() else "")
+        if not urls:
+            super().insertFromMimeData(source)
+            return
+        cursor = self.textCursor()
+        prefix = ("\n" if cursor.block().text()[:cursor.positionInBlock()]
+                  .strip() else "")
+        cursor.insertText(prefix + "\n".join(urls))
 
 
 class FormatListWorker(QThread):
@@ -191,6 +209,14 @@ class AddUrlDialog(QDialog):
             cookies_row.addStretch()
             layout.addLayout(cookies_row)
 
+        # design 2b: the format list lives in one frame with a darker
+        # "tail" under the last row (so a short list stops looking cut
+        # off) and a pinned «Selected: …» bar at the bottom
+        self.format_area = QFrame()
+        self.format_area.setObjectName("format_area")
+        area_box = QVBoxLayout(self.format_area)
+        area_box.setContentsMargins(0, 0, 0, 0)
+        area_box.setSpacing(0)
         self.table = HoverRowTable(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels(
             [tr(c) for c in self.COLUMNS])
@@ -203,15 +229,54 @@ class AddUrlDialog(QDialog):
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(True)
         self.table.itemDoubleClicked.connect(lambda _: self.accept())
-        self.table.itemSelectionChanged.connect(self._update_ok)
+        self.table.itemSelectionChanged.connect(self._on_selection)
+        area_box.addWidget(self.table)
+
+        self.format_tail = QWidget()
+        self.format_tail.setObjectName("format_tail")
+        tail_box = QVBoxLayout(self.format_tail)
+        tail_box.setContentsMargins(16, 0, 16, 0)
+        tail_box.setSpacing(4)
+        tail_box.addStretch()
+        end_line = QFrame()
+        end_line.setObjectName("format_end_line")
+        end_line.setFixedHeight(1)
+        tail_box.addWidget(end_line)
+        self.tail_title = QLabel("")
+        self.tail_title.setObjectName("format_tail_title")
+        self.tail_title.setAlignment(Qt.AlignCenter)
+        tail_box.addWidget(self.tail_title)
+        self.tail_hint = QLabel(
+            tr("Need another option? A cookies file sometimes helps"))
+        self.tail_hint.setObjectName("format_tail_hint")
+        self.tail_hint.setAlignment(Qt.AlignCenter)
+        tail_box.addWidget(self.tail_hint)
+        tail_box.addStretch()
+        area_box.addWidget(self.format_tail, stretch=1)
+
+        self.selected_bar = QWidget()
+        self.selected_bar.setObjectName("format_selected")
+        bar_box = QHBoxLayout(self.selected_bar)
+        bar_box.setContentsMargins(16, 9, 16, 9)
+        self.selected_label = QLabel("")
+        self.selected_label.setObjectName("format_selected_label")
+        bar_box.addWidget(self.selected_label, stretch=1)
+        self.selected_detail = QLabel("")
+        self.selected_detail.setObjectName("format_selected_detail")
+        bar_box.addWidget(self.selected_detail)
+        self.selected_bar.setVisible(False)
+        area_box.addWidget(self.selected_bar)
+
         # size the input once the sheet is applied: before that the mono
         # face is not in place and the box comes out a third too short
         QTimer.singleShot(0, self._apply_single_geometry)
-        layout.addWidget(self.table, stretch=1)
+        layout.addWidget(self.format_area, stretch=1)
+
+        self.format_tail.setVisible(False)
 
         footer = QWidget()
         footer.setObjectName("add_url_footer")
-        buttons_row = QHBoxLayout(footer)
+        self._footer_layout = buttons_row = QHBoxLayout(footer)
         buttons_row.setContentsMargins(0, 8, 0, 0)
         self.summary_label = QLabel("")
         self.summary_label.setObjectName("add_url_summary")
@@ -275,15 +340,20 @@ class AddUrlDialog(QDialog):
         self._multi_urls = urls
         self.loading_bar.setVisible(False)
         self.table.setRowCount(0)
-        self.table.setVisible(False)      # useless without a fetch
+        self.format_area.setVisible(False)   # useless without a fetch
         self._info = None
         self.quality_row.setVisible(True)
         self._normalize_text()
+        self.url_edit.allow_newline = True   # Enter = another link
         if first_time:
             self._url_stretch(True)
             # nothing to select without the table
             self.buttons.button(QDialogButtonBox.Ok).setVisible(False)
-        self._resize_input()
+            # design: [summary] … [Отмена] [Добавить N] — the primary
+            # moves to the right of Cancel for the batch
+            self._footer_layout.removeWidget(self.best_button)
+            self._footer_layout.addWidget(self.best_button)
+            self._resize_input()
         self._update_multi_labels()
         self._update_ok()
 
@@ -374,9 +444,10 @@ class AddUrlDialog(QDialog):
         self.resize(self._single_size)
 
     def _resize_input(self):
-        """Batch mode: MIN_LINES..MAX_LINES of links, then it scrolls."""
-        blocks = max(self.url_edit.document().blockCount(), 1)
-        self._set_input_lines(max(MIN_LINES, min(MAX_LINES, blocks)))
+        """Batch mode: the box holds MAX_LINES links from the start —
+        a constant, roomy height (per tester feedback) instead of
+        growing under the user's paste; past MAX_LINES it scrolls."""
+        self._set_input_lines(MAX_LINES)
         self.adjustSize()
 
     def _host_counts(self):
@@ -406,8 +477,8 @@ class AddUrlDialog(QDialog):
                 make_chip(f"{host} · {count}", CHIP_ACCENT))
         if bad:
             self._chips_layout.addWidget(make_chip(
-                tr("{} line(s) are not links — they will be skipped")
-                .format(bad), CHIP_WARN, warn=True))
+                tr_plural("{} lines are not links", bad),
+                CHIP_WARN, warn=True))
         self.chips_row.setVisible(bool(hosts))
         self.chips_row.updateGeometry()
 
@@ -419,7 +490,7 @@ class AddUrlDialog(QDialog):
         self.status.setVisible(False)
         self.summary_label.setVisible(True)
         self.summary_label.setText(
-            tr("{} links · {}").format(count, tr(label)))
+            f"{tr_plural('{} links', count)} · {tr(label)}")
         self.best_button.setText(tr("Add {} to the queue").format(count))
         self._rebuild_chips()
 
@@ -428,11 +499,15 @@ class AddUrlDialog(QDialog):
 
     def _leave_multi_mode(self):
         self._multi_urls = []
+        self.url_edit.allow_newline = False
         self.quality_row.setVisible(False)
         self.chips_row.setVisible(False)
         self.summary_label.setVisible(False)
-        self.table.setVisible(True)
+        self.format_area.setVisible(True)
         self.buttons.button(QDialogButtonBox.Ok).setVisible(True)
+        # the primary returns to the footer's left edge (single design)
+        self._footer_layout.removeWidget(self.best_button)
+        self._footer_layout.insertWidget(1, self.best_button)
         self._url_stretch(False)
         self._apply_single_geometry()       # not the batch-sized stub
         self.best_button.setText(tr("Add (best quality)"))
@@ -452,6 +527,9 @@ class AddUrlDialog(QDialog):
         self.status.setText(tr("Fetching format list…"))
         self.loading_bar.setVisible(True)
         self.table.setRowCount(0)
+        self.table.setMaximumHeight(16777215)
+        self.format_tail.setVisible(False)
+        self.selected_bar.setVisible(False)
         self._info = None
         self._update_ok()
         worker = FormatListWorker(url, cookies=self._cookies)
@@ -489,6 +567,14 @@ class AddUrlDialog(QDialog):
                  tr(d["kind"])],
                 f)
         self.table.selectRow(0)
+        header_h = self.table.horizontalHeader().height()
+        content = header_h + 2 * self.table.frameWidth() + sum(
+            self.table.rowHeight(r) for r in range(self.table.rowCount()))
+        self.table.setMaximumHeight(content)
+        self.tail_title.setText(
+            tr("That's every format this site offered — {}")
+            .format(len(info["formats"])))
+        self.format_tail.setVisible(True)
         self._update_ok()
 
     def _add_row(self, texts, fmt):
@@ -510,6 +596,30 @@ class AddUrlDialog(QDialog):
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(
             bool(self.table.selectionModel()
                  and self.table.selectionModel().hasSelection()))
+
+    def _on_selection(self):
+        self._update_ok()
+        rows = (self.table.selectionModel().selectedRows()
+                if self.table.selectionModel() else [])
+        if not rows or self._multi_urls:
+            self.selected_bar.setVisible(False)
+            return
+        row = rows[0].row()
+        name = " ".join(self.table.item(row, 0).text().split())
+        if row == 0:
+            # the right side already says «рекомендуется» — saying it
+            # twice on one line read as a glitch
+            name = name.split(" (")[0]
+        self.selected_label.setText(
+            tr("Selected:") + f" <b>{name}</b>")
+        if row == 0:
+            self.selected_detail.setText(tr("recommended"))
+        else:
+            parts = [self.table.item(row, 1).text(),
+                     self.table.item(row, 3).text()]
+            self.selected_detail.setText(
+                " · ".join(part for part in parts if part))
+        self.selected_bar.setVisible(True)
 
     # ---------------------------------------------------------- result
     def _accept_best(self):

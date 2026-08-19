@@ -90,6 +90,7 @@ class WordListsTab(QWidget):
         top.addWidget(self.save_button)
         layout.addWidget(toolbar)
         self._syntax_popover = None
+        self._popover_closed_at = 0.0
 
         # first-run framing: shipped lists are a template, not policy.
         # One 32px line now, dismissed per list (not globally)
@@ -144,7 +145,11 @@ class WordListsTab(QWidget):
         self.tester_input = QLineEdit()
         self.tester_input.setObjectName("wl_tester_input")
         self.tester_input.setPlaceholderText(
-            tr("Why would this be muted? — type a word or phrase"))
+            tr("Check a word or phrase against this list and the other "
+               "saved one…"))
+        from .theme import ui_icon
+        self.tester_input.addAction(ui_icon("search", 13),
+                                    QLineEdit.LeadingPosition)
         self.tester_input.textChanged.connect(self._run_tester)
         tester_row.addWidget(self.tester_input, stretch=1)
         self.tester_result = QLabel("")
@@ -335,7 +340,16 @@ class WordListsTab(QWidget):
     # ------------------------------------------------------ syntax help
     def _toggle_syntax_popover(self, show: bool):
         """A Popup QFrame, not a QMenu: the legend is a two-column grid,
-        which a menu cannot lay out."""
+        which a menu cannot lay out.
+
+        The reopen guard: clicking the checked button closes the popup
+        BEFORE the click lands (Qt.Popup eats the press), the Hide
+        filter unchecks the button, and the same click then re-checks
+        it — without the timestamp the button could only ever open."""
+        import time
+        if show and time.monotonic() - self._popover_closed_at < 0.25:
+            self.syntax_help.setChecked(False)
+            return
         if not show:
             if self._syntax_popover is not None:
                 self._syntax_popover.hide()
@@ -371,5 +385,7 @@ class WordListsTab(QWidget):
 
     def eventFilter(self, obj, event):
         if obj is self._syntax_popover and event.type() == QEvent.Hide:
+            import time
+            self._popover_closed_at = time.monotonic()
             self.syntax_help.setChecked(False)
         return super().eventFilter(obj, event)

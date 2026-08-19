@@ -73,6 +73,23 @@ default, light switchable at runtime. Sheets load in the order
    transcript tab reuses the shell with `accepts="false"`. The muting
    explanation moved to the Start button's tooltip.
 
+## Second live round (real-app feedback)
+
+Fixes after the user ran the branch: host chips are true pills with the
+mock's 5px dot (Qt silently draws SQUARE corners when border-radius
+exceeds half the widget height — the chips needed a fixed 28px height);
+a wrapping FlowLayout keeps many chips from clipping the warning; the
+warning and the footer count use real Russian plurals («1 строка не
+похожа…» / «5 строк не похожи…») via the new `tr_plural()`; Enter adds
+a line in batch mode and pastes land on their own line, so hand-typing
+a link into a list works; the batch input opens at its full 10-line
+height; the footer is [summary] … [Отмена] [Добавить N в очередь]; the
+single-link window implements mock 2b (darker list tail, fading
+end-of-list line, «Это все форматы…», pinned «Выбрано: …» row); the «?»
+popover closes on the second click; the queue and transcript empty
+states use the mock's SVG icons; the tester input carries the mock's
+magnifier and placeholder.
+
 ## Deliberate deviations from the handoff
 
 - State lives in the app's `settings.json` (`%APPDATA%\WordMute`), not
@@ -80,6 +97,5 @@ default, light switchable at runtime. Sheets load in the order
   dismissal all use the existing store.
 - i18n uses the app's own `tr()` dictionary rather than Qt `.qm`
   catalogs; `qtbase_ru.qm` is loaded only for Qt's own dialogs.
-- Counts are formatted as «Добавить 4 в очередь» / «в очередь попадёт
-  файлов: 3» — phrasing that dodges Russian plural forms, since the
-  `tr()` dict has no plural support.
+- Counts now resolve real Russian plural forms through `tr_plural()`
+  (one/few/many); the earlier plural-dodging phrasing is gone.

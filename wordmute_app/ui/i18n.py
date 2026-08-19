@@ -23,6 +23,48 @@ def tr(text: str) -> str:
     return text
 
 
+def tr_plural(key: str, n: int) -> str:
+    """Count-aware translation: Russian needs three forms («1 строка» /
+    «2 строки» / «5 строк»), which a plain key dict cannot express —
+    «строк не похожи на ссылки: 1» read as broken Russian. English uses
+    the first form for 1, the last for everything else."""
+    forms = PLURALS.get(key, {}).get(_LANG)
+    if not forms:
+        return key.format(n)
+    if _LANG == "ru":
+        if n % 10 == 1 and n % 100 != 11:
+            form = forms[0]
+        elif 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+            form = forms[1]
+        else:
+            form = forms[2]
+    else:
+        form = forms[0] if n == 1 else forms[-1]
+    return form.format(n)
+
+
+PLURALS = {
+    "{} links": {
+        "en": ("{} link", "{} links"),
+        "ru": ("{} ссылка", "{} ссылки", "{} ссылок"),
+    },
+    "{} lines are not links": {
+        "en": ("{} line is not a link — it will be skipped",
+               "{} lines are not links — they will be skipped"),
+        "ru": ("{} строка не похожа на ссылку — будет пропущена",
+               "{} строки не похожи на ссылки — будут пропущены",
+               "{} строк не похожи на ссылки — будут пропущены"),
+    },
+    "{} files join the queue": {
+        "en": ("Release — {} file joins the queue",
+               "Release — {} files join the queue"),
+        "ru": ("Отпустите — {} файл попадёт в очередь",
+               "Отпустите — {} файла попадут в очередь",
+               "Отпустите — {} файлов попадут в очередь"),
+    },
+}
+
+
 RU = {
     # main window
     "Add Files": "Добавить файлы",
@@ -135,11 +177,14 @@ RU = {
         "Проверка по текущим правкам (даже несохраненным) "
         "плюс другой сохраненный список.",
     "Hide this note": "Скрыть эту подсказку",
-    # add URL, batch mode
-    "{} links · {}": "ссылок: {} · {}",
+    # add URL: batch mode + the 2b single-link tail
     "Add {} to the queue": "Добавить {} в очередь",
-    "{} line(s) are not links — they will be skipped":
-        "строк не похожи на ссылки: {} — будут пропущены",
+    "That's every format this site offered — {}":
+        "Это все форматы, которые отдал этот сайт — {}",
+    "Need another option? A cookies file sometimes helps":
+        "Нужен другой вариант? Иногда помогает файл cookies",
+    "Selected:": "Выбрано:",
+    "recommended": "рекомендуется",
     # setup: the install page's moving detail line and log dock
     "Now: {}": "Сейчас: {}",
     "{} of {}": "{} из {}",
@@ -179,8 +224,10 @@ RU = {
         "регистру, дубликаты убираются.",
     "This is the shipped template — edit it freely, it's your list.":
         "Это стартовый шаблон — правьте свободно, это ваш список.",
-    "Why would this be muted? — type a word or phrase":
-        "Почему это заглушится? — введите слово или фразу",
+    "Check a word or phrase against this list and the other saved "
+    "one…":
+        "Проверить слово или фразу по этому списку и другим "
+        "сохранённым…",
     "(no match)": "(нет совпадений)",
     'phrase "{}"  ←  matched': 'фраза «{}»  ←  совпала',
     # history

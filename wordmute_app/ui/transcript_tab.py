@@ -63,8 +63,10 @@ class TranscriptTab(QWidget):
         self.empty_state.setProperty("accepts", "false")
         empty_layout = QVBoxLayout(self.empty_state)
         empty_layout.addStretch()
-        icon = QLabel("¶")
+        icon = QLabel()
         icon.setObjectName("empty_icon")
+        from .theme import ui_icon
+        icon.setPixmap(ui_icon("doc-text", 21).pixmap(21, 21))
         icon.setProperty("accepts", "false")
         icon.setAlignment(Qt.AlignCenter)
         icon_row = QHBoxLayout()

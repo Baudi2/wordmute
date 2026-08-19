@@ -1036,9 +1036,11 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
     assert d.layout().stretch(d.layout().indexOf(d.url_edit)) == 0
     # one chip per host (with its count), and the button carries the total
     assert d.chips_row.isVisibleTo(d)
-    chips = [d._chips_layout.itemAt(i).widget().text()
+    # chips render rich text (the leading dot); the plain string is
+    # kept on a property for exactly this kind of check
+    chips = [d._chips_layout.itemAt(i).widget().property("chipText")
              for i in range(d._chips_layout.count())]
-    assert [c.split("</span> ")[-1] for c in chips] ==         ["a.com · 1", "b.com · 1", "c.com · 1"]
+    assert chips == ["a.com · 1", "b.com · 1", "c.com · 1"]
     assert "3" in d.best_button.text()
 
     # editing the list further must not fight the caret or re-wrap

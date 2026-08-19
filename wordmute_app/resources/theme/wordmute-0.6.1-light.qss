@@ -189,3 +189,29 @@ QFrame#drop_zone[dragOver="true"] QLabel#empty_title { color: #5d5294; }
 QLabel#empty_body { font-size: 12px; color: #595d6c; }
 QPushButton#btn_empty_primary { padding: 7px 14px; font-size: 12px; }
 QPushButton#btn_empty_secondary { padding: 7px 14px; font-size: 12px; }
+
+
+/* ============================================================
+   local merge: fixes from the first live round on the real app
+   (keep when a new design drop replaces this file)
+   ============================================================ */
+QPlainTextEdit#url_input { min-height: 0; }
+
+QFrame#format_area {
+  border: 1px solid #d5d8e6; border-radius: 8px; background: #f7f8fd;
+}
+QFrame#format_area QTableWidget { border: none; background: #f7f8fd; }
+QWidget#format_tail { background: #e9ecf7; }
+QFrame#format_end_line {
+  border: none;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+      stop:0 transparent, stop:0.5 #c9cddd, stop:1 transparent);
+}
+QLabel#format_tail_title { color: #595d6c; font-size: 12px; }
+QLabel#format_tail_hint { color: #8b8fa3; font-size: 11px; }
+QWidget#format_selected {
+  background: #f7f8fd; border-top: 1px solid #d5d8e6;
+  border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;
+}
+QLabel#format_selected_label { font-size: 12px; color: #292b31; }
+QLabel#format_selected_detail { font-size: 12px; color: #595d6c; }

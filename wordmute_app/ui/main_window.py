@@ -36,7 +36,7 @@ from .dialogs import (confirm, inform, mark_danger, repolish,
 from .events import format_event
 from .formats import fmt_rate
 from .history_tab import HistoryTab
-from .i18n import tr
+from .i18n import tr, tr_plural
 from .models_tab import ModelsTab
 from .plan_widget import PassPlanWidget
 from .queue_card import QueueCard
@@ -314,9 +314,12 @@ class MainWindow(QMainWindow):
         empty_outer.addWidget(self.drop_zone)
         empty_layout = QVBoxLayout(self.drop_zone)
         empty_layout.addStretch()
-        self.empty_icon = QLabel("＋")
+        self.empty_icon = QLabel()
         self.empty_icon.setObjectName("empty_icon")
         self.empty_icon.setAlignment(Qt.AlignCenter)
+        from .theme import ui_icon
+        self.empty_icon.setPixmap(
+            ui_icon("drop-files", 21, "#d2cefd").pixmap(21, 21))
         icon_row = QHBoxLayout()
         icon_row.addStretch()
         icon_row.addWidget(self.empty_icon)
@@ -831,7 +834,7 @@ class MainWindow(QMainWindow):
         count = self._accepted_media(mime)
         if not count:
             return None
-        return (tr("Release — {} file(s) join the queue").format(count),
+        return (tr_plural("{} files join the queue", count),
                 tr("mp4 · mkv · mp3 — anything else is skipped"))
 
     def dragEnterEvent(self, event):

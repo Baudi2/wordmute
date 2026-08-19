@@ -76,11 +76,19 @@ class FlowLayout(QLayout):
 
 
 def make_chip(text: str, accent: str, warn: bool = False):
-    """A pill with a leading dot, as in the design mock."""
+    """A pill with a small leading dot, as in the design mock (5px dot,
+    13px corner radius)."""
     from PySide6.QtWidgets import QLabel
-    chip = QLabel(f'<span style="color:{accent}">●</span> {text}')
+    dot = ("" if warn else
+           f'<span style="color:{accent}; font-size:7px;">●</span>&nbsp;')
+    chip = QLabel(dot + text)
     chip.setProperty("urlChip", True)
+    chip.setProperty("chipText", text)      # plain text, for tests/tools
     chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+    # Qt drops border-radius entirely once it exceeds half the widget
+    # height — the design's 13px radius painted SQUARE corners on the
+    # ~25px chip the label sized itself to
+    chip.setFixedHeight(28)
     if warn:
         chip.setProperty("state", "warn")
     return chip

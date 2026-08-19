@@ -323,3 +323,34 @@ QFrame#drop_zone[dragOver="true"] QLabel#empty_title { color: #d2cefd; }
 QLabel#empty_body { font-size: 12px; color: #9397ab; }             /* ONE line — see the handoff on the copy cut */
 QPushButton#btn_empty_primary { padding: 7px 14px; font-size: 12px; }
 QPushButton#btn_empty_secondary { padding: 7px 14px; font-size: 12px; }
+
+
+/* ============================================================
+   local merge: fixes from the first live round on the real app
+   (keep when a new design drop replaces this file)
+   ============================================================ */
+/* the code owns the input height — this sheet's min-height fought a
+   smaller fixed height and the status line painted over the border */
+QPlainTextEdit#url_input { min-height: 0; }
+
+/* 2b — single link, few formats: the list's tail goes a tone deeper,
+   the end-of-list line fades at the edges, and the current pick is
+   pinned at the bottom */
+QFrame#format_area {
+  border: 1px solid #292b31; border-radius: 8px; background: #1b1d2c;
+}
+QFrame#format_area QTableWidget { border: none; background: #1b1d2c; }
+QWidget#format_tail { background: #111322; }
+QFrame#format_end_line {
+  border: none;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+      stop:0 transparent, stop:0.5 #3f424d, stop:1 transparent);
+}
+QLabel#format_tail_title { color: #9397ab; font-size: 12px; }
+QLabel#format_tail_hint { color: #75798c; font-size: 11px; }
+QWidget#format_selected {
+  background: #1b1d2c; border-top: 1px solid #292b31;
+  border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;
+}
+QLabel#format_selected_label { font-size: 12px; color: #e9e9ed; }
+QLabel#format_selected_detail { font-size: 12px; color: #9397ab; }
