@@ -15,6 +15,10 @@ BEST_LABEL = "best quality"
 # stream, so a link that has nothing that small still downloads.
 QUALITY_PRESETS = (
     ("best", "best quality", BEST_SPEC),
+    ("2160", "up to 2160p (4K)",
+     "bv*[height<=2160]+ba/b[height<=2160]/bv*+ba/b"),
+    ("1440", "up to 1440p",
+     "bv*[height<=1440]+ba/b[height<=1440]/bv*+ba/b"),
     ("1080", "up to 1080p",
      "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
     ("720", "up to 720p",
