@@ -194,6 +194,52 @@ RU = {
         "обычно это значит, что yt-dlp пора обновить: вкладка «Модели» "
         "→ «Проверить обновления» → «Обновить все», затем перезапустите "
         "приложение. Иногда помогает и простой повтор.",
+    # models tab regroup (design models-tab-handoff.md)
+    "recognition runs on the graphics card": "распознавание идёт на видеокарте",
+    "No NVIDIA GPU found — recognition runs on the processor, 2–4× "
+    "slower":
+        "NVIDIA GPU не найден — распознавание на процессоре, в 2–4 раза "
+    "медленнее",
+    "Open settings →": "Открыть настройки →",
+    "Recognition models": "Модели распознавания",
+    "what is downloaded and how much disk it takes": "что скачано и сколько занимает на диске",
+    "State": "Состояние",
+    "GIGAAM · RUSSIAN ENGINE": "GIGAAM · РУССКИЙ ДВИЖОК",
+    "failed — {}": "не удалось — {}",
+    "Model downloaded": "Модель скачана",
+    "Delete…": "Удалить…",
+    "Delete the GigaAM model caches?": "Удалить кэши моделей GigaAM?",
+    "Disk usage · {}": "Занято на диске · {}",
+    "components": "компоненты",
+    "Maintenance": "Обслуживание",
+    "updates and repair of the install": "обновления и ремонт установки",
+    "checked {}": "проверено {}",
+    "checking for updates…": "проверка обновлений…",
+    "Update all ({})": "Обновить все ({})",
+    "Press «Check for updates» to see whether newer versions of the "
+    "engines and models exist.":
+        "Нажмите «Проверить обновления», чтобы узнать, есть ли новые версии "
+    "движков и моделей.",
+    "GigaAM weights update together with the onnx-asr package.": "Веса GigaAM обновляются вместе с пакетом onnx-asr.",
+    "Add components…": "Доустановить компоненты…",
+    "the wizard adds what is missing and leaves the rest alone": "мастер доставит пропущенное, установленное не тронет",
+    "Repair components…": "Починить компоненты…",
+    "clean start of the runtime": "чистый старт среды",
+    "What's new": "Что нового",
+    "up to date": "актуально",
+    "Update": "Обновить",
+    "{} model": "модель {}",
+    "current revision": "текущая ревизия",
+    "new revision": "новая ревизия",
+    "updating {} of {}": "обновление {} из {}",
+    "Updates installed": "Обновления установлены",
+    "Update failed": "Не удалось обновить",
+    "Delete the runtime and set it up again?": "Удалить среду выполнения и настроить заново?",
+    "Word lists, settings, history and the downloaded models are kept. "
+    "Best done right after starting the app, before any processing.":
+        "Словари, настройки, история и скачанные модели сохранятся. Лучше "
+    "делать сразу после запуска, до обработки.",
+    "Delete and set up": "Удалить и настроить",
     # setup: the install page's moving detail line and log dock
     "Now: {}": "Сейчас: {}",
     "{} of {}": "{} из {}",

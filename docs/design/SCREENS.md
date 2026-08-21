@@ -23,7 +23,7 @@ default, light switchable at runtime. Sheets load in the order
 | 08 | `08_tab_wordlists_syntax.png` | The syntax legend, now a popover behind «?» |
 | 09 | `09_tab_transcript_empty.png` | Transcript empty state (same shell, `accepts="false"`) |
 | 10 | `10_tab_transcript.png` | Transcript browser with a cached transcript |
-| 11 | `11_tab_models.png` | Models: Whisper table, GigaAM cache, disk usage, update/repair |
+| 11 | `11_tab_models.png` | Models after the regroup: Устройство · one model list (Whisper + GigaAM, download in flight) · Обслуживание as update rows with «Обновить все (N)» |
 | 12 | `12_tab_history.png` | History after 1d: locale dates, no ✓/✗ column, «ошибка» in Заглушено |
 | 13 | `13_tab_settings.png` | Settings after 1e: «100 мс», «1000 Гц» |
 | 14 | `14_dialog_add_url_single.png` | Add URL — one link, format table |
@@ -89,6 +89,32 @@ end-of-list line, «Это все форматы…», pinned «Выбрано: 
 popover closes on the second click; the queue and transcript empty
 states use the mock's SVG icons; the tester input carries the mock's
 magnifier and placeholder.
+
+## Third round: the Models tab regroup + native title bar
+
+`models-tab-handoff.md` implemented in full: three group cards; the
+device line gets a warn state with «Открыть настройки →» (no more
+dead end); Whisper and GigaAM share ONE list with catalogue sizes
+before download, an in-row indeterminate bar with «Отменить» (the
+download runs as a subprocess so it can actually be killed), and a ⋯
+menu instead of red buttons; disk usage is a stacked bar; the update
+check is a list of rows (↑ new / ✓ up to date / ⚠ could not check /
+not installed → «Установить») with one button that morphs «Проверить
+обновления» → «Обновить все (N)», the last result remembered in
+settings.json and re-shown on open; the footer has «Доустановить
+компоненты…» and the red «Починить компоненты…» link whose
+confirmation lists what survives. The check targets `onnx-asr` now, so
+onnx installs stop reading as «gigaam: не установлен».
+
+The in-app «WordMute» header strip is gone: the OS title bar is the
+header, painted in the theme's chrome colors through DWM (caption,
+text and border; follows live theme switches; every dialog gets it on
+show). The tab scrolls as a whole — its groups outgrow a 760px window.
+
+*Deviation:* «Обновить все (N)» counts packages and models only; the
+app itself is a separate «Скачать» (it needs the installer), so the
+mock's «(2) · 17 МБ» reads «(1)» when only yt-dlp is stale. VRAM shows
+whole gigabytes («8 ГБ»), not the byte-exact 7,6.
 
 ## Deliberate deviations from the handoff
 

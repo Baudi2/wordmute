@@ -253,8 +253,33 @@ for name, tab in (("wordlists", win.wordlists_tab),
             json.dumps(words, ensure_ascii=False), encoding="utf-8")
         tab.load_media(media)
     if name == "models":
+        # the disk walk runs in a worker on first show and would
+        # overwrite a staged value with the empty fake LOCALAPPDATA
+        from wordmute_app.core import runtime_env
+        runtime_env.disk_usage = lambda: 2_410_000_000
         tab._runtime_bytes = 2_410_000_000
         tab.refresh()
+        # the handoff's extra states: a download in flight and a check
+        # that found two updates
+        tab._downloading = "medium"
+        tab.refresh()
+        tab._downloading = None
+        tab._render_result({
+            "app": {"current": "0.6.0", "latest": "0.7.0",
+                    "update": True,
+                    "url": "https://github.com/Baudi2/wordmute/releases"},
+            "packages": [
+                {"name": "faster-whisper", "installed": "1.2.1",
+                 "latest": "1.2.1", "update": False},
+                {"name": "onnx-asr", "installed": "0.8.0",
+                 "latest": "0.8.0", "update": False},
+                {"name": "yt-dlp", "installed": "2026.07.04",
+                 "latest": "2026.8.19", "update": True},
+            ],
+            "models": [{"model": "large-v3", "repo": "r",
+                        "update": False}],
+        }, __import__("datetime").datetime.now().isoformat(
+            timespec="seconds"))
     if name == "history":
         tab.refresh()
     if name == "settings":

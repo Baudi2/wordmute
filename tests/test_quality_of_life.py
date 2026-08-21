@@ -120,11 +120,17 @@ def test_disk_label_combines_components(models_tab):
     from wordmute_app.core.models import fmt_size
 
     models_tab._on_disk_result(2_000_000_000)
-    text = models_tab.disk_label.text()
-    assert fmt_size(2_000_000_000) in text                    # runtime
-    assert fmt_size(3_000_000_000) in text                    # whisper
-    assert fmt_size(500_000_000) in text                      # gigaam
-    assert fmt_size(5_500_000_000) in text                    # total
+    legend = models_tab.disk_legend
+    assert fmt_size(2_000_000_000) in legend["components"].text()
+    assert fmt_size(3_000_000_000) in legend["whisper"].text()
+    assert fmt_size(500_000_000) in legend["gigaam"].text()
+    assert fmt_size(5_500_000_000) in models_tab.disk_total.text()
+    # the stacked bar: stretch factors follow the sizes (in MB)
+    bar = models_tab._disk_bar
+    stretches = {key: bar.stretch(bar.indexOf(seg))
+                 for key, seg in models_tab.disk_segments.items()}
+    assert stretches["whisper"] > stretches["components"]
+    assert stretches["components"] > stretches["gigaam"] > 0
 
 
 def test_repair_deletes_runtime_and_reopens_setup(models_tab, monkeypatch,

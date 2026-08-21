@@ -85,19 +85,24 @@ def test_models_tab_lists_status(qapp, tmp_path, monkeypatch):
     d1 = tmp_path / "models--Systran--faster-whisper-base" / "blobs"
     d1.mkdir(parents=True)
     (d1 / "w.bin").write_bytes(b"x" * 100)
+    from wordmute_app.core import models
+    # the dev box has a real GigaAM cache under ~/.cache — hide it
+    monkeypatch.setattr(models, "gigaam_cache_dirs", lambda: [])
     from wordmute_app.ui.models_tab import ModelsTab
 
     tab = ModelsTab()
-    rows = {tab.table.item(r, 0).text(): tab.table.item(r, 1).text()
-            for r in range(tab.table.rowCount())}
-    assert rows["base"] == "downloaded ✓"
-    assert rows["large-v3"] == "not downloaded"
-    # per-row action buttons
-    buttons = {tab.table.item(r, 0).text():
-               tab.table.cellWidget(r, 3).text()
-               for r in range(tab.table.rowCount())}
-    assert buttons["base"] == "Delete"
-    assert buttons["large-v3"] == "Download"
+    rows = tab.model_rows
+    assert rows["base"].state_label.text() == "downloaded ✓"
+    assert rows["large-v3"].state_label.text() == "not downloaded"
+    # a downloaded row gets the ⋯ menu, a missing one the Download
+    # button — and the catalogue size, so the column never sits empty
+    assert rows["base"].more_button.isVisibleTo(tab)
+    assert not rows["base"].download_button.isVisibleTo(tab)
+    assert rows["large-v3"].download_button.text() == "Download"
+    assert rows["large-v3"].size_label.text() != ""
+    # GigaAM is a row in the SAME list now
+    assert "gigaam" in rows
+    assert rows["gigaam"].state_label.text() == "not downloaded"
 
 
 def test_history_tab_populates(qapp, tmp_path, monkeypatch):

@@ -257,25 +257,14 @@ class MainWindow(QMainWindow):
         self._watch_timer.setInterval(5000)
         self._watch_timer.timeout.connect(self._watch_tick)
 
-        # --- shell: header strip + sidebar navigation (no menu bar)
-        from .theme import app_icon
+        # --- shell: sidebar navigation (no menu bar). The app name and
+        # icon live in the OS title bar, which theme.apply_titlebar paints
+        # in the theme's chrome colors — the old in-app header strip
+        # duplicated it one row below
         container = QWidget()
         shell = QVBoxLayout(container)
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)
-        header_bar = QWidget()
-        header_bar.setObjectName("header_bar")
-        header_layout = QHBoxLayout(header_bar)
-        header_layout.setContentsMargins(16, 8, 16, 8)
-        header_layout.setSpacing(8)
-        icon_label = QLabel()
-        icon_label.setPixmap(app_icon().pixmap(20, 20))
-        header_layout.addWidget(icon_label)
-        title_label = QLabel("WordMute")
-        title_label.setObjectName("app_title")
-        header_layout.addWidget(title_label)
-        header_layout.addStretch()
-        shell.addWidget(header_bar)
         self.tabs = SidebarNav()
         shell.addWidget(self.tabs, stretch=1)
         self.setCentralWidget(container)

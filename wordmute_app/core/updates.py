@@ -17,7 +17,9 @@ from importlib import metadata
 from . import models as models_mod
 from .proc import creationflags
 
-PACKAGES = ("faster-whisper", "gigaam", "yt-dlp")
+# onnx-asr is what setup installs for GigaAM today; the legacy torch
+# "gigaam" package made every onnx-only install report "not installed"
+PACKAGES = ("faster-whisper", "onnx-asr", "yt-dlp")
 APP_REPO = "Baudi2/wordmute"
 APP_RELEASES_URL = f"https://github.com/{APP_REPO}/releases/latest"
 
