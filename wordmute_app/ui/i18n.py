@@ -185,6 +185,15 @@ RU = {
         "Нужен другой вариант? Иногда помогает файл cookies",
     "Selected:": "Выбрано:",
     "recommended": "рекомендуется",
+    # updates: live progress + the 403 hint
+    "Updating {}…": "Обновление {}…",
+    "Updating the {} model…": "Обновление модели {}…",
+    "this usually means yt-dlp needs updating: Models tab → Check for "
+    "updates → Update all, then restart the app. Retrying once also "
+    "sometimes helps.":
+        "обычно это значит, что yt-dlp пора обновить: вкладка «Модели» "
+        "→ «Проверить обновления» → «Обновить все», затем перезапустите "
+        "приложение. Иногда помогает и простой повтор.",
     # setup: the install page's moving detail line and log dock
     "Now: {}": "Сейчас: {}",
     "{} of {}": "{} из {}",

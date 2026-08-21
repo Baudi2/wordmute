@@ -63,6 +63,7 @@ class CheckUpdatesWorker(QThread):
 
 class UpgradeWorker(QThread):
     finished_ok = Signal(bool, str)
+    progress = Signal(str)      # live line for the status label
 
     def __init__(self, package_names, model_names, parent=None):
         super().__init__(parent)
@@ -73,11 +74,15 @@ class UpgradeWorker(QThread):
         messages = []
         ok = True
         if self._packages:
-            pip_ok, tail = updates.pip_upgrade(self._packages)
+            names = ", ".join(self._packages)
+            self.progress.emit(tr("Updating {}…").format(names))
+            pip_ok, tail = updates.pip_upgrade(
+                self._packages,
+                log=lambda line: self.progress.emit(f"{names}: {line}"))
             ok = ok and pip_ok
-            messages.append(tail if not pip_ok
-                            else ", ".join(self._packages))
+            messages.append(tail if not pip_ok else names)
         for model in self._models:
+            self.progress.emit(tr("Updating the {} model…").format(model))
             try:  # snapshot_download fetches the new revision
                 models.download_whisper_model(model)
             except Exception as exc:
@@ -419,8 +424,17 @@ class ModelsTab(QWidget):
         self.updates_label.setText(tr("Updating…"))
         self._upgrade_worker = UpgradeWorker(self._outdated_packages,
                                              self._outdated_models)
+        self._upgrade_worker.progress.connect(self._on_upgrade_progress)
         self._upgrade_worker.finished_ok.connect(self._on_upgrade_done)
         self._upgrade_worker.start()
+
+    def _on_upgrade_progress(self, line: str):
+        # one live line, middle-truncated: pip's download lines carry
+        # the version and the size — exactly the reassurance a frozen
+        # «Обновление…» label was missing
+        if len(line) > 110:
+            line = line[:60] + "…" + line[-45:]
+        self.updates_label.setText(line)
 
     def _on_upgrade_done(self, ok: bool, message: str):
         had_packages = bool(self._outdated_packages)

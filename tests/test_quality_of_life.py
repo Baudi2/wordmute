@@ -1134,3 +1134,39 @@ def test_url_probe_never_overwrites_download_backfill(window, monkeypatch):
     window.queue.item(0).setData(TITLE_ROLE, "видео.mp4")  # backfilled
     window._on_url_probed(item, "Позднее имя из пробы", 100, "")
     assert window.queue.item(0).data(TITLE_ROLE) == "видео.mp4"
+
+
+# ------------------------------------------------- download error hints
+def test_403_error_gets_the_yt_dlp_hint():
+    from wordmute_app.ui.worker import humanize_download_error
+
+    raw = "ERROR: unable to download video data: HTTP Error 403: Forbidden"
+    hinted = humanize_download_error(raw)
+    assert raw in hinted
+    assert "yt-dlp" in hinted
+    # anything else passes through untouched
+    assert humanize_download_error("boom") == "boom"
+
+
+def test_pip_upgrade_streams_lines(monkeypatch, tmp_path):
+    import subprocess
+    from wordmute_app.core import updates
+
+    fake_python = tmp_path / "python.exe"
+    fake_python.touch()
+    monkeypatch.setattr(updates, "_pip_python", lambda: str(fake_python))
+
+    class FakeProc:
+        stdout = iter(["Collecting yt-dlp\n",
+                       "Downloading yt_dlp-2026.8.19-py3-none-any.whl\n",
+                       "Successfully installed yt-dlp-2026.8.19\n"])
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: FakeProc())
+    seen = []
+    ok, tail = updates.pip_upgrade(["yt-dlp"], log=seen.append)
+    assert ok
+    assert seen[0] == "Collecting yt-dlp"
+    assert "Successfully installed" in tail
