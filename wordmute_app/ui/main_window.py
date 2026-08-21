@@ -263,6 +263,10 @@ class MainWindow(QMainWindow):
         # in the theme's chrome colors — the old in-app header strip
         # duplicated it one row below
         container = QWidget()
+        # 1px rule under the caption (QSS border-top): the sidebar's
+        # vertical divider terminates into it instead of running off
+        # into the title bar
+        container.setObjectName("shell_body")
         shell = QVBoxLayout(container)
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)

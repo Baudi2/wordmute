@@ -281,6 +281,10 @@ QPlainTextEdit#log_pane {
 
 QWidget#header_bar { background: #f3f5fe; border-bottom: 1px solid #e4e7f5; }
 QLabel#app_title { font-size: 15px; font-weight: 500; letter-spacing: -0.2px; }
+/* local merge: the header strip is gone (the OS caption is the header);
+   this rule under the caption is what the sidebar's vertical divider
+   terminates into — same color as that divider and the DWM frame */
+QWidget#shell_body { border-top: 1px solid #cfd3e5; }
 
 QWidget#setup_bar {
   background: #edf0fa; border: 1px solid #cfd3e5; border-radius: 8px;
