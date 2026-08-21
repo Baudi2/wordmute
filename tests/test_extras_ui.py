@@ -234,13 +234,17 @@ def test_start_skips_already_done_rows(qapp, tmp_path, monkeypatch):
         def connect(self, *a, **k):
             pass
 
-    class FakeWorker:
+    from PySide6.QtCore import QObject
+
+    class FakeWorker(QObject):   # QObject: start_thread parents it
         def __init__(self, items, *args, **kwargs):
+            super().__init__()
             captured["items"] = list(items)
             self.engine_event = DummySignal()
             self.file_started = DummySignal()
             self.file_finished = DummySignal()
             self.all_finished = DummySignal()
+            self.finished = DummySignal()
 
         def start(self):
             pass

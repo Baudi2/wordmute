@@ -38,6 +38,7 @@ from ..core import config, gpu, models, runtime_env
 from .dialogs import confirm
 from .formats import fmt_bytes, fmt_rate
 from .i18n import current_language, set_language, tr
+from .threads import start_thread, wait_thread
 
 STEP_KEYS = ("intro", "python", "whisper", "ytdlp", "ffmpeg", "gigaam",
              "review", "install")
@@ -1063,7 +1064,7 @@ class SetupDialog(QDialog):
                 tr("done")))
         self._worker.progress.connect(self._on_progress)
         self._worker.finished_ok.connect(self._on_finished)
-        self._worker.start()
+        start_thread(self, self._worker)
 
     def _on_stage(self, key: str):
         row_key = key if key in self._rows else "gigaam"
@@ -1168,5 +1169,5 @@ class SetupDialog(QDialog):
     def closeEvent(self, event):
         if self._worker is not None:
             self._worker.cancel()
-            self._worker.wait(30000)
+            wait_thread(self._worker, 30000)
         event.accept()

@@ -30,10 +30,12 @@ from PySide6.QtWidgets import (
 
 from ..core import config, gpu, models, runtime_env, updates
 from ..core.proc import creationflags
+from .. import __version__
 from .dialogs import confirm, inform, mark_danger, repolish, themed_menu
 from .formats import fmt_bytes, human_datetime
 from .i18n import tr
 from .theme import ui_icon
+from .threads import start_thread, wait_thread
 
 WHISPER_MODELS = ("large-v3", "large-v3-turbo", "medium", "small", "base")
 GIGAAM_KEY = "gigaam"
@@ -158,11 +160,22 @@ class CheckUpdatesWorker(QThread):
     result = Signal(dict)
 
     def run(self):
+        # each check degrades on its own: an exception here would
+        # leave the button disabled behind «проверка…» forever
         self.result.emit({
-            "app": updates.check_app_update(),
-            "packages": updates.check_packages(),
-            "models": updates.check_whisper_models(),
+            "app": self._safe(updates.check_app_update,
+                              {"current": __version__, "latest": None,
+                               "update": False, "url": ""}),
+            "packages": self._safe(updates.check_packages, []),
+            "models": self._safe(updates.check_whisper_models, []),
         })
+
+    @staticmethod
+    def _safe(check, fallback):
+        try:
+            return check()
+        except Exception:
+            return fallback
 
 
 class UpgradeWorker(QThread):
@@ -601,7 +614,7 @@ class ModelsTab(QWidget):
         else:
             self._worker = WhisperDownloadWorker(key)
         self._worker.finished_ok.connect(self._on_download_finished)
-        self._worker.start()
+        start_thread(self, self._worker)
         self.refresh()
 
     def _cancel_download(self):
@@ -689,7 +702,7 @@ class ModelsTab(QWidget):
             return
         self._disk_worker = DiskUsageWorker()
         self._disk_worker.result.connect(self._on_disk_result)
-        self._disk_worker.start()
+        start_thread(self, self._disk_worker)
 
     def _on_disk_result(self, size):
         self._disk_worker = None
@@ -800,7 +813,7 @@ class ModelsTab(QWidget):
         self.service_hint.setText(tr("checking for updates…"))
         self._updates_worker = CheckUpdatesWorker()
         self._updates_worker.result.connect(self._on_updates_result)
-        self._updates_worker.start()
+        start_thread(self, self._updates_worker)
 
     def _on_updates_result(self, result: dict):
         self._updates_worker = None
@@ -902,7 +915,7 @@ class ModelsTab(QWidget):
         self._upgrade_worker.stage.connect(self._on_upgrade_stage)
         self._upgrade_worker.progress.connect(self._on_upgrade_progress)
         self._upgrade_worker.finished_ok.connect(self._on_upgrade_done)
-        self._upgrade_worker.start()
+        start_thread(self, self._upgrade_worker)
 
     def _on_upgrade_stage(self, name: str, index: int, total: int):
         self.service_hint.setText(
@@ -966,5 +979,4 @@ class ModelsTab(QWidget):
     def shutdown(self):
         for worker in (self._worker, self._updates_worker,
                        self._upgrade_worker, self._disk_worker):
-            if worker is not None:
-                worker.wait(30000)
+            wait_thread(worker, 30000)

@@ -26,6 +26,7 @@ from ..engine.wordmute import fmt_ts
 from .dialogs import confirm
 from .hover_table import HoverRowTable
 from .i18n import tr
+from .threads import start_thread, wait_thread
 from .player import SnippetPlayer
 from .waveform import WaveformStrip, WaveformWorker
 
@@ -250,7 +251,7 @@ class ReviewDialog(QDialog):
         worker.ready.connect(self._on_waveform_ready)
         worker.finished.connect(self._on_waveform_worker_done)
         self._wave_worker = worker
-        worker.start()
+        start_thread(self, worker)
 
     def _on_waveform_worker_done(self):
         self._wave_worker = None
@@ -291,7 +292,7 @@ class ReviewDialog(QDialog):
         self._worker.succeeded.connect(self._on_rerender_ok)
         self._worker.failed.connect(self._on_rerender_failed)
         self._worker.progressed.connect(self._on_rerender_progress)
-        self._worker.start()
+        start_thread(self, self._worker)
 
     def _on_rerender_progress(self, seconds: float):
         if self._duration:
@@ -321,10 +322,8 @@ class ReviewDialog(QDialog):
 
     # ---------------------------------------------------------- lifecycle
     def closeEvent(self, event):
-        if self._worker is not None:
-            self._worker.wait()
-        if self._wave_worker is not None:
-            self._wave_worker.wait(5000)
+        wait_thread(self._worker)
+        wait_thread(self._wave_worker, 5000)
         if self._dirty:
             if not confirm(self, title=tr("Close without re-rendering?"),
                            body=tr("You changed the mute selection but "

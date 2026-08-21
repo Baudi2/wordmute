@@ -46,6 +46,7 @@ from .sidebar import SidebarNav
 from .transcript_tab import TranscriptTab
 from .url_dialog import AddUrlDialog
 from .wordlists_tab import WordListsTab
+from .threads import start_thread, wait_thread
 from .worker import ProcessWorker
 
 # data roles on each queue QListWidgetItem. Cards are rebuilt from
@@ -1308,7 +1309,7 @@ class MainWindow(QMainWindow):
         plan_text = " -> ".join(f"{e}({m})" for e, m in plan)
         self._append_log(f"Word list: {n} entries. Plan: {plan_text}."
                          + (f" Output: {output_dir}" if output_dir else ""))
-        self._worker.start()
+        start_thread(self, self._worker)
 
     def _cancel(self):
         if self._worker is not None:
@@ -1596,7 +1597,7 @@ class MainWindow(QMainWindow):
             return
         self._app_update_worker = AppUpdateWorker()
         self._app_update_worker.result.connect(self._on_app_update_result)
-        self._app_update_worker.start()
+        start_thread(self, self._app_update_worker)
 
     def _on_app_update_result(self, info: dict):
         if not info.get("update"):
@@ -1634,13 +1635,12 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
             self._worker.cancel()
-            self._worker.wait(15000)
+            wait_thread(self._worker, 15000)
         if not self.wordlists_tab.maybe_save():
             event.ignore()
             return
         self.models_tab.shutdown()
-        if self._app_update_worker is not None:
-            self._app_update_worker.wait(5000)
+        wait_thread(self._app_update_worker, 5000)
         if self._probe_worker is not None:
             self._probe_worker.stop()
             self._probe_worker.wait(10000)

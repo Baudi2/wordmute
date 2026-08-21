@@ -31,6 +31,7 @@ from ..core.jobs import QueueItem
 from .flow_layout import FlowLayout, make_chip
 from .hover_table import HoverRowTable
 from .i18n import tr, tr_plural
+from .threads import start_thread
 
 # keep fetch threads alive if their dialog closes early; Qt drops the
 # signal connections with the dialog, so late emits are harmless
@@ -577,7 +578,7 @@ class AddUrlDialog(QDialog):
             lambda message, g=generation:
             self._on_fetch_error(message)
             if g == self._fetch_generation else None)
-        worker.start()
+        start_thread(self, worker)
 
     def _on_formats_ready(self, info: dict):
         self._info = info
