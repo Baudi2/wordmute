@@ -1076,9 +1076,9 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
 def test_initial_size_clamps_to_small_screens():
     from wordmute_app.ui.main_window import _initial_size
 
-    assert _initial_size(1920, 1040) == (960, 720)   # big screen: as-is
+    assert _initial_size(1920, 1040) == (1100, 760)  # big screen: as-is
     assert _initial_size(911, 512) == (887, 464)     # 1366x768 @150%
-    assert _initial_size(0, 0) == (960, 720)         # unknown screen
+    assert _initial_size(0, 0) == (1100, 760)        # unknown screen
     # the floor keeps the window usable even on absurd geometry
     assert _initial_size(300, 200) == (480, 360)
 

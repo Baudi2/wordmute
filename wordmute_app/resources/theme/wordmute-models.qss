@@ -160,3 +160,14 @@ QLabel#svc_repair_hint { font-size: 11px; color: #9397ab; }
    760px window once the update list is filled */
 QScrollArea#models_scroll { background: transparent; border: none; }
 QScrollArea#models_scroll > QWidget > QWidget { background: transparent; }
+
+/* local merge: fixes from the first live run
+   - the state cell's container is a bare QWidget and picked up a
+     styled background — the «Состояние» column showed as a band
+   - the base sheets' QPushButton min-height/padding and QToolButton
+     padding inflated the row buttons past the 44px row and the ⋯
+     button past its 30x30 spec */
+QWidget#model_state_box { background: transparent; }
+QToolButton#model_more { padding: 0; }
+QPushButton#model_download, QPushButton#model_cancel,
+QPushButton#upd_row_btn { min-height: 0; }

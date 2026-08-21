@@ -43,6 +43,42 @@ MUTED = "#9397ab"
 ERROR_TEXT = "#eab7b7"
 
 
+
+class ElidedLabel(QLabel):
+    """A QLabel that yields horizontal space instead of demanding it:
+    minimum width ~0, text elided with «…» when squeezed. For the
+    decorative hints — they were forcing the whole tab wider than the
+    window, which clipped the right edge."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        from PySide6.QtWidgets import QSizePolicy
+        policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        policy.setHorizontalStretch(0)
+        self.setSizePolicy(policy)
+        self.setMinimumWidth(24)
+        self._full_text = text
+
+    def setText(self, text):
+        self._full_text = text
+        super().setText(text)
+        self.setToolTip("")
+
+    def paintEvent(self, event):
+        metrics = self.fontMetrics()
+        if metrics.horizontalAdvance(self._full_text) <= self.width():
+            super().paintEvent(event)
+            return
+        from PySide6.QtGui import QPainter
+        painter = QPainter(self)
+        elided = metrics.elidedText(self._full_text, Qt.ElideRight,
+                                    self.width())
+        painter.drawText(self.rect(), int(self.alignment())
+                         | Qt.AlignVCenter, elided)
+        if self.toolTip() != self._full_text:
+            self.setToolTip(self._full_text)
+
+
 # ================================================================ workers
 class WhisperDownloadWorker(QThread):
     """snapshot_download in a SUBPROCESS so «Отменить» can kill it —
@@ -182,6 +218,7 @@ class ModelRow(QFrame):
         row.addWidget(self.name_label)
 
         state_box = QWidget()
+        state_box.setObjectName("model_state_box")
         state_box.setFixedWidth(220)
         state_layout = QVBoxLayout(state_box)
         state_layout.setContentsMargins(0, 0, 0, 0)
@@ -357,7 +394,7 @@ class ModelsTab(QWidget):
         self.device_text = QLabel("")
         self.device_text.setObjectName("device_text")
         row.addWidget(self.device_text)
-        self.device_note = QLabel("")
+        self.device_note = ElidedLabel("")
         self.device_note.setObjectName("device_note")
         row.addWidget(self.device_note)
         row.addStretch()
@@ -380,7 +417,7 @@ class ModelsTab(QWidget):
             self.device_note.setText(
                 tr("recognition runs on the graphics card"))
             self.device_icon.setPixmap(
-                ui_icon("tabs/models", 16, ACCENT_TEXT).pixmap(16, 16))
+                ui_icon("gpu", 15, ACCENT_TEXT).pixmap(15, 15))
         else:
             self.group_device.setProperty("state", "warn")
             self.device_text.setText(
@@ -408,7 +445,7 @@ class ModelsTab(QWidget):
         title_label = QLabel(title)
         title_label.setProperty("groupTitle", True)
         head.addWidget(title_label)
-        hint_label = QLabel(hint)
+        hint_label = ElidedLabel(hint)
         hint_label.setProperty("groupHint", True)
         head.addWidget(hint_label)
         head.addStretch()
@@ -668,7 +705,7 @@ class ModelsTab(QWidget):
         box.setSpacing(8)
         head, self.service_hint = self._group_header(
             tr("Maintenance"), tr("updates and repair of the install"))
-        self.upd_checked_at = QLabel("")
+        self.upd_checked_at = ElidedLabel("")
         self.upd_checked_at.setObjectName("upd_checked_at")
         head.insertWidget(2, self.upd_checked_at)
         self.btn_check = QPushButton("")
@@ -704,8 +741,9 @@ class ModelsTab(QWidget):
         self.btn_component_install.setObjectName("btn_component_install")
         self.btn_component_install.clicked.connect(self._open_components)
         foot.addWidget(self.btn_component_install)
-        svc_hint = QLabel(tr("the wizard adds what is missing and leaves "
-                             "the rest alone"))
+        svc_hint = ElidedLabel(
+            tr("the wizard adds what is missing and leaves the rest "
+               "alone"))
         svc_hint.setObjectName("svc_hint")
         foot.addWidget(svc_hint)
         foot.addStretch()
@@ -715,7 +753,7 @@ class ModelsTab(QWidget):
         self.btn_repair_link.setCursor(Qt.PointingHandCursor)
         self.btn_repair_link.clicked.connect(self._repair_components)
         foot.addWidget(self.btn_repair_link)
-        repair_hint = QLabel(tr("clean start of the runtime"))
+        repair_hint = ElidedLabel(tr("clean start of the runtime"))
         repair_hint.setObjectName("svc_repair_hint")
         foot.addWidget(repair_hint)
         box.addWidget(footer)

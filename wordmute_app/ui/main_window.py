@@ -88,9 +88,10 @@ def fmt_eta(sec: float) -> str:
 
 
 def _initial_size(avail_w: int, avail_h: int) -> tuple:
-    """Preferred 960x720, shrunk to fit the available desktop (with a
-    small margin for window chrome); 0/negative = unknown screen."""
-    width, height = 960, 720
+    """Preferred 1100x760 (the Models groups need ~900 of content
+    width), shrunk to fit the available desktop (with a small margin
+    for window chrome); 0/negative = unknown screen."""
+    width, height = 1100, 760
     if avail_w > 0:
         width = max(480, min(width, avail_w - 24))
     if avail_h > 0:
