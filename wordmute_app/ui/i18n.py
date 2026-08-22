@@ -62,6 +62,17 @@ PLURALS = {
                "Отпустите — {} файла попадут в очередь",
                "Отпустите — {} файлов попадут в очередь"),
     },
+    # word lists: the find bar's filter count and the tester's
+    # «also in N lists» (design round 4)
+    "{} lines": {
+        "en": ("{} line", "{} lines"),
+        "ru": ("{} строка", "{} строки", "{} строк"),
+    },
+    "· also in {} lists": {
+        "en": ("· also in {} list", "· also in {} lists"),
+        "ru": ("· ещё в {} списке", "· ещё в {} списках",
+               "· ещё в {} списках"),
+    },
 }
 
 
@@ -285,6 +296,25 @@ RU = {
         "сохранённым…",
     "(no match)": "(нет совпадений)",
     'phrase "{}"  ←  matched': 'фраза «{}»  ←  совпала',
+    # word lists: find bar (design round 4, 1a + 1b) and the tester row
+    "Find in list (Ctrl+F)": "Поиск по списку (Ctrl+F)",
+    "Find…": "Найти…",
+    "{} of {}": "{} из {}",
+    "no matches": "нет совпадений",
+    "Search finds list entries. To check whether a word gets muted, use "
+    "the tester below.":
+        "Поиск ищет записи списка. Проверить, заглушится ли слово, — "
+        "в тестере внизу.",
+    "Matches": "Совпадения",
+    "Show only the matching lines": "Показать только строки с совпадениями",
+    "Previous match (Shift+F3)": "Предыдущее совпадение (Shift+F3)",
+    "Next match (F3)": "Следующее совпадение (F3)",
+    "Close (Esc)": "Закрыть (Esc)",
+    "showing {} of {} — filter by «{}» · editing off":
+        "показаны {} из {} — фильтр по «{}» · редактирование выключено",
+    "Show all": "Показать все",
+    "will be muted": "заглушится",
+    "will not be muted — no matches": "не заглушится — совпадений нет",
     # history
     "Copy error": "Копировать ошибку",
     "Processed files will appear here.":

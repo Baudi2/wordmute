@@ -32,6 +32,7 @@ from ..core import config, gpu, models, runtime_env, updates
 from ..core.proc import creationflags
 from .. import __version__
 from .dialogs import confirm, inform, mark_danger, repolish, themed_menu
+from .elided_label import ElidedLabel
 from .formats import fmt_bytes, human_datetime
 from .i18n import tr
 from .theme import ui_icon
@@ -46,39 +47,6 @@ ERROR_TEXT = "#eab7b7"
 
 
 
-class ElidedLabel(QLabel):
-    """A QLabel that yields horizontal space instead of demanding it:
-    minimum width ~0, text elided with «…» when squeezed. For the
-    decorative hints — they were forcing the whole tab wider than the
-    window, which clipped the right edge."""
-
-    def __init__(self, text="", parent=None):
-        super().__init__(text, parent)
-        from PySide6.QtWidgets import QSizePolicy
-        policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        policy.setHorizontalStretch(0)
-        self.setSizePolicy(policy)
-        self.setMinimumWidth(24)
-        self._full_text = text
-
-    def setText(self, text):
-        self._full_text = text
-        super().setText(text)
-        self.setToolTip("")
-
-    def paintEvent(self, event):
-        metrics = self.fontMetrics()
-        if metrics.horizontalAdvance(self._full_text) <= self.width():
-            super().paintEvent(event)
-            return
-        from PySide6.QtGui import QPainter
-        painter = QPainter(self)
-        elided = metrics.elidedText(self._full_text, Qt.ElideRight,
-                                    self.width())
-        painter.drawText(self.rect(), int(self.alignment())
-                         | Qt.AlignVCenter, elided)
-        if self.toolTip() != self._full_text:
-            self.setToolTip(self._full_text)
 
 
 # ================================================================ workers

@@ -8,7 +8,8 @@ these are the worst case for layout.
 
 Windows desktop app, PySide6 (Qt Widgets), "Nocturne" theme, dark by
 default, light switchable at runtime. Sheets load in the order
-`wordmute.qss` → `wordmute-setup.qss` → `wordmute-0.6.1.qss`.
+`wordmute.qss` → `wordmute-setup.qss` → `wordmute-0.6.1.qss` →
+`wordmute-models.qss` → `wordmute-wordlist-search.qss`.
 
 | # | File | What it is |
 |---|---|---|
@@ -19,21 +20,24 @@ default, light switchable at runtime. Sheets load in the order
 | 04 | `04_queue_setup_panel.png` | Same, with the «Изменить…» panel open (word lists + pass plan) |
 | 05 | `05_queue_card_menu.png` | Per-card ⋯ menu, themed (1a); destructive rows carry a red trash icon |
 | 06 | `06_queue_card_menu_language.png` | Its «Язык обработки» submenu with our check glyph |
-| 07 | `07_tab_wordlists.png` | Word Lists after 1f: one toolbar row, one ribbon, editor ~90px taller, single-line tester |
+| 07 | `07_tab_wordlists.png` | Word Lists after 1f + round 4: one toolbar row («?» and the magnifier), one ribbon, the full-width tester row with its verdict |
 | 08 | `08_tab_wordlists_syntax.png` | The syntax legend, now a popover behind «?» |
-| 09 | `09_tab_transcript_empty.png` | Transcript empty state (same shell, `accepts="false"`) |
-| 10 | `10_tab_transcript.png` | Transcript browser with a cached transcript |
-| 11 | `11_tab_models.png` | Models after the regroup: Устройство · one model list (Whisper + GigaAM, download in flight) · Обслуживание as update rows with «Обновить все (N)» |
-| 12 | `12_tab_history.png` | History after 1d: locale dates, no ✓/✗ column, «ошибка» in Заглушено |
-| 13 | `13_tab_settings.png` | Settings after 1e: «100 мс», «1000 Гц» |
-| 14 | `14_dialog_add_url_single.png` | Add URL — one link, format table |
-| 15 | `15_dialog_add_url_batch.png` | Add URL — batch after 1c: input sized to content, host chips, count on the button |
-| 16 | `16_dialog_review.png` | Review dialog: intervals, waveform, re-render/SRT |
-| 17 | `17_dialog_delete_files.png` | Delete confirmation — our own `QDialog#wm_confirm`, not QMessageBox |
-| 18–25 | `18_wizard_0_intro` … `25_wizard_7_install` | Setup wizard, 8 steps; the install page after 1b (docked log, 30px rows) |
-| 26 | `26_toast_finished.png` | In-app toast |
-| 27–29 | `27_light_queue`, `28_light_settings`, `29_light_history` | Light theme, main screens |
-| 30 | `30_light_wizard_whisper.png` | Light theme, wizard |
+| 09 | `09_tab_wordlists_find.png` | The Ctrl+F bar (1a) over the editor: «1 из 14», chevrons, «Совпадения», × |
+| 10 | `10_tab_wordlists_filter.png` | The same bar in filter mode (1b): only matching lines, read-only, footer with «Показать все» |
+| 11 | `11_tab_transcript_empty.png` | Transcript empty state (same shell, `accepts="false"`) |
+| 12 | `12_tab_transcript.png` | Transcript browser with a cached transcript |
+| 13 | `13_tab_models.png` | Models after the regroup: Устройство · one model list (Whisper + GigaAM, download in flight) · Обслуживание as update rows with «Обновить все (N)» |
+| 14 | `14_tab_history.png` | History after 1d: locale dates, no ✓/✗ column, «ошибка» in Заглушено |
+| 15 | `15_tab_settings.png` | Settings after 1e: «100 мс», «1000 Гц» |
+| 16 | `16_dialog_add_url_single.png` | Add URL — one link, format table |
+| 17 | `17_dialog_add_url_batch.png` | Add URL — batch after 1c: input sized to content, host chips, count on the button |
+| 18 | `18_dialog_review.png` | Review dialog: intervals, waveform, re-render/SRT |
+| 19 | `19_dialog_delete_files.png` | Delete confirmation — our own `QDialog#wm_confirm`, not QMessageBox |
+| 20–27 | `20_wizard_0_intro` … `27_wizard_7_install` | Setup wizard, 8 steps; the install page after 1b (docked log, 30px rows) |
+| 28 | `28_toast_finished.png` | In-app toast |
+| 29–31 | `29_light_queue`, `30_light_settings`, `31_light_history` | Light theme, main screens |
+| 32 | `32_light_wordlists_find.png` | Light theme, Word Lists with the find bar open |
+| 33 | `33_light_wizard_whisper.png` | Light theme, wizard |
 
 ## The seven weak points — what was done
 
@@ -115,6 +119,30 @@ show). The tab scrolls as a whole — its groups outgrow a 760px window.
 app itself is a separate «Скачать» (it needs the installer), so the
 mock's «(2) · 17 МБ» reads «(1)» when only yt-dlp is stale. VRAM shows
 whole gigabytes («8 ГБ»), not the byte-exact 7,6.
+
+## Fourth round: Word Lists search + the tester row
+
+`wordlist-search-handoff.md`, option 1a with 1b: a floating find bar
+in the editor's top-right corner (Ctrl+F, the toolbar magnifier, a
+single-word selection prefills it; Esc closes; Enter/F3 next,
+Shift+Enter/Shift+F3 previous, wrap-around; «1 из 14» / «нет
+совпадений» with the search-vs-tester tooltip). Matching is substring,
+case-insensitive and ё = е like everything else in the app; matches
+are `QTextCharFormat` extra selections merged with the comment dimming
+(highlights are capped at 2000 — the count stays exact). «Совпадения»
+hides every non-matching line (block visibility), makes the editor
+read-only and shows the footer «показаны 14 из 4559 — фильтр по «апо»
+· редактирование выключено · Показать все»; closing the bar or «Показать
+все» restores everything. Typing in the bar scrolls the first match
+into view; edits in the editor recount without moving the caret.
+
+The tester is one full-width row now: check-circle icon, borderless
+input, verdict «заглушится ← колдова*» (accent text, monospace
+pattern, accent border — also while the input has focus) or «не
+заглушится — совпадений нет» (muted, never red), «· ещё в 1 списке»
+when another saved list hits too; the per-list breakdown is the row's
+tooltip. The «?» and magnifier are the mock's 24px boxes (the base
+QToolButton padding had inflated «?»).
 
 ## Deliberate deviations from the handoff
 

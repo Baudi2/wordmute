@@ -35,6 +35,17 @@ MODELS_THEMES = {
     "dark": "wordmute-models.qss",
     "light": "wordmute-models-light.qss",
 }
+# Word Lists search bar (design round 4) — loads last
+SEARCH_THEMES = {
+    "dark": "wordmute-wordlist-search.qss",
+    "light": "wordmute-wordlist-search-light.qss",
+}
+# match highlights are QTextCharFormat (not QSS): (match bg, current
+# bg, current fg) per theme, from the handoff
+FIND_HIGHLIGHT = {
+    "dark": ("#2b2741", "#423a6a", "#d2cefd"),
+    "light": ("#e7e5fe", "#d2cefd", "#5d5294"),
+}
 # the OS title bar painted as the app's chrome (Windows 11 DWM): caption
 # background, caption text, window border — per theme
 _TITLEBAR = {
@@ -59,7 +70,8 @@ def theme_dir():
 def load_stylesheet(name: str) -> str:
     name = name if name in THEMES else DEFAULT_THEME
     parts = []
-    for table in (THEMES, SETUP_THEMES, FIX_THEMES, MODELS_THEMES):
+    for table in (THEMES, SETUP_THEMES, FIX_THEMES, MODELS_THEMES,
+                  SEARCH_THEMES):
         path = theme_dir() / table[name]
         if path.exists():
             parts.append(path.read_text(encoding="utf-8"))

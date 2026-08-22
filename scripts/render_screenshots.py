@@ -293,6 +293,17 @@ for name, tab in (("wordlists", win.wordlists_tab),
             app.processEvents()
         shot(tab._syntax_popover, "tab_wordlists_syntax")
         tab.syntax_help.setChecked(False)
+        # design round 4: the Ctrl+F bar with matches, then filter mode
+        tab.open_find()
+        tab.find_bar.input.setText("апо")
+        for _ in range(3):
+            app.processEvents()
+        shot(win, "tab_wordlists_find", hide=False)
+        tab.find_bar.filter_btn.setChecked(True)
+        for _ in range(3):
+            app.processEvents()
+        shot(win, "tab_wordlists_filter", hide=False)
+        tab.close_find()
 
 win.tabs.setCurrentIndex(0)
 
@@ -442,6 +453,13 @@ win.tabs.setCurrentWidget(win.settings_tab)
 shot(win, "light_settings", hide=False)
 win.tabs.setCurrentWidget(win.history_tab)
 shot(win, "light_history", hide=False)
+win.tabs.setCurrentWidget(win.wordlists_tab)
+win.wordlists_tab.open_find()
+win.wordlists_tab.find_bar.input.setText("апо")
+for _ in range(3):
+    app.processEvents()
+shot(win, "light_wordlists_find", hide=False)
+win.wordlists_tab.close_find()
 win.hide()
 
 light_wizard = SetupDialog(first_run=True)

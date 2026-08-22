@@ -38,19 +38,72 @@ def test_wordlists_switch_lists(qapp, tmp_path):
 
 
 def test_wordlists_tester_inline(qapp, tmp_path):
-    """design 1f: the first hit shows inline, the full per-word
-    breakdown moved into the tooltip."""
+    """design round 4: verdict + the first pattern inline on the row,
+    other lists counted, the per-list breakdown in the tooltip."""
     tab, _, _ = make_wordlists_tab(qapp, tmp_path)
     tab.tester_input.setText("колдовать и демонстрация")
-    assert "колд*" in tab.tester_result.text()
-    text = tab.tester_result.toolTip()
-    assert "колд*" in text
-    assert "*монстр*" in text
+    assert tab.tester_result.text() == "will be muted ←"
+    assert tab.tester_pattern.text() == "колд*"
+    assert tab.tester_row.property("state") == "hit"
+    assert tab.tester_more.text() == ""           # English list: no hit
+    text = tab.tester_row.toolTip()
+    assert "колд*" in text and "*монстр*" in text
     assert "(no match)" in text  # "и"
+    assert "English list: no matches" in text
     tab.tester_input.setText("боже мой")
-    assert 'phrase "боже мой"' in tab.tester_result.toolTip()
+    assert 'phrase "боже мой"' in tab.tester_row.toolTip()
+    tab.tester_input.setText("god")               # only the OTHER list
+    assert tab.tester_pattern.text() == "god"
+    tab.tester_input.setText("бог god")           # both lists
+    assert tab.tester_pattern.text() == "бог"
+    assert tab.tester_more.text() == "· also in 1 list"
     tab.tester_input.setText("ничего")
-    assert tab.tester_result.text() == "(no match)"
+    assert tab.tester_result.text() == "will not be muted — no matches"
+    assert tab.tester_pattern.text() == ""
+    assert tab.tester_row.property("state") is None
+
+
+def _blocks(doc):
+    block, out = doc.firstBlock(), []
+    while block.isValid():
+        out.append(block)
+        block = block.next()
+    return out
+
+
+def test_wordlists_find_bar(qapp, tmp_path):
+    """design round 4 (1a/1b): Ctrl+F bar — count, wrap-around
+    navigation, ё/case folding, and the «Matches» filter that hides
+    the other lines and makes the editor read-only."""
+    tab, _, _ = make_wordlists_tab(qapp, tmp_path)
+    tab.open_find()
+    assert tab._find_open and tab.search_button.isChecked()
+    tab.find_bar.input.setText("бо")
+    assert tab.find_bar.count.text() == "1 of 2"       # бог, боже мой
+    tab._find_step(1)
+    assert tab.find_bar.count.text() == "2 of 2"
+    assert tab.editor.textCursor().blockNumber() == 3
+    tab._find_step(1)
+    assert tab.find_bar.count.text() == "1 of 2"       # wraps
+    tab.find_bar.input.setText("Ё")                    # ё→е, any case
+    assert tab.find_bar.count.text() == "1 of 1"       # «боже»
+    tab.find_bar.input.setText("zzz")
+    assert tab.find_bar.count.text() == "no matches"
+    # filter mode
+    tab.find_bar.input.setText("бо")
+    tab.find_bar.filter_btn.setChecked(True)
+    blocks = _blocks(tab.editor.document())
+    assert [b.text() for b in blocks if b.isVisible()] == ["бог", "боже мой"]
+    assert tab.editor.isReadOnly()
+    assert tab.find_bar.count.text() == "2 lines"
+    assert tab.filter_row.isVisibleTo(tab)
+    assert "2" in tab.filter_note.text() and "бо" in tab.filter_note.text()
+    assert not tab.find_bar.next_btn.isEnabled()
+    tab.close_find()
+    assert not tab._find_open and not tab.editor.isReadOnly()
+    assert all(b.isVisible() for b in _blocks(tab.editor.document()))
+    assert not tab.find_bar.filter_btn.isChecked()
+    assert tab.find_bar.count.text() == ""
 
 
 def test_transcript_tab_search_and_load(qapp, tmp_path):
