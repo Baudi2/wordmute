@@ -1,0 +1,88 @@
+/* ============================================================
+   WordMute — Word Lists search (find bar), DARK theme (QSS)
+   ------------------------------------------------------------
+   Mock: wordlist-search-mock.html (1a find bar · 1b filter mode).
+   Python side (FindBar class, shortcuts, highlights, filter):
+   wordlist-search-handoff.md — highlights are QTextCharFormat,
+   they CANNOT be styled from QSS; hex pairs live in code.
+
+   Load LAST:
+     wordmute.qss + wordmute-setup.qss + wordmute-0.6.1.qss
+     + wordmute-models.qss + this file
+   Light pair: wordmute-wordlist-search-light.qss.
+   ============================================================ */
+
+/* Toolbar: magnifier button next to "?" (same 24px box as #wl_syntax_help) */
+QToolButton#wl_search_btn {
+  background: transparent; border: 1px solid #3f424d; border-radius: 6px;
+  min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px;
+}
+QToolButton#wl_search_btn:hover { border-color: #9184d9; }
+QToolButton#wl_search_btn:checked { border-color: #9184d9; background: #2b2741; }
+
+/* The floating bar (overlay child of the editor, positioned in code) */
+QFrame#wl_find_bar {
+  background: #161826; border: 1px solid #595d6c; border-radius: 8px;
+}
+QLineEdit#wl_find_input {
+  background: transparent; border: none; color: #e9e9ed;
+  font-size: 13px; padding: 2px 4px;
+  min-width: 150px; max-width: 190px;
+}
+QLabel#wl_find_count { color: #9397ab; font-size: 11px; }
+QFrame#wl_find_sep { background: #292b31; min-width: 1px; max-width: 1px; }
+
+QToolButton#wl_find_prev, QToolButton#wl_find_next, QToolButton#wl_find_close {
+  background: transparent; border: none; border-radius: 5px; color: #9397ab;
+  min-width: 22px; max-width: 22px; min-height: 22px; max-height: 22px;
+}
+QToolButton#wl_find_prev:hover, QToolButton#wl_find_next:hover,
+QToolButton#wl_find_close:hover { background: #292b31; color: #e9e9ed; }
+QToolButton#wl_find_prev:disabled, QToolButton#wl_find_next:disabled { color: rgba(147,151,171,0.40); }
+
+/* "Совпадения" — checkable filter toggle */
+QToolButton#wl_find_filter {
+  background: transparent; border: 1px solid transparent; border-radius: 5px;
+  color: #9397ab; font-size: 11px; padding: 0 8px; min-height: 22px; max-height: 22px;
+}
+QToolButton#wl_find_filter:hover { background: #292b31; color: #e9e9ed; }
+QToolButton#wl_find_filter:checked {
+  background: #2b2741; border-color: #423a6a; color: #d2cefd;
+}
+
+/* Footer line while the filter is on */
+QLabel#wl_filter_note { color: #9397ab; font-size: 11px; }
+QToolButton#wl_filter_show_all {
+  background: transparent; border: none; color: #d2cefd; font-size: 11px; padding: 0;
+}
+QToolButton#wl_filter_show_all:hover { text-decoration: underline; }
+
+/* local merge: the base sheet's QToolButton padding (7px 12px) inflates
+   every fixed-size button past its box — the 24px «?»/magnifier and
+   the 22px bar buttons */
+QToolButton#wl_syntax_help, QToolButton#wl_search_btn,
+QToolButton#wl_find_prev, QToolButton#wl_find_next,
+QToolButton#wl_find_close { padding: 0; }
+
+/* local merge: the tester row per the round-4 mock — ONE full-width
+   row: icon · borderless input (stretch) · verdict · pattern · «also
+   in N lists». The row carries the border (accent on a hit and while
+   the input has focus — set from code, QSS has no :focus-within). */
+QFrame#wl_tester_row {
+  background: #232532; border: 1px solid #3f424d; border-radius: 6px;
+  min-height: 32px; max-height: 32px;
+}
+QFrame#wl_tester_row[focused="true"], QFrame#wl_tester_row[state="hit"] {
+  border-color: #9184d9;
+}
+QLineEdit#wl_tester_input {
+  background: transparent; border: none; border-radius: 0;
+  padding: 0; min-height: 0; font-size: 12px;
+}
+QLabel#wl_tester_result { font-size: 12px; color: #9397ab; }
+QLabel#wl_tester_result[state="hit"] { color: #d2cefd; }
+QLabel#wl_tester_pattern {
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px;
+  color: #d2cefd;
+}
+QLabel#wl_tester_more { font-size: 11px; color: #9397ab; }

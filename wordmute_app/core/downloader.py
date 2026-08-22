@@ -15,6 +15,10 @@ BEST_LABEL = "best quality"
 # stream, so a link that has nothing that small still downloads.
 QUALITY_PRESETS = (
     ("best", "best quality", BEST_SPEC),
+    ("2160", "up to 2160p (4K)",
+     "bv*[height<=2160]+ba/b[height<=2160]/bv*+ba/b"),
+    ("1440", "up to 1440p",
+     "bv*[height<=1440]+ba/b[height<=1440]/bv*+ba/b"),
     ("1080", "up to 1080p",
      "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"),
     ("720", "up to 720p",
@@ -86,6 +90,21 @@ def list_formats(url: str, cookies=None) -> dict:
             "duration": info.get("duration"),
             "url": info.get("webpage_url") or url,
             "formats": sort_formats(formats)}
+
+
+def probe_url(url: str, cookies=None) -> dict:
+    """Lightweight metadata for a queued link: real title, duration and
+    a thumbnail URL — so batch-added cards stop reading as bare URLs
+    until the download finishes. One extract_info call, no download."""
+    import yt_dlp
+    with yt_dlp.YoutubeDL(_with_cookies(_base_opts(), cookies)) as ydl:
+        info = ydl.extract_info(url, download=False)
+    if info.get("_type") == "playlist":
+        entries = info.get("entries") or [{}]
+        info = entries[0] or {}
+    return {"title": info.get("title") or "",
+            "duration": info.get("duration"),
+            "thumbnail_url": info.get("thumbnail") or ""}
 
 
 def spec_for_format(f) -> str:

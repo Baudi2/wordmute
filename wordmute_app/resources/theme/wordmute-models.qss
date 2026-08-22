@@ -1,0 +1,173 @@
+/* ============================================================
+   WordMute — Models tab regroup, DARK theme (QSS)
+   ------------------------------------------------------------
+   Implements the reworked «Модели» tab (mock: WordMute Models Tab
+   .dc.html, section 5a; offline copy: models-tab-mock.html).
+   Three groups — Устройство / Модели распознавания / Обслуживание.
+
+   Load LAST in the chain:
+       wordmute.qss + wordmute-setup.qss + wordmute-0.6.1.qss + this
+   Light pair: wordmute-models-light.qss (same selectors, colors only).
+
+   Python side, widget tree and metrics: models-tab-handoff.md.
+   QSS owns color/border/radius/font; sizes marked (code) are set
+   in Python. Tokens = Nocturne dark (see wordmute-0.6.1.qss header).
+   ============================================================ */
+
+/* ---- Group cards ------------------------------------------------ */
+QFrame#group_device, QFrame#group_models, QFrame#group_service {
+  background: #1b1d2c; border: 1px solid #3f424d; border-radius: 10px;
+}
+QLabel[groupTitle="true"] { font-size: 13px; font-weight: 600; color: #e9e9ed; }
+QLabel[groupHint="true"]  { font-size: 11px; color: #9397ab; }
+
+/* ---- Устройство ------------------------------------------------- */
+QLabel#device_icon {
+  min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px;
+  border-radius: 8px; qproperty-alignment: AlignCenter;
+  background: #2b2741; border: 1px solid #423a6a;
+}
+QLabel#device_text { font-size: 13px; color: #e9e9ed; }
+QLabel#device_note { font-size: 12px; color: #9397ab; }
+/* no NVIDIA GPU: group_device.setProperty("state","warn") + repolish */
+QFrame#group_device[state="warn"] { border-color: rgba(205,179,128,0.45); }
+QFrame#group_device[state="warn"] QLabel#device_text { color: #e6d5ae; }
+QFrame#group_device[state="warn"] QLabel#device_icon {
+  background: rgba(205,179,128,0.10); border-color: rgba(205,179,128,0.45);
+}
+QToolButton#device_settings_link {
+  background: transparent; border: none; color: #d2cefd; font-size: 12px; padding: 0;
+}
+QToolButton#device_settings_link:hover { text-decoration: underline; }
+
+/* ---- Модели: единый список (Whisper + GigaAM) ------------------- */
+QLabel[tableCap="true"] {                       /* WHISPER / GIGAAM · РУССКИЙ ДВИЖОК */
+  font-size: 10px; letter-spacing: 1px; color: #9397ab;
+  border-bottom: 1px solid #292b31; padding: 4px 10px;
+}
+QLabel[tableHead="true"] { font-size: 11px; color: #9397ab; padding: 0 10px; }
+
+QFrame[modelRow="true"] {
+  background: transparent; border: none; border-bottom: 1px solid #292b31;
+  min-height: 44px; max-height: 44px;
+}
+QFrame[modelRow="true"][state="busy"] { background: #232532; }
+QLabel#model_name  { font-size: 13px; color: #e9e9ed; }        /* fixed 220 (code) */
+QLabel#model_state { font-size: 12px; color: #9397ab; }        /* fixed 220 (code) */
+QLabel#model_state[state="done"] { color: #e9e9ed; }
+QLabel#model_state[state="busy"] { color: #d2cefd; }
+QLabel#model_state[state="err"]  { color: #eab7b7; }
+QLabel#model_size  { font-size: 12px; color: #9397ab; qproperty-alignment: 'AlignRight|AlignVCenter'; }
+QLabel#model_size[state="done"] { color: #e9e9ed; }
+/* indeterminate: bar.setRange(0,0); fixed 130×3 (code) */
+QProgressBar#model_progress { max-height: 3px; border-radius: 2px; background: #292b31; border: none; }
+QProgressBar#model_progress::chunk { background: #9184d9; border-radius: 2px; }
+
+QPushButton#model_download {
+  background: transparent; border: 1px solid #3f424d; border-radius: 5px;
+  color: #e9e9ed; font-size: 11px; padding: 6px 14px;
+}
+QPushButton#model_download:hover { background: #292b31; border-color: #595d6c; }
+QPushButton#model_cancel {
+  background: transparent; border: 1px solid #3f424d; border-radius: 5px;
+  color: #9397ab; font-size: 11px; padding: 6px 12px;
+}
+QPushButton#model_cancel:hover { background: #292b31; color: #e9e9ed; }
+QToolButton#model_more {                          /* "⋯" — themed QMenu (см. 1a) */
+  background: transparent; border: 1px solid #3f424d; border-radius: 6px;
+  color: #9397ab; font-size: 14px;
+  min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px;
+}
+QToolButton#model_more:hover { border-color: #595d6c; color: #e9e9ed; }
+QToolButton#model_more::menu-indicator { image: none; }
+/* during any download every other action is disabled — rely on :disabled */
+QPushButton#model_download:disabled, QPushButton#model_cancel:disabled,
+QToolButton#model_more:disabled { color: rgba(233,233,237,0.35); border-color: #292b31; }
+
+/* ---- Занято на диске: stacked bar -------------------------------
+   The bar is three QFrames in an HBox, stretch factors = byte sizes;
+   2px spacing; container fixed height 8, radius 4 (code). */
+QWidget#disk_summary { background: transparent; border-top: 1px solid #292b31; }
+QLabel#disk_total { font-size: 12px; color: #e9e9ed; }
+QLabel[diskLegend="true"] { font-size: 11px; color: #9397ab; }
+QFrame[diskSeg="components"] { background: #6f63ac; border: none; }
+QFrame[diskSeg="whisper"]    { background: #9184d9; border: none; }
+QFrame[diskSeg="gigaam"]     { background: #423a6a; border: none; }
+QFrame[diskDot="components"], QFrame[diskDot="whisper"], QFrame[diskDot="gigaam"] {
+  min-width: 7px; max-width: 7px; min-height: 7px; max-height: 7px; border-radius: 2px;
+}
+QFrame[diskDot="components"] { background: #6f63ac; }
+QFrame[diskDot="whisper"]    { background: #9184d9; }
+QFrame[diskDot="gigaam"]     { background: #423a6a; }
+
+/* ---- Обслуживание: список обновлений ----------------------------
+   One button morphs: btn_check.setProperty("mode","check"|"update")
+   + setText(«Проверить обновления» | «Обновить все (2) · 17 МБ»). */
+QPushButton#btn_check[mode="check"] {
+  background: transparent; border: 1px solid #3f424d; border-radius: 6px;
+  color: #e9e9ed; font-size: 12px; padding: 6px 13px;
+}
+QPushButton#btn_check[mode="check"]:hover { background: #292b31; }
+QPushButton#btn_check[mode="update"] {
+  background: #2b2741; border: 1px solid #9184d9; border-radius: 6px;
+  color: #d2cefd; font-size: 12px; padding: 6px 13px;
+}
+QPushButton#btn_check[mode="update"]:hover { background: #423a6a; }
+QLabel#upd_checked_at { font-size: 11px; color: #9397ab; }     /* «проверено сегодня 14:02» */
+
+QFrame[updateRow="true"] {
+  background: #161826; border: 1px solid #3f424d; border-radius: 6px;
+  min-height: 36px; max-height: 36px;
+}
+QFrame[updateRow="true"][state="new"] { border-color: #9184d9; }
+QFrame[updateRow="true"][state="err"] { border-color: #6c4a4a; }
+QLabel#upd_icon { min-width: 12px; max-width: 12px; qproperty-alignment: AlignCenter; }
+QLabel#upd_name { font-size: 12px; color: #e9e9ed; }           /* fixed 150 (code) */
+QLabel#upd_old  { font-size: 12px; color: #9397ab; }
+QLabel#upd_new  { font-size: 12px; color: #d2cefd; }           /* «→ 0.7.0» */
+QLabel#upd_state { font-size: 11px; color: #9397ab; }          /* «актуально» / «не удалось проверить» */
+QLabel#upd_state[state="err"] { color: #eab7b7; }
+QPushButton#upd_row_btn {                                       /* «Обновить» / «Скачать» на строке */
+  background: transparent; border: 1px solid #3f424d; border-radius: 5px;
+  color: #e9e9ed; font-size: 11px; padding: 5px 12px;
+}
+QPushButton#upd_row_btn:hover { background: #292b31; }
+QPushButton#upd_row_btn[accent="true"] { border-color: #9184d9; color: #d2cefd; }
+QPushButton#upd_row_btn[accent="true"]:hover { background: #2b2741; }
+QToolButton#upd_whats_new {
+  background: transparent; border: none; color: #d2cefd; font-size: 11px; padding: 0;
+}
+QToolButton#upd_whats_new:hover { text-decoration: underline; }
+QProgressBar#upd_progress { max-height: 3px; border-radius: 2px; background: #292b31; border: none; }
+QProgressBar#upd_progress::chunk { background: #9184d9; border-radius: 2px; }
+QLabel#upd_footnote { font-size: 11px; color: #9397ab; }       /* «Веса GigaAM обновляются…» */
+
+/* ---- Обслуживание: нижний ряд ----------------------------------- */
+QWidget#svc_footer { background: transparent; border-top: 1px solid #292b31; }
+QPushButton#btn_component_install {
+  background: transparent; border: 1px solid #3f424d; border-radius: 6px;
+  color: #e9e9ed; font-size: 12px; padding: 7px 14px;
+}
+QPushButton#btn_component_install:hover { background: #292b31; border-color: #595d6c; }
+QLabel#svc_hint { font-size: 11px; color: #9397ab; }
+QToolButton#btn_repair_link {                                   /* красная ссылка, не кнопка */
+  background: transparent; border: none; color: #eab7b7; font-size: 11px; padding: 0;
+}
+QToolButton#btn_repair_link:hover { text-decoration: underline; }
+QLabel#svc_repair_hint { font-size: 11px; color: #9397ab; }
+
+/* local merge: the tab scrolls as a whole — its three groups outgrow a
+   760px window once the update list is filled */
+QScrollArea#models_scroll { background: transparent; border: none; }
+QScrollArea#models_scroll > QWidget > QWidget { background: transparent; }
+
+/* local merge: fixes from the first live run
+   - the state cell's container is a bare QWidget and picked up a
+     styled background — the «Состояние» column showed as a band
+   - the base sheets' QPushButton min-height/padding and QToolButton
+     padding inflated the row buttons past the 44px row and the ⋯
+     button past its 30x30 spec */
+QWidget#model_state_box { background: transparent; }
+QToolButton#model_more { padding: 0; }
+QPushButton#model_download, QPushButton#model_cancel,
+QPushButton#upd_row_btn { min-height: 0; }

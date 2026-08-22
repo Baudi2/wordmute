@@ -120,17 +120,22 @@ def test_disk_label_combines_components(models_tab):
     from wordmute_app.core.models import fmt_size
 
     models_tab._on_disk_result(2_000_000_000)
-    text = models_tab.disk_label.text()
-    assert fmt_size(2_000_000_000) in text                    # runtime
-    assert fmt_size(3_000_000_000) in text                    # whisper
-    assert fmt_size(500_000_000) in text                      # gigaam
-    assert fmt_size(5_500_000_000) in text                    # total
+    legend = models_tab.disk_legend
+    assert fmt_size(2_000_000_000) in legend["components"].text()
+    assert fmt_size(3_000_000_000) in legend["whisper"].text()
+    assert fmt_size(500_000_000) in legend["gigaam"].text()
+    assert fmt_size(5_500_000_000) in models_tab.disk_total.text()
+    # the stacked bar: stretch factors follow the sizes (in MB)
+    bar = models_tab._disk_bar
+    stretches = {key: bar.stretch(bar.indexOf(seg))
+                 for key, seg in models_tab.disk_segments.items()}
+    assert stretches["whisper"] > stretches["components"]
+    assert stretches["components"] > stretches["gigaam"] > 0
 
 
 def test_repair_deletes_runtime_and_reopens_setup(models_tab, monkeypatch,
-                                                  tmp_path):
+                                                  tmp_path, confirm_yes):
     from wordmute_app.core import runtime_env
-    from PySide6.QtWidgets import QMessageBox
 
     marker = runtime_env.runtime_dir() / "python" / "python.exe"
     marker.parent.mkdir(parents=True)
@@ -138,21 +143,16 @@ def test_repair_deletes_runtime_and_reopens_setup(models_tab, monkeypatch,
     opened = []
     monkeypatch.setattr(models_tab, "_open_components",
                         lambda: opened.append(True))
-    monkeypatch.setattr(QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.StandardButton.Yes)
-    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
     models_tab._repair_components()
     assert not runtime_env.runtime_dir().exists()
     assert opened == [True]
 
 
 def test_repair_declined_keeps_runtime(models_tab, monkeypatch):
+    """no_modal_dialogs answers Cancel by default."""
     from wordmute_app.core import runtime_env
-    from PySide6.QtWidgets import QMessageBox
 
     runtime_env.runtime_dir().mkdir(parents=True)
-    monkeypatch.setattr(QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.StandardButton.No)
     models_tab._repair_components()
     assert runtime_env.runtime_dir().exists()
 
@@ -1025,7 +1025,8 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
     from wordmute_app.ui.url_dialog import AddUrlDialog
 
     d = AddUrlDialog(auto_fetch=False)
-    single_h = d.url_edit.maximumHeight()
+    d._apply_single_geometry()          # normally a singleShot(0)
+    single_h = d.url_edit.height()
     assert d.table.isVisibleTo(d)
 
     d.url_edit.setPlainText(
@@ -1033,12 +1034,20 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
     # pasted on one line -> rewritten one per line, no text lost
     assert d.url_edit.toPlainText() == \
         "https://a.com/1\nhttps://b.com/2\nhttps://c.com/3"
-    # the table's space goes to the input; table + "add selected" gone
+    # design 1c: the input is sized to its content instead of taking
+    # the table's whole space; table + "add selected" gone
     assert not d.table.isVisibleTo(d)
     assert not d.buttons.button(QDialogButtonBox.Ok).isVisibleTo(d)
-    assert d.url_edit.maximumHeight() > single_h
-    assert d.layout().stretch(
-        d.layout().indexOf(d.url_edit)) == 1
+    assert d.url_edit.height() > single_h
+    assert d.layout().stretch(d.layout().indexOf(d.url_edit)) == 0
+    # one chip per host (with its count), and the button carries the total
+    assert d.chips_row.isVisibleTo(d)
+    # chips render rich text (the leading dot); the plain string is
+    # kept on a property for exactly this kind of check
+    chips = [d._chips_layout.itemAt(i).widget().property("chipText")
+             for i in range(d._chips_layout.count())]
+    assert chips == ["a.com · 1", "b.com · 1", "c.com · 1"]
+    assert "3" in d.best_button.text()
 
     # editing the list further must not fight the caret or re-wrap
     d.url_edit.setPlainText("https://a.com/1\nhttps://b.com/2")
@@ -1046,11 +1055,13 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
     assert d.url_edit.toPlainText() == \
         "https://a.com/1\nhttps://b.com/2"
 
-    # back to one link -> single-line layout restored
+    # back to one link -> single-mode layout and window size restored
     d.url_edit.setPlainText("https://only.com/1")
     assert d.table.isVisibleTo(d)
     assert d.buttons.button(QDialogButtonBox.Ok).isVisibleTo(d)
-    assert d.url_edit.maximumHeight() == single_h
+    assert d.url_edit.height() == single_h
+    assert d.size() == d._single_size
+    assert not d.chips_row.isVisibleTo(d)
 
     # back to a single link: normal mode, single result
     d2 = AddUrlDialog(auto_fetch=False)
@@ -1065,8 +1076,103 @@ def test_batch_mode_input_grows_and_lists_one_per_line(qapp):
 def test_initial_size_clamps_to_small_screens():
     from wordmute_app.ui.main_window import _initial_size
 
-    assert _initial_size(1920, 1040) == (960, 720)   # big screen: as-is
+    assert _initial_size(1920, 1040) == (1100, 760)  # big screen: as-is
     assert _initial_size(911, 512) == (887, 464)     # 1366x768 @150%
-    assert _initial_size(0, 0) == (960, 720)         # unknown screen
+    assert _initial_size(0, 0) == (1100, 760)        # unknown screen
     # the floor keeps the window usable even on absurd geometry
     assert _initial_size(300, 200) == (480, 360)
+
+
+# --------------------------------------------- URL cards: title + poster
+def test_url_card_gets_title_and_thumb_before_download(window, monkeypatch,
+                                                       tmp_path):
+    """Batch-added links must show the real video name (and poster)
+    right away — a queue of bare URLs made per-video language profiles
+    unusable on mixed RU/EN batches."""
+    from wordmute_app.core import downloader, thumbs
+    from wordmute_app.core.jobs import QueueItem
+    from wordmute_app.ui.main_window import THUMB_ROLE, TITLE_ROLE
+
+    fake_thumb = tmp_path / "poster.jpg"
+    fake_thumb.write_bytes(b"jpg")
+    monkeypatch.setattr(
+        downloader, "probe_url",
+        lambda url, cookies=None: {"title": "Настоящее имя видео",
+                                   "duration": 321,
+                                   "thumbnail_url": "https://x/p.jpg"})
+    monkeypatch.setattr(thumbs, "remote_thumbnail_path",
+                        lambda video_url, thumb_url: fake_thumb)
+
+    item = QueueItem(kind="url", url="https://e.com/v",
+                     format_spec="best", format_label="best")
+    window._add_url_row(item)          # WORDMUTE_SYNC_PROBE: runs inline
+    list_item = window.queue.item(0)
+    assert list_item.data(TITLE_ROLE) == "Настоящее имя видео"
+    assert item.title == "Настоящее имя видео"
+    assert item.duration == 321
+    assert list_item.data(THUMB_ROLE) == str(fake_thumb)
+
+
+def test_url_probe_failure_leaves_card_as_url(window, monkeypatch):
+    from wordmute_app.core import downloader
+    from wordmute_app.core.jobs import QueueItem
+    from wordmute_app.ui.main_window import TITLE_ROLE
+
+    def boom(url, cookies=None):
+        raise OSError("site is down")
+
+    monkeypatch.setattr(downloader, "probe_url", boom)
+    item = QueueItem(kind="url", url="https://e.com/v",
+                     format_spec="best", format_label="best")
+    window._add_url_row(item)
+    assert window.queue.item(0).data(TITLE_ROLE) == "https://e.com/v"
+
+
+def test_url_probe_never_overwrites_download_backfill(window, monkeypatch):
+    """A slow probe result must not clobber the real local file name
+    the finished download already wrote onto the card."""
+    from wordmute_app.core.jobs import QueueItem
+    from wordmute_app.ui.main_window import TITLE_ROLE
+
+    item = QueueItem(kind="url", url="https://e.com/v",
+                     format_spec="best", format_label="best")
+    window._insert_row(item)
+    window.queue.item(0).setData(TITLE_ROLE, "видео.mp4")  # backfilled
+    window._on_url_probed(item, "Позднее имя из пробы", 100, "")
+    assert window.queue.item(0).data(TITLE_ROLE) == "видео.mp4"
+
+
+# ------------------------------------------------- download error hints
+def test_403_error_gets_the_yt_dlp_hint():
+    from wordmute_app.ui.worker import humanize_download_error
+
+    raw = "ERROR: unable to download video data: HTTP Error 403: Forbidden"
+    hinted = humanize_download_error(raw)
+    assert raw in hinted
+    assert "yt-dlp" in hinted
+    # anything else passes through untouched
+    assert humanize_download_error("boom") == "boom"
+
+
+def test_pip_upgrade_streams_lines(monkeypatch, tmp_path):
+    import subprocess
+    from wordmute_app.core import updates
+
+    fake_python = tmp_path / "python.exe"
+    fake_python.touch()
+    monkeypatch.setattr(updates, "_pip_python", lambda: str(fake_python))
+
+    class FakeProc:
+        stdout = iter(["Collecting yt-dlp\n",
+                       "Downloading yt_dlp-2026.8.19-py3-none-any.whl\n",
+                       "Successfully installed yt-dlp-2026.8.19\n"])
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: FakeProc())
+    seen = []
+    ok, tail = updates.pip_upgrade(["yt-dlp"], log=seen.append)
+    assert ok
+    assert seen[0] == "Collecting yt-dlp"
+    assert "Successfully installed" in tail

@@ -64,6 +64,14 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   button height), item widgets follow item sizeHint (QueueList syncs to
   viewport width), setItemWidget widgets die on drag-move (rebuild on
   rowsMoved), screenshots need show()+processEvents before grab.
+- INVIOLABLE thread rule: every QThread worker starts via
+  ui/threads.start_thread(owner, thread) and close-time waits go
+  through wait_thread(). A parentless QThread whose last Python ref is
+  dropped in its result slot (`self._worker = None`) is deleted while
+  Qt still counts it running → qFatal "QThread: Destroyed while thread
+  is still running" → the app vanishes with exit 0xC0000409, no
+  traceback. Reproduced on «Проверить обновления»; tests/test_threads.py
+  guards it.
 
 ## Commands
 - Tests: `python -m pytest tests` (150+, all offscreen/stubbed, no

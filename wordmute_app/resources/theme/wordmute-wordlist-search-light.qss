@@ -1,0 +1,73 @@
+/* ============================================================
+   WordMute — Word Lists search (find bar), LIGHT theme (QSS)
+   Same selectors as wordmute-wordlist-search.qss, colors only.
+   Load after wordmute-models-light.qss.
+   ============================================================ */
+
+QToolButton#wl_search_btn {
+  background: transparent; border: 1px solid #cfd3e5; border-radius: 6px;
+  min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px;
+}
+QToolButton#wl_search_btn:hover { border-color: #9184d9; }
+QToolButton#wl_search_btn:checked { border-color: #9184d9; background: #e7e5fe; }
+
+QFrame#wl_find_bar {
+  background: #f3f5fe; border: 1px solid #b2b6ca; border-radius: 8px;
+}
+QLineEdit#wl_find_input {
+  background: transparent; border: none; color: #292b31;
+  font-size: 13px; padding: 2px 4px;
+  min-width: 150px; max-width: 190px;
+}
+QLabel#wl_find_count { color: #595d6c; font-size: 11px; }
+QFrame#wl_find_sep { background: #dfe3f3; min-width: 1px; max-width: 1px; }
+
+QToolButton#wl_find_prev, QToolButton#wl_find_next, QToolButton#wl_find_close {
+  background: transparent; border: none; border-radius: 5px; color: #595d6c;
+  min-width: 22px; max-width: 22px; min-height: 22px; max-height: 22px;
+}
+QToolButton#wl_find_prev:hover, QToolButton#wl_find_next:hover,
+QToolButton#wl_find_close:hover { background: #dfe3f3; color: #292b31; }
+QToolButton#wl_find_prev:disabled, QToolButton#wl_find_next:disabled { color: rgba(89,93,108,0.40); }
+
+QToolButton#wl_find_filter {
+  background: transparent; border: 1px solid transparent; border-radius: 5px;
+  color: #595d6c; font-size: 11px; padding: 0 8px; min-height: 22px; max-height: 22px;
+}
+QToolButton#wl_find_filter:hover { background: #dfe3f3; color: #292b31; }
+QToolButton#wl_find_filter:checked {
+  background: #e7e5fe; border-color: #d2cefd; color: #5d5294;
+}
+
+QLabel#wl_filter_note { color: #595d6c; font-size: 11px; }
+QToolButton#wl_filter_show_all {
+  background: transparent; border: none; color: #5d5294; font-size: 11px; padding: 0;
+}
+QToolButton#wl_filter_show_all:hover { text-decoration: underline; }
+
+/* local merge: the base sheet's QToolButton padding (7px 12px) inflates
+   every fixed-size button past its box — the 24px «?»/magnifier and
+   the 22px bar buttons */
+QToolButton#wl_syntax_help, QToolButton#wl_search_btn,
+QToolButton#wl_find_prev, QToolButton#wl_find_next,
+QToolButton#wl_find_close { padding: 0; }
+
+/* local merge: the tester row per the round-4 mock (see the dark sheet) */
+QFrame#wl_tester_row {
+  background: #f3f5fe; border: 1px solid #cfd3e5; border-radius: 6px;
+  min-height: 32px; max-height: 32px;
+}
+QFrame#wl_tester_row[focused="true"], QFrame#wl_tester_row[state="hit"] {
+  border-color: #9184d9;
+}
+QLineEdit#wl_tester_input {
+  background: transparent; border: none; border-radius: 0;
+  padding: 0; min-height: 0; font-size: 12px;
+}
+QLabel#wl_tester_result { font-size: 12px; color: #595d6c; }
+QLabel#wl_tester_result[state="hit"] { color: #5d5294; }
+QLabel#wl_tester_pattern {
+  font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px;
+  color: #5d5294;
+}
+QLabel#wl_tester_more { font-size: 11px; color: #595d6c; }

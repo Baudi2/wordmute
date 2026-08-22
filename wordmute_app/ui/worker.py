@@ -14,12 +14,25 @@ import time
 from PySide6.QtCore import QThread, Signal
 
 from ..core import downloader, history, review
+from .i18n import tr
 from ..engine import wordmute as engine
 
 
 class JobCancelled(Exception):
     pass
 
+
+
+def humanize_download_error(text: str) -> str:
+    """Attach a fix to the errors users can actually act on. A bare
+    «HTTP Error 403: Forbidden» made a real user conclude YouTube
+    downloads were dead — the actual cure was updating yt-dlp."""
+    if "403" in text and "forbidden" in text.lower():
+        return (text + " — " +
+                tr("this usually means yt-dlp needs updating: Models "
+                   "tab → Check for updates → Update all, then restart "
+                   "the app. Retrying once also sometimes helps."))
+    return text
 
 class _DownloadPump(threading.Thread):
     """Downloads every URL item in queue order, back to back. Each
@@ -257,10 +270,11 @@ class ProcessWorker(QThread):
                                       stages=self._finish_timing(i, item_t0))
                     self.file_finished.emit(i, False, "cancelled")
                 except Exception as exc:
-                    self._log_history(item, "error", str(exc), source=path,
+                    message = humanize_download_error(str(exc))
+                    self._log_history(item, "error", message, source=path,
                                       dl_bytes=dl_bytes,
                                       stages=self._finish_timing(i, item_t0))
-                    self.file_finished.emit(i, False, str(exc))
+                    self.file_finished.emit(i, False, message)
                 else:
                     done += 1
                     if out.exists():  # nothing muted -> no output file

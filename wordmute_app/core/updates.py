@@ -17,7 +17,9 @@ from importlib import metadata
 from . import models as models_mod
 from .proc import creationflags
 
-PACKAGES = ("faster-whisper", "gigaam", "yt-dlp")
+# onnx-asr is what setup installs for GigaAM today; the legacy torch
+# "gigaam" package made every onnx-only install report "not installed"
+PACKAGES = ("faster-whisper", "onnx-asr", "yt-dlp")
 APP_REPO = "Baudi2/wordmute"
 APP_RELEASES_URL = f"https://github.com/{APP_REPO}/releases/latest"
 
@@ -130,16 +132,29 @@ def _pip_python():
     return sys.executable
 
 
-def pip_upgrade(names) -> tuple:
-    """Upgrade packages in-place. Returns (ok, output tail)."""
+def pip_upgrade(names, log=None) -> tuple:
+    """Upgrade packages in-place. Returns (ok, output tail); `log`
+    receives each output line as it happens — a multi-minute pip run
+    behind a frozen «Обновление…» label looked hung."""
     python = _pip_python()
     if python is None:
         return False, ("runtime environment not installed — run the "
                        "component setup first")
     cmd = [python, "-m", "pip", "install", "--upgrade", *names]
+    lines = []
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
-                           timeout=900, creationflags=creationflags())
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace",
+            creationflags=creationflags())
+        for line in proc.stdout:
+            line = line.rstrip()
+            if not line:
+                continue
+            lines.append(line)
+            if log:
+                log(line)
+        code = proc.wait(timeout=900)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, str(exc)
-    return r.returncode == 0, (r.stdout + r.stderr)[-800:]
+    return code == 0, "\n".join(lines)[-800:]

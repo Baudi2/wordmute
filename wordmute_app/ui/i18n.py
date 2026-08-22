@@ -23,6 +23,59 @@ def tr(text: str) -> str:
     return text
 
 
+def tr_plural(key: str, n: int) -> str:
+    """Count-aware translation: Russian needs three forms («1 строка» /
+    «2 строки» / «5 строк»), which a plain key dict cannot express —
+    «строк не похожи на ссылки: 1» read as broken Russian. English uses
+    the first form for 1, the last for everything else."""
+    forms = PLURALS.get(key, {}).get(_LANG)
+    if not forms:
+        return key.format(n)
+    if _LANG == "ru":
+        if n % 10 == 1 and n % 100 != 11:
+            form = forms[0]
+        elif 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+            form = forms[1]
+        else:
+            form = forms[2]
+    else:
+        form = forms[0] if n == 1 else forms[-1]
+    return form.format(n)
+
+
+PLURALS = {
+    "{} links": {
+        "en": ("{} link", "{} links"),
+        "ru": ("{} ссылка", "{} ссылки", "{} ссылок"),
+    },
+    "{} lines are not links": {
+        "en": ("{} line is not a link — it will be skipped",
+               "{} lines are not links — they will be skipped"),
+        "ru": ("{} строка не похожа на ссылку — будет пропущена",
+               "{} строки не похожи на ссылки — будут пропущены",
+               "{} строк не похожи на ссылки — будут пропущены"),
+    },
+    "{} files join the queue": {
+        "en": ("Release — {} file joins the queue",
+               "Release — {} files join the queue"),
+        "ru": ("Отпустите — {} файл попадёт в очередь",
+               "Отпустите — {} файла попадут в очередь",
+               "Отпустите — {} файлов попадут в очередь"),
+    },
+    # word lists: the find bar's filter count and the tester's
+    # «also in N lists» (design round 4)
+    "{} lines": {
+        "en": ("{} line", "{} lines"),
+        "ru": ("{} строка", "{} строки", "{} строк"),
+    },
+    "· also in {} lists": {
+        "en": ("· also in {} list", "· also in {} lists"),
+        "ru": ("· ещё в {} списке", "· ещё в {} списках",
+               "· ещё в {} списках"),
+    },
+}
+
+
 RU = {
     # main window
     "Add Files": "Добавить файлы",
@@ -135,8 +188,133 @@ RU = {
         "Проверка по текущим правкам (даже несохраненным) "
         "плюс другой сохраненный список.",
     "Hide this note": "Скрыть эту подсказку",
+    # add URL: batch mode + the 2b single-link tail
+    "Add {} to the queue": "Добавить {} в очередь",
+    "That's every format this site offered — {}":
+        "Это все форматы, которые отдал этот сайт — {}",
+    "Need another option? A cookies file sometimes helps":
+        "Нужен другой вариант? Иногда помогает файл cookies",
+    "Selected:": "Выбрано:",
+    "recommended": "рекомендуется",
+    # updates: live progress + the 403 hint
+    "Updating {}…": "Обновление {}…",
+    "Updating the {} model…": "Обновление модели {}…",
+    "this usually means yt-dlp needs updating: Models tab → Check for "
+    "updates → Update all, then restart the app. Retrying once also "
+    "sometimes helps.":
+        "обычно это значит, что yt-dlp пора обновить: вкладка «Модели» "
+        "→ «Проверить обновления» → «Обновить все», затем перезапустите "
+        "приложение. Иногда помогает и простой повтор.",
+    # models tab regroup (design models-tab-handoff.md)
+    "recognition runs on the graphics card": "распознавание идёт на видеокарте",
+    "No NVIDIA GPU found — recognition runs on the processor, 2–4× "
+    "slower":
+        "NVIDIA GPU не найден — распознавание на процессоре, в 2–4 раза "
+    "медленнее",
+    "Open settings →": "Открыть настройки →",
+    "Recognition models": "Модели распознавания",
+    "what is downloaded and how much disk it takes": "что скачано и сколько занимает на диске",
+    "State": "Состояние",
+    "GIGAAM · RUSSIAN ENGINE": "GIGAAM · РУССКИЙ ДВИЖОК",
+    "failed — {}": "не удалось — {}",
+    "Model downloaded": "Модель скачана",
+    "Delete…": "Удалить…",
+    "Delete the GigaAM model caches?": "Удалить кэши моделей GigaAM?",
+    "Disk usage · {}": "Занято на диске · {}",
+    "components": "компоненты",
+    "Maintenance": "Обслуживание",
+    "updates and repair of the install": "обновления и ремонт установки",
+    "checked {}": "проверено {}",
+    "checking for updates…": "проверка обновлений…",
+    "Update all ({})": "Обновить все ({})",
+    "Press «Check for updates» to see whether newer versions of the "
+    "engines and models exist.":
+        "Нажмите «Проверить обновления», чтобы узнать, есть ли новые версии "
+    "движков и моделей.",
+    "GigaAM weights update together with the onnx-asr package.": "Веса GigaAM обновляются вместе с пакетом onnx-asr.",
+    "Add components…": "Доустановить компоненты…",
+    "the wizard adds what is missing and leaves the rest alone": "мастер доставит пропущенное, установленное не тронет",
+    "Repair components…": "Починить компоненты…",
+    "clean start of the runtime": "чистый старт среды",
+    "What's new": "Что нового",
+    "up to date": "актуально",
+    "Update": "Обновить",
+    "{} model": "модель {}",
+    "current revision": "текущая ревизия",
+    "new revision": "новая ревизия",
+    "updating {} of {}": "обновление {} из {}",
+    "Updates installed": "Обновления установлены",
+    "Update failed": "Не удалось обновить",
+    "Delete the runtime and set it up again?": "Удалить среду выполнения и настроить заново?",
+    "Word lists, settings, history and the downloaded models are kept. "
+    "Best done right after starting the app, before any processing.":
+        "Словари, настройки, история и скачанные модели сохранятся. Лучше "
+    "делать сразу после запуска, до обработки.",
+    "Delete and set up": "Удалить и настроить",
+    # setup: the install page's moving detail line and log dock
+    "Now: {}": "Сейчас: {}",
+    "{} of {}": "{} из {}",
+    "Copy": "Копировать",
+    "Copied": "Скопировано",
+    "Open file": "Открыть файл",
+    "Setup stopped — see the log.":
+        "Установка остановлена — подробности в журнале.",
+    # empty states as drop targets (design 1g)
+    "Drop video or audio here": "Перетащите сюда видео или аудио",
+    "Or paste a link. Everything runs on this computer.":
+        "Или вставьте ссылку. Всё считается на этом компьютере.",
+    "Release — {} file(s) join the queue":
+        "Отпустите — в очередь попадёт файлов: {}",
+    "mp4 · mkv · mp3 — anything else is skipped":
+        "mp4 · mkv · mp3 — остальное будет пропущено",
+    "The transcript will appear here": "Здесь появится расшифровка",
+    "Processed files open from here — or from History with a double "
+    "click.":
+        "Обработанные файлы открываются отсюда — или из истории "
+        "двойным щелчком.",
+    "Open History": "Открыть историю",
+    "Words from your lists are muted in the audio; the video itself is "
+    "copied untouched.":
+        "Слова из ваших списков заглушаются в звуке; сам видеоряд "
+        "копируется без изменений.",
+    # word lists: one toolbar row + the syntax popover (design 1f)
+    "Entry syntax": "Синтаксис записей",
+    "ENTRY SYNTAX": "СИНТАКСИС ЗАПИСЕЙ",
+    "exact word": "точное слово",
+    "word starts with": "слово начинается с",
+    "anywhere in the word": "в любом месте слова",
+    "phrase": "фраза",
+    "comment": "комментарий",
+    "Saving sorts the list, lowercases it and removes duplicates.":
+        "При сохранении список сортируется, приводится к нижнему "
+        "регистру, дубликаты убираются.",
+    "This is the shipped template — edit it freely, it's your list.":
+        "Это стартовый шаблон — правьте свободно, это ваш список.",
+    "Check a word or phrase against this list and the other saved "
+    "one…":
+        "Проверить слово или фразу по этому списку и другим "
+        "сохранённым…",
     "(no match)": "(нет совпадений)",
     'phrase "{}"  ←  matched': 'фраза «{}»  ←  совпала',
+    # word lists: find bar (design round 4, 1a + 1b) and the tester row
+    "Find in list (Ctrl+F)": "Поиск по списку (Ctrl+F)",
+    "Find…": "Найти…",
+    "{} of {}": "{} из {}",
+    "no matches": "нет совпадений",
+    "Search finds list entries. To check whether a word gets muted, use "
+    "the tester below.":
+        "Поиск ищет записи списка. Проверить, заглушится ли слово, — "
+        "в тестере внизу.",
+    "Matches": "Совпадения",
+    "Show only the matching lines": "Показать только строки с совпадениями",
+    "Previous match (Shift+F3)": "Предыдущее совпадение (Shift+F3)",
+    "Next match (F3)": "Следующее совпадение (F3)",
+    "Close (Esc)": "Закрыть (Esc)",
+    "showing {} of {} — filter by «{}» · editing off":
+        "показаны {} из {} — фильтр по «{}» · редактирование выключено",
+    "Show all": "Показать все",
+    "will be muted": "заглушится",
+    "will not be muted — no matches": "не заглушится — совпадений нет",
     # history
     "Copy error": "Копировать ошибку",
     "Processed files will appear here.":
@@ -381,6 +559,8 @@ RU = {
     "Add {} links": "Добавить ссылок: {}",
     "Quality for all links:": "Качество для всех ссылок:",
     "best quality": "лучшее качество",
+    "up to 2160p (4K)": "до 2160p (4K)",
+    "up to 1440p": "до 1440p",
     "up to 1080p": "до 1080p",
     "up to 720p": "до 720p",
     "up to 480p": "до 480p",
@@ -435,6 +615,13 @@ RU = {
     "optional": "по желанию",
     "GB": "ГБ",
     "MB": "МБ",
+    "kB": "КБ",
+    "MB/s": "МБ/с",
+    "kB/s": "КБ/с",
+    "today {}": "сегодня {}",
+    "yesterday {}": "вчера {}",
+    "ms": "мс",
+    "Hz": "Гц",
     "Install": "Установить",
     "WordMute installs the app itself; the recognition engines "
     "are downloaded once, right now. Everything lands in your "
@@ -714,8 +901,64 @@ RU = {
         "Проходы идут сверху вниз; каждый перепроверяет результат "
         "предыдущего и останавливается, когда нового ничего не "
         "найдено. Разные движки ловят то, что пропустил другой.",
-    # dialogs (shared)
+    # dialogs (shared) — confirmations name the action, never Yes/No
     "Close": "Закрыть",
+    "Got it": "Понятно",
+    "Save": "Сохранить",
+    "Discard": "Не сохранять",
+    "They can be restored from the Recycle Bin.":
+        "Их можно вернуть из Корзины.",
+    "To Recycle Bin": "В Корзину",
+    "Delete failed": "Не удалось удалить",
+    "Nothing to review yet": "Проверять пока нечего",
+    "Review data appears after the file has been processed and "
+    "something was muted.":
+        "Данные проверки появляются после обработки файла, если "
+        "что-то было заглушено.",
+    "Could not open the review file":
+        "Не удалось открыть файл проверки",
+    "Everything is processed already": "Всё уже обработано",
+    "Add new files, or use Retry on a failed one.":
+        "Добавьте новые файлы или нажмите «Повторить» на неудачном.",
+    "Processing is still running.": "Обработка ещё идёт.",
+    "Quitting cancels the current file; finished files are kept.":
+        "При выходе текущий файл отменяется, готовые остаются.",
+    "Cancel and quit": "Отменить и выйти",
+    "Delete source and JSONs": "Удалить исходник и JSON",
+    "Delete all files": "Удалить все файлы",
+    "Clear history": "Очистить историю",
+    "Only the list is cleared — no video file is touched.":
+        "Очищается только список — сами видео не затрагиваются.",
+    "Delete the downloaded '{}' model?":
+        "Удалить скачанную модель «{}»?",
+    "It is downloaded again the next time it is used.":
+        "Она скачается заново при следующем использовании.",
+    "Delete model": "Удалить модель",
+    "Delete all GigaAM model caches?": "Удалить все кэши моделей GigaAM?",
+    "They are downloaded again on the next GigaAM pass.":
+        "Они скачаются заново на следующем проходе GigaAM.",
+    "Delete caches": "Удалить кэши",
+    "Reinstall the downloaded components?":
+        "Переустановить скачанные компоненты?",
+    "Word lists, settings and models are not affected. Best done right "
+    "after starting the app, before any processing.":
+        "Списки слов, настройки и модели не затрагиваются. Лучше делать "
+        "сразу после запуска, до обработки.",
+    "Reinstall": "Переустановить",
+    "Close without re-rendering?": "Закрыть без пересборки?",
+    "You changed the mute selection but didn't re-render, so the "
+    "output file stays as it is.":
+        "Вы изменили набор заглушек, но не пересобрали результат — "
+        "файл останется прежним.",
+    "Close anyway": "Всё равно закрыть",
+    "Stop the installation?": "Прервать установку?",
+    "Downloaded parts are kept and setup resumes next time.":
+        "Скачанное сохранится, установка продолжится в следующий раз.",
+    "Stop installing": "Прервать",
+    "The word list has unsaved changes.":
+        "В списке слов есть несохранённые правки.",
+    "Saving also sorts the list and removes duplicates.":
+        "При сохранении список сортируется, дубликаты убираются.",
     "Browse…": "Обзор…",
     "Delete": "Удалить",
     "Download": "Скачать",

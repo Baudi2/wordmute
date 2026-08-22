@@ -37,11 +37,11 @@ for old in OUT.glob("*.png"):
 WORK = Path(tempfile.mkdtemp(prefix="wm_shots_"))
 
 from PySide6.QtCore import QCoreApplication, QEvent, QPoint
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication
 
 from wordmute_app.core import gpu, history, models, review
 from wordmute_app.core.jobs import QueueItem
-from wordmute_app.ui.i18n import set_language
+from wordmute_app.ui.i18n import set_language, tr
 from wordmute_app.ui.theme import apply_theme
 
 app = QApplication(sys.argv)
@@ -146,6 +146,20 @@ win = MainWindow()
 win.resize(1100, 760)
 shot(win, "queue_empty", hide=False)
 
+# the empty queue is a drop target now: show it mid-drag too (1g)
+from PySide6.QtCore import QMimeData, QUrl
+
+drag_files = []
+for drag_name in ("Лекция_01.mp4", "Интервью.mkv", "Подкаст_44.mp3"):
+    dropped = WORK / drag_name
+    dropped.write_bytes(b"x")
+    drag_files.append(QUrl.fromLocalFile(str(dropped)))
+drag_mime = QMimeData()
+drag_mime.setUrls(drag_files)
+win.drop_zone.begin_drag(drag_mime)
+shot(win, "queue_empty_drag", hide=False)
+win.drop_zone.end_drag()
+
 rows = [
     (QueueItem(kind="file", path=Path(r"D:\Видео\Лекция_01.mp4"),
                duration=5415), "готово"),
@@ -225,6 +239,8 @@ for name, tab in (("wordlists", win.wordlists_tab),
     if name == "wordlists":
         tab.tester_input.setText("колдовать и демонстрация")
     if name == "transcript":
+        shot(win, "tab_transcript_empty", hide=False)
+    if name == "transcript":
         media = WORK / "Лекция_01.mp4"
         words, position = [], 0.0
         for word in ("сегодня мы поговорим о том как устроена память "
@@ -237,14 +253,57 @@ for name, tab in (("wordlists", win.wordlists_tab),
             json.dumps(words, ensure_ascii=False), encoding="utf-8")
         tab.load_media(media)
     if name == "models":
+        # the disk walk runs in a worker on first show and would
+        # overwrite a staged value with the empty fake LOCALAPPDATA
+        from wordmute_app.core import runtime_env
+        runtime_env.disk_usage = lambda: 2_410_000_000
         tab._runtime_bytes = 2_410_000_000
         tab.refresh()
+        # the handoff's extra states: a download in flight and a check
+        # that found two updates
+        tab._downloading = "medium"
+        tab.refresh()
+        tab._downloading = None
+        tab._render_result({
+            "app": {"current": "0.6.0", "latest": "0.7.0",
+                    "update": True,
+                    "url": "https://github.com/Baudi2/wordmute/releases"},
+            "packages": [
+                {"name": "faster-whisper", "installed": "1.2.1",
+                 "latest": "1.2.1", "update": False},
+                {"name": "onnx-asr", "installed": "0.8.0",
+                 "latest": "0.8.0", "update": False},
+                {"name": "yt-dlp", "installed": "2026.07.04",
+                 "latest": "2026.8.19", "update": True},
+            ],
+            "models": [{"model": "large-v3", "repo": "r",
+                        "update": False}],
+        }, __import__("datetime").datetime.now().isoformat(
+            timespec="seconds"))
     if name == "history":
         tab.refresh()
     if name == "settings":
         tab.cookies_edit.setText(r"C:\Видео\boosty_cookies.txt")
         tab.download_dir_edit.setText(r"D:\Видео\Загрузки")
     shot(win, f"tab_{name}", hide=False)
+    if name == "wordlists":
+        # the syntax legend now lives behind the «?» button (1f)
+        tab.syntax_help.setChecked(True)
+        for _ in range(3):
+            app.processEvents()
+        shot(tab._syntax_popover, "tab_wordlists_syntax")
+        tab.syntax_help.setChecked(False)
+        # design round 4: the Ctrl+F bar with matches, then filter mode
+        tab.open_find()
+        tab.find_bar.input.setText("апо")
+        for _ in range(3):
+            app.processEvents()
+        shot(win, "tab_wordlists_find", hide=False)
+        tab.find_bar.filter_btn.setChecked(True)
+        for _ in range(3):
+            app.processEvents()
+        shot(win, "tab_wordlists_filter", hide=False)
+        tab.close_find()
 
 win.tabs.setCurrentIndex(0)
 
@@ -325,27 +384,19 @@ for _ in range(4):
     app.processEvents()
 shot(rev, "dialog_review")
 
-# the "move files to the Recycle Bin" confirmation
-from wordmute_app.ui import file_delete
+# the "move files to the Recycle Bin" confirmation — built, never
+# exec()ed: it is modal and would block the render forever
+from wordmute_app.ui.dialogs import ConfirmDialog
 
-_asked = {}
-
-
-def _capture_question(parent, title, text, *a, **kw):
-    _asked["title"], _asked["text"] = title, text
-    return QMessageBox.StandardButton.No
-
-
-_real_question = QMessageBox.question
-QMessageBox.question = staticmethod(_capture_question)
-file_delete.confirm_and_recycle(
-    win, [WORK / "Лекция_01.mp4", WORK / "Лекция_01.mp4.words.json",
-          WORK / "Лекция_01.clean.mp4.wordmute.json"])
-QMessageBox.question = _real_question
-box = QMessageBox(QMessageBox.Question, _asked.get("title", "WordMute"),
-                  _asked.get("text", ""),
-                  QMessageBox.Yes | QMessageBox.No, win)
-shot(box, "dialog_delete_files")
+episode = ("Во все тяжкие (2008-2013) — 4 сезон 9 серия ｜ Breaking Bad "
+           "(Дубляж) [6e00e1683df4cee70d2df65fc32e78a5]")
+confirm_box = ConfirmDialog(
+    win, title=tr("Move {} file(s) to the Recycle Bin?").format(3),
+    body=tr("They can be restored from the Recycle Bin."),
+    files=[episode + ".mp4", episode + ".mp4.words.json",
+           episode + ".clean.mp4.wordmute.json"],
+    ok_text=tr("To Recycle Bin"))
+shot(confirm_box, "dialog_delete_files")
 
 # ------------------------------------------------------------ setup wizard
 from wordmute_app.ui.setup_dialog import STEP_KEYS, SetupDialog
@@ -359,10 +410,10 @@ for index, key in enumerate(STEP_KEYS):
         wizard._refresh_install_rows()
         wizard._set_row_state("python", "done", "готово")
         wizard._set_row_state("ffmpeg", "done", "готово")
-        wizard._set_row_state("whisper", "run", "скачивание… 63%")
-        wizard.install_percent.setText("41%")
-        wizard.total_progress.setRange(0, 100)
-        wizard.total_progress.setValue(41)
+        wizard._active_row = "whisper"
+        wizard._set_row_state("whisper", "run", "63%")
+        # the moving detail line comes from the real progress handler
+        wizard._on_progress(1_040_000_000, 1_600_000_000)
         wizard.log_toggle.setChecked(True)
         for line in ["wordmute setup",
                      "  → python-3.12.10-embed-amd64.zip",
@@ -402,6 +453,13 @@ win.tabs.setCurrentWidget(win.settings_tab)
 shot(win, "light_settings", hide=False)
 win.tabs.setCurrentWidget(win.history_tab)
 shot(win, "light_history", hide=False)
+win.tabs.setCurrentWidget(win.wordlists_tab)
+win.wordlists_tab.open_find()
+win.wordlists_tab.find_bar.input.setText("апо")
+for _ in range(3):
+    app.processEvents()
+shot(win, "light_wordlists_find", hide=False)
+win.wordlists_tab.close_find()
 win.hide()
 
 light_wizard = SetupDialog(first_run=True)

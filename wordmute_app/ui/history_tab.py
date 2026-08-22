@@ -2,7 +2,6 @@
 
 import os
 import subprocess
-from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -12,8 +11,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMenu,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -22,24 +19,22 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import cleanup, config, history
+from .dialogs import confirm, inform, mark_danger, themed_menu
 from .file_delete import confirm_and_recycle
+from .formats import fmt_bytes, full_datetime, human_datetime
 from .hover_table import HoverRowTable
 from .i18n import tr
 
-COLUMNS = ["Time", "File", "", "Muted", "Plan", ""]
+# design 0.6.1 (1d): the ✓/✗ column was redundant next to the number —
+# failures now say «не удалось» in the Muted cell instead
+COLUMNS = ["Time", "File", "Muted", "Plan", ""]
 FILE_COL = 1     # the single stretch column
-STATUS_COL = 2   # 28px ✓/✗ glyph
-FILES_COL = 5    # 28px ●/◐/○ files-on-disk glyph
+MUTED_COL = 2    # count, or the failure word
+FILES_COL = 4    # 28px ●/◐/○ files-on-disk glyph
+TIME_ROLE = Qt.UserRole   # ISO stamp: «сегодня» must not sort as text
 OK_COLOR = QColor("#d2cefd")     # accent-300
 ERR_COLOR = QColor("#eab7b7")    # error text
 DIM_COLOR = QColor("#9096a0")    # muted text
-
-
-def _short_time(iso: str) -> str:
-    try:
-        return datetime.fromisoformat(iso).strftime("%d %b %H:%M")
-    except ValueError:
-        return iso
 
 
 def _files_glyph(record: dict):
@@ -109,20 +104,19 @@ class HistoryTab(QWidget):
         layout.setSpacing(12)
 
         self.table = HoverRowTable(0, len(COLUMNS))
+        self.table.setObjectName("history_table")
         self.table.setHorizontalHeaderLabels(
             [tr(c) if c else "" for c in COLUMNS])
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeToContents)
         header.setSectionResizeMode(FILE_COL, QHeaderView.Stretch)
-        header.setSectionResizeMode(STATUS_COL, QHeaderView.Fixed)
-        self.table.setColumnWidth(STATUS_COL, 28)
         header.setSectionResizeMode(FILES_COL, QHeaderView.Fixed)
         self.table.setColumnWidth(FILES_COL, 28)
         self.table.verticalHeader().setVisible(False)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.verticalHeader().setDefaultSectionSize(34)
+        self.table.verticalHeader().setDefaultSectionSize(40)
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(True)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -158,16 +152,16 @@ class HistoryTab(QWidget):
         for row, r in enumerate(self._records):
             status = r.get("status", "")
             error = r.get("error", "")
-            status_item = QTableWidgetItem("✓" if status == "ok" else "✕")
-            status_item.setTextAlignment(Qt.AlignCenter)
             if status == "ok":
-                status_item.setForeground(OK_COLOR)
-                status_item.setToolTip(tr("Done"))
+                muted_item = QTableWidgetItem(str(r.get("muted", "")))
             else:
-                status_item.setForeground(ERR_COLOR)
-                status_item.setToolTip(error or tr("Error"))
-            time_item = QTableWidgetItem(_short_time(r.get("time", "")))
-            time_item.setToolTip(r.get("time", ""))
+                muted_item = QTableWidgetItem(tr("failed"))
+                muted_item.setForeground(ERR_COLOR)
+                muted_item.setToolTip(error or tr("Error"))
+            stamp = r.get("time", "")
+            time_item = QTableWidgetItem(human_datetime(stamp))
+            time_item.setData(TIME_ROLE, stamp)
+            time_item.setToolTip(full_datetime(stamp))
             output = r.get("output", "")
             name = r.get("name", "")
             if name.startswith(("http://", "https://")):
@@ -192,8 +186,7 @@ class HistoryTab(QWidget):
                                      else DIM_COLOR)
             if tip:
                 files_item.setToolTip(tr(tip))
-            values = [time_item, file_item, status_item,
-                      QTableWidgetItem(str(r.get("muted", ""))), plan_item,
+            values = [time_item, file_item, muted_item, plan_item,
                       files_item]
             for col, item in enumerate(values):
                 self.table.setItem(row, col, item)
@@ -202,10 +195,9 @@ class HistoryTab(QWidget):
             else tr("Processed files will appear here."))
         month = history.month_traffic()
         if month:
-            from ..core.models import fmt_size
             self.traffic_label.setText(
                 "· " + tr("downloaded this month: {}")
-                .format(fmt_size(month)))
+                .format(fmt_bytes(month)))
         else:
             self.traffic_label.setText("")
 
@@ -223,7 +215,7 @@ class HistoryTab(QWidget):
         r = self._record_for_row(row)
         if r is None:
             return
-        menu = QMenu(self)
+        menu = themed_menu(self, "history_menu")
         out = r.get("output", "")
         out_ok = bool(out and Path(out).exists())
         act_open = menu.addAction(tr("Open output"))
@@ -233,11 +225,12 @@ class HistoryTab(QWidget):
         act_copy = menu.addAction(tr("Copy error"))
         act_copy.setEnabled(bool(r.get("error")))
         menu.addSeparator()
-        act_del_src = menu.addAction(tr("Delete source video and JSONs"))
+        act_del_src = menu.addAction(tr("Delete source and JSONs"))
         act_del_src.setEnabled(bool(self._files_for_row(row, False)))
-        act_del_all = menu.addAction(
-            tr("Delete all files (source, clean, JSONs)"))
+        mark_danger(act_del_src)
+        act_del_all = menu.addAction(tr("Delete all files"))
         act_del_all.setEnabled(bool(self._files_for_row(row, True)))
+        mark_danger(act_del_all)
         chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
         if chosen is act_open:
             os.startfile(out)
@@ -285,12 +278,12 @@ class HistoryTab(QWidget):
                 else:
                     os.startfile(str(Path(out).parent))
                 return
-        QMessageBox.information(self, "WordMute",
-                                tr("Processed files will appear here."))
+        inform(self, title=tr("Processed files will appear here."))
 
     def _clear(self):
-        if QMessageBox.question(self, "WordMute",
-                                tr("Clear the whole processing history?")) \
-                == QMessageBox.StandardButton.Yes:
+        if confirm(self, title=tr("Clear the whole processing history?"),
+                   body=tr("Only the list is cleared — no video file is "
+                           "touched."),
+                   ok_text=tr("Clear history")):
             history.clear_history()
             self.refresh()
