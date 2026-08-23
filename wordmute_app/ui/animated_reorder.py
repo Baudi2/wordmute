@@ -176,7 +176,13 @@ class AnimatedReorder(QObject):
         if self._landing:
             anim = getattr(self, "_land_anim", None)
             if anim is not None:
-                anim.stop()     # stop() emits finished -> _commit now
+                # stop() emits finished ONLY when the animation is
+                # already at its end — mid-flight it does not, which
+                # left the lift floating and the viewport's mouse grab
+                # held: the whole window went mouse-dead
+                anim.stop()
+            if self._landing:            # finished did not fire
+                self._commit(self._land_cancel)
             return
         land, self._land_ms = self._land_ms, 0
         try:
@@ -352,6 +358,7 @@ class AnimatedReorder(QObject):
             self._view.window(),
             QPoint(rect.left() - self._pad.x(), final_y - self._pad.y()))
         self._landing = True
+        self._land_cancel = cancel       # abort() may have to commit
         if self._land_ms <= 0:
             self._commit(cancel)
             return
@@ -365,6 +372,8 @@ class AnimatedReorder(QObject):
         self._land_anim = anim       # keep alive until finished
 
     def _commit(self, cancel: bool):
+        if self._src < 0:
+            return                       # already committed
         src, dst = self._src, self._dst
         self._edge_timer.stop()
         if self._view.viewport().mouseGrabber() is self._view.viewport():

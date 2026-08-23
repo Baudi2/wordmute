@@ -7,6 +7,35 @@ we actually have no console, so CLI usage keeps its normal output."""
 
 import os
 import subprocess
+import threading
+
+# ---- children a worker thread may need to kill from the GUI thread
+# pip prints nothing while a wheel downloads, so a cancel flag polled
+# per output line was never seen for minutes; the GUI thread kills the
+# child directly instead (keyed by the worker thread that spawned it)
+_CHILDREN = {}   # thread ident -> Popen
+
+
+def track_child(proc) -> None:
+    _CHILDREN[threading.get_ident()] = proc
+
+
+def untrack_child(proc) -> None:
+    if _CHILDREN.get(threading.get_ident()) is proc:
+        del _CHILDREN[threading.get_ident()]
+
+
+def kill_child_of(thread_ident) -> bool:
+    """Kill the child the given worker thread is currently streaming;
+    its read loop then sees EOF at once. True if something was killed."""
+    proc = _CHILDREN.get(thread_ident)
+    if proc is None or proc.poll() is not None:
+        return False
+    try:
+        proc.kill()
+    except OSError:
+        return False
+    return True
 
 
 def creationflags() -> int:

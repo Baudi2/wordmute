@@ -15,6 +15,16 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 ROOT = Path(SPECPATH).parent
 
+# the frozen app imports cp312 wheels from the managed runtime; a
+# freeze with another interpreter produces an exe whose first engine
+# import fails with «DLL load failed»
+sys.path.insert(0, str(ROOT))
+from wordmute_app.core.runtime_env import PYTHON_VERSION  # noqa: E402
+_want = tuple(int(x) for x in PYTHON_VERSION.split(".")[:2])
+assert sys.version_info[:2] == _want, (
+    f"freeze with Python {_want[0]}.{_want[1]} (the runtime is "
+    f"{PYTHON_VERSION}); this is {sys.version.split()[0]}")
+
 datas = [(str(ROOT / "wordmute_app" / "resources"), "wordmute_app/resources")]
 binaries = []
 # toasts are imported lazily inside methods; name them explicitly so a
@@ -41,6 +51,18 @@ for pkg in ("huggingface_hub",):
     datas += d
     binaries += b
     hiddenimports += h
+
+# Qt's own catalogs are NOT collected automatically: without them the
+# native dialogs keep their English labels in a Russian UI. Ship one .qm
+# per language the app offers (main.install_qt_translations looks here).
+import PySide6
+_qt_translations = Path(PySide6.__file__).parent / "translations"
+for _lang in ("ru",):
+    _qm = _qt_translations / f"qtbase_{_lang}.qm"
+    if _qm.exists():
+        datas.append((str(_qm), "PySide6/translations"))
+    else:
+        raise SystemExit(f"missing Qt translation: {_qm}")
 
 a = Analysis(
     [str(Path(SPECPATH) / "launch.py")],

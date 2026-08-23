@@ -3,14 +3,17 @@ cached transcript, export SRT. Cache-only — never transcribes."""
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -18,8 +21,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import transcript
-from .hover_table import HoverRowTable
 from ..engine.wordmute import MEDIA_EXTS, fmt_ts, norm
+from .hover_table import HoverRowTable
 from .i18n import tr
 
 
@@ -53,6 +56,46 @@ class TranscriptTab(QWidget):
         search_row.addWidget(self.count_label)
         layout.addLayout(search_row)
 
+        # design 1g: the same empty-state shell as the queue, but with
+        # accepts="false" — nothing can be dropped here
+        self.empty_state = QFrame()
+        self.empty_state.setObjectName("drop_zone")
+        self.empty_state.setProperty("accepts", "false")
+        empty_layout = QVBoxLayout(self.empty_state)
+        empty_layout.addStretch()
+        icon = QLabel()
+        icon.setObjectName("empty_icon")
+        from .theme import ui_icon
+        icon.setPixmap(ui_icon("doc-text", 21).pixmap(21, 21))
+        icon.setProperty("accepts", "false")
+        icon.setAlignment(Qt.AlignCenter)
+        icon_row = QHBoxLayout()
+        icon_row.addStretch()
+        icon_row.addWidget(icon)
+        icon_row.addStretch()
+        empty_layout.addLayout(icon_row)
+        empty_layout.addSpacing(12)
+        title = QLabel(tr("The transcript will appear here"))
+        title.setObjectName("empty_title")
+        title.setAlignment(Qt.AlignCenter)
+        body = QLabel(tr("Processed files open from here — or from "
+                         "History with a double click."))
+        body.setObjectName("empty_body")
+        body.setAlignment(Qt.AlignCenter)
+        body.setWordWrap(True)
+        empty_layout.addWidget(title)
+        empty_layout.addWidget(body)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        open_history = QPushButton(tr("Open History"))
+        open_history.setObjectName("btn_empty_secondary")
+        open_history.clicked.connect(self._goto_history)
+        buttons.addWidget(open_history)
+        buttons.addStretch()
+        empty_layout.addSpacing(12)
+        empty_layout.addLayout(buttons)
+        empty_layout.addStretch()
+
         self.table = HoverRowTable(0, 2)
         self.table.setHorizontalHeaderLabels([tr("Time"), tr("Text")])
         self.table.horizontalHeader().setSectionResizeMode(
@@ -63,7 +106,10 @@ class TranscriptTab(QWidget):
         self.table.setWordWrap(True)
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(True)
-        layout.addWidget(self.table, stretch=1)
+        self.stack = QStackedWidget()
+        self.stack.addWidget(self.empty_state)
+        self.stack.addWidget(self.table)
+        layout.addWidget(self.stack, stretch=1)
 
         bottom = QHBoxLayout()
         self.export_button = QPushButton(tr("Export SRT…"))
@@ -79,10 +125,16 @@ class TranscriptTab(QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
+    def _goto_history(self):
+        window = self.window()
+        if hasattr(window, "tabs") and hasattr(window, "history_tab"):
+            window.tabs.setCurrentWidget(window.history_tab)
+
     def _pick_media(self):
         exts = " ".join(f"*{e}" for e in sorted(MEDIA_EXTS))
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open media file", "", f"Media files ({exts})")
+            self, tr("Open media file"), "",
+            tr("Media files ({})").format(exts))
         if path:
             self.load_media(path)
 
@@ -100,6 +152,7 @@ class TranscriptTab(QWidget):
         self.export_button.setEnabled(True)
         self.search.clear()
         self._fill()
+        self.stack.setCurrentWidget(self.table)
 
     def _fill(self):
         from PySide6.QtGui import QFont

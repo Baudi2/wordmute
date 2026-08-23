@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -24,8 +23,10 @@ from ..core import review
 from ..core.probe import media_duration
 from ..engine import wordmute as engine
 from ..engine.wordmute import fmt_ts
+from .dialogs import confirm
 from .hover_table import HoverRowTable
 from .i18n import tr
+from .threads import detach_thread, start_thread, wait_thread
 from .player import SnippetPlayer
 from .waveform import WaveformStrip, WaveformWorker
 
@@ -78,6 +79,17 @@ class ReviewDialog(QDialog):
     def __init__(self, review_path, parent=None):
         super().__init__(parent)
         self._data = review.load_review(review_path)
+        # the sidecar's own location wins over the absolute output path
+        # recorded at processing time: a clean file renamed/moved along
+        # with its .wordmute.json was left untouched while the dialog
+        # said «Output updated» (a second file appeared under the old name)
+        sidecar = Path(review_path)
+        suffix = review.REVIEW_SUFFIX
+        if (review.review_path_for(self._data["output"]) != sidecar
+                and sidecar.name.endswith(suffix)):
+            moved = sidecar.with_name(sidecar.name[:-len(suffix)])
+            if moved.exists():
+                self._data["output"] = str(moved)
         self._player = SnippetPlayer()
         self._worker = None
         self._dirty = False
@@ -250,7 +262,7 @@ class ReviewDialog(QDialog):
         worker.ready.connect(self._on_waveform_ready)
         worker.finished.connect(self._on_waveform_worker_done)
         self._wave_worker = worker
-        worker.start()
+        start_thread(self, worker)
 
     def _on_waveform_worker_done(self):
         self._wave_worker = None
@@ -291,7 +303,7 @@ class ReviewDialog(QDialog):
         self._worker.succeeded.connect(self._on_rerender_ok)
         self._worker.failed.connect(self._on_rerender_failed)
         self._worker.progressed.connect(self._on_rerender_progress)
-        self._worker.start()
+        start_thread(self, self._worker)
 
     def _on_rerender_progress(self, seconds: float):
         if self._duration:
@@ -320,18 +332,29 @@ class ReviewDialog(QDialog):
             tr("Re-render failed: {}").format(message))
 
     # ---------------------------------------------------------- lifecycle
+    def reject(self):
+        """Esc goes through QDialog.reject(), which skips closeEvent —
+        the only place the worker threads are handled. With
+        WA_DeleteOnClose that destroyed the dialog under a running
+        re-render and Qt aborted the whole app. One path owns closing."""
+        self.close()
+
     def closeEvent(self, event):
         if self._worker is not None:
-            self._worker.wait()
-        if self._wave_worker is not None:
-            self._wave_worker.wait(5000)
+            # no cancel exists for the ffmpeg pass and waiting here
+            # would freeze the whole app for its duration
+            self.status_label.setText(
+                tr("Re-render in progress — wait for it to finish."))
+            event.ignore()
+            return
+        if not wait_thread(self._wave_worker, 3000):
+            detach_thread(self._wave_worker)   # never dies with us
         if self._dirty:
-            if QMessageBox.question(
-                    self, "WordMute",
-                    tr("You changed the mute selection but didn't "
-                       "re-render, so the output file is unchanged. "
-                       "Close anyway?")) \
-                    != QMessageBox.StandardButton.Yes:
+            if not confirm(self, title=tr("Close without re-rendering?"),
+                           body=tr("You changed the mute selection but "
+                                   "didn't re-render, so the output file "
+                                   "stays as it is."),
+                           ok_text=tr("Close anyway")):
                 event.ignore()
                 return
         self._player.dispose()

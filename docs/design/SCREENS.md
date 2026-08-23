@@ -1,4 +1,4 @@
-# WordMute — screen inventory (v0.5.1, pre-release)
+# WordMute — screen inventory (0.6.1 design round applied)
 
 Every screen, tab, dialog, menu and notification the app can show.
 Rendered by `scripts/render_screenshots.py` with staged demo data
@@ -7,52 +7,149 @@ primary audience and its strings run ~40 % longer than English, so
 these are the worst case for layout.
 
 Windows desktop app, PySide6 (Qt Widgets), "Nocturne" theme, dark by
-default, light switchable at runtime. Fixed values in the QSS are
-logical px (DPI-safe).
+default, light switchable at runtime. Sheets load in the order
+`wordmute.qss` → `wordmute-setup.qss` → `wordmute-0.6.1.qss` →
+`wordmute-models.qss` → `wordmute-wordlist-search.qss`.
 
 | # | File | What it is |
 |---|---|---|
-| 00 | `00_queue_empty.png` | Queue tab, empty state — the app's first screen |
-| 01 | `01_queue_running.png` | Queue with 4 cards: done / transcribing / downloading / queued, run bar at the bottom |
-| 02 | `02_queue_log_open.png` | Same, with the «Подробности» log drawer expanded |
-| 03 | `03_queue_setup_panel.png` | Same, with the «Изменить…» panel open (word lists + pass plan chips) |
-| 04 | `04_queue_card_menu.png` | Per-card ⋯ context menu (all items force-enabled for the shot) |
-| 05 | `05_queue_card_menu_language.png` | Its «Язык обработки» submenu (per-video RU/EN profile) |
-| 06 | `06_tab_wordlists.png` | Word Lists tab: list picker, syntax hint, dismissible template note, editor, match tester |
-| 07 | `07_tab_transcript.png` | Transcript tab: cached transcript browser + SRT export |
-| 08 | `08_tab_models.png` | Models tab: Whisper model table, GigaAM cache, disk usage, update/repair buttons |
-| 09 | `09_tab_history.png` | History tab: processed items, ✓/✗ status glyph, files-on-disk glyph (●/◐/○), monthly traffic |
-| 10 | `10_tab_settings.png` | Settings tab: recognition, muting, files/downloads, theme, UI language |
-| 11 | `11_dialog_add_url_single.png` | Add URL — one link, format table fetched by yt-dlp |
-| 12 | `12_dialog_add_url_batch.png` | Add URL — batch mode (one link per line, one quality for all) |
-| 13 | `13_dialog_review.png` | Review dialog (non-modal): interval table, waveform strip, re-render/SRT actions |
-| 14 | `14_dialog_delete_files.png` | Delete-files confirmation (QMessageBox) |
-| 15–22 | `15_wizard_0_intro` … `22_wizard_7_install` | First-run component wizard, all 8 steps: intro → Python → Whisper → yt-dlp → ffmpeg → GigaAM → review → installing |
-| 23 | `23_toast_finished.png` | In-app toast (pyqttoast, Nocturne-styled) |
-| 24–26 | `24_light_queue`, `25_light_settings`, `26_light_history` | Light theme, main screens |
-| 27 | `27_light_wizard_whisper.png` | Light theme, wizard (Whisper step) |
+| 00 | `00_queue_empty.png` | Queue, empty — now a real drop zone (1g) |
+| 01 | `01_queue_empty_drag.png` | The same zone while three files hover over it |
+| 02 | `02_queue_running.png` | Queue with 4 cards: done / transcribing / downloading / queued |
+| 03 | `03_queue_log_open.png` | Same, with the «Подробности» log drawer expanded |
+| 04 | `04_queue_setup_panel.png` | Same, with the «Изменить…» panel open (word lists + pass plan) |
+| 05 | `05_queue_card_menu.png` | Per-card ⋯ menu, themed (1a); destructive rows carry a red trash icon |
+| 06 | `06_queue_card_menu_language.png` | Its «Язык обработки» submenu with our check glyph |
+| 07 | `07_tab_wordlists.png` | Word Lists after 1f + round 4: one toolbar row («?» and the magnifier), one ribbon, the full-width tester row with its verdict |
+| 08 | `08_tab_wordlists_syntax.png` | The syntax legend, now a popover behind «?» |
+| 09 | `09_tab_wordlists_find.png` | The Ctrl+F bar (1a) over the editor: «1 из 14», chevrons, «Совпадения», × |
+| 10 | `10_tab_wordlists_filter.png` | The same bar in filter mode (1b): only matching lines, read-only, footer with «Показать все» |
+| 11 | `11_tab_transcript_empty.png` | Transcript empty state (same shell, `accepts="false"`) |
+| 12 | `12_tab_transcript.png` | Transcript browser with a cached transcript |
+| 13 | `13_tab_models.png` | Models after the regroup: Устройство · one model list (Whisper + GigaAM, download in flight) · Обслуживание as update rows with «Обновить все (N)» |
+| 14 | `14_tab_history.png` | History after 1d: locale dates, no ✓/✗ column, «ошибка» in Заглушено |
+| 15 | `15_tab_settings.png` | Settings after 1e: «100 мс», «1000 Гц» |
+| 16 | `16_dialog_add_url_single.png` | Add URL — one link, format table |
+| 17 | `17_dialog_add_url_batch.png` | Add URL — batch after 1c: input sized to content, host chips, count on the button |
+| 18 | `18_dialog_review.png` | Review dialog: intervals, waveform, re-render/SRT |
+| 19 | `19_dialog_delete_files.png` | Delete confirmation — our own `QDialog#wm_confirm`, not QMessageBox |
+| 20–27 | `20_wizard_0_intro` … `27_wizard_7_install` | Setup wizard, 8 steps; the install page after 1b (docked log, 30px rows) |
+| 28 | `28_toast_finished.png` | In-app toast |
+| 29–31 | `29_light_queue`, `30_light_settings`, `31_light_history` | Light theme, main screens |
+| 32 | `32_light_wordlists_find.png` | Light theme, Word Lists with the find bar open |
+| 33 | `33_light_wizard_whisper.png` | Light theme, wizard |
 
-## Known weak points (candidates for the rework)
+## The seven weak points — what was done
 
-Found while producing this set; none of them are staging artifacts.
+1. **Menus and confirmations (1a)** — `themed_menu()` makes every menu
+   frameless + translucent so the platform rim and native shadow stop
+   leaking around our corners; the sheet owns `::indicator` (check.svg)
+   and `::right-arrow` (chevron-right.svg). Every `QMessageBox` is
+   replaced by `QDialog#wm_confirm`, whose primary button names the
+   action («В Корзину», «Удалить модель», «Прервать»); `qtbase_ru.qm`
+   ships with the app for the native file dialogs.
+   *Deviation:* red TEXT on destructive menu items is impossible in Qt
+   — QSS sub-control selectors read the menu widget's properties, not
+   the QAction's. They carry a red trash icon instead.
+2. **Install page (1b)** — the page left the shared scroll area: head
+   and progress fixed, only the rows scroll, log docked at the bottom
+   (24px disclosure + 118px pane, with Копировать / Открыть файл). Rows
+   are 30px, the percent moved into the row and the moving detail
+   («Сейчас: Whisper · 992 МБ из 1,5 ГБ · 8,2 МБ/с») into the subtitle.
+   With the log closed all six rows fit; open, four of six stay visible
+   (the mock predicted five — our head block is one line taller).
+   The log state is remembered in settings.json, and a failure turns
+   «Прервать» into «Повторить».
+3. **Batch Add-URL (1c)** — the input is sized to its content (3–8
+   lines, then it scrolls) instead of eating the dialog; one chip per
+   host plus a warn chip counting lines that are not links; summary on
+   the left of the footer and the count on the button.
+4. **History dates (1d)** — QLocale, with today/yesterday branches, the
+   full stamp in the tooltip and the ISO string in `Qt.UserRole`.
+5. **Unit suffixes (1e)** — set in `retranslate_ui()` with NBSP and no
+   group separator; sizes and rates go through one locale-aware helper.
+6. **Word Lists (1f)** — three explanatory rows became one toolbar; the
+   legend is a Popup `QFrame` with a two-column grid; the ribbon is one
+   32px line dismissed per list; the tester is one row with the first
+   hit inline and the breakdown in its tooltip.
+7. **Empty states (1g)** — `QFrame#drop_zone` fills the queue page, and
+   a hovering drag repaints it with the accepted-file count; the
+   transcript tab reuses the shell with `accepts="false"`. The muting
+   explanation moved to the Start button's tooltip.
 
-1. **QMenu and QMessageBox are unthemed** (`04`, `05`, `14`) — the card
-   menu and the delete confirmation still use the platform look:
-   flat grey menu, blue system "?" icon, and Qt's standard buttons
-   render as English **Yes/No** in a Russian UI (Qt's own `qtbase_ru`
-   translation is not installed; it also has to be bundled into the
-   frozen build).
-2. **Install page overflows** (`22`) — with the log expanded the page
-   scrolls at the default 920×620 wizard size; the log ends up below
-   the fold exactly when the user wants it.
-3. **Batch Add-URL is mostly empty space** (`12`) — the growing input
-   takes the whole dialog even for four links; the quality row and
-   cookies hint sit far from the eye.
-4. **History dates are English** (`09`) — `16 Aug 22:35` comes from
-   `strftime("%d %b")`, i.e. the C locale, in an otherwise Russian UI.
-5. **Unit suffixes stay English** (`10`) — «100 ms», «1000 Hz» instead
-   of мс / Гц.
-6. **Word Lists tab is dense** (`06`) — three stacked explanatory rows
-   (syntax legend, template note, tester hint) before the editor.
-7. **Empty queue and empty transcript have no visual anchor** (`00`,
-   `07`) — large blank areas, drop target not obvious.
+## Second live round (real-app feedback)
+
+Fixes after the user ran the branch: host chips are true pills with the
+mock's 5px dot (Qt silently draws SQUARE corners when border-radius
+exceeds half the widget height — the chips needed a fixed 28px height);
+a wrapping FlowLayout keeps many chips from clipping the warning; the
+warning and the footer count use real Russian plurals («1 строка не
+похожа…» / «5 строк не похожи…») via the new `tr_plural()`; Enter adds
+a line in batch mode and pastes land on their own line, so hand-typing
+a link into a list works; the batch input opens at its full 10-line
+height; the footer is [summary] … [Отмена] [Добавить N в очередь]; the
+single-link window implements mock 2b (darker list tail, fading
+end-of-list line, «Это все форматы…», pinned «Выбрано: …» row); the «?»
+popover closes on the second click; the queue and transcript empty
+states use the mock's SVG icons; the tester input carries the mock's
+magnifier and placeholder.
+
+## Third round: the Models tab regroup + native title bar
+
+`models-tab-handoff.md` implemented in full: three group cards; the
+device line gets a warn state with «Открыть настройки →» (no more
+dead end); Whisper and GigaAM share ONE list with catalogue sizes
+before download, an in-row indeterminate bar with «Отменить» (the
+download runs as a subprocess so it can actually be killed), and a ⋯
+menu instead of red buttons; disk usage is a stacked bar; the update
+check is a list of rows (↑ new / ✓ up to date / ⚠ could not check /
+not installed → «Установить») with one button that morphs «Проверить
+обновления» → «Обновить все (N)», the last result remembered in
+settings.json and re-shown on open; the footer has «Доустановить
+компоненты…» and the red «Починить компоненты…» link whose
+confirmation lists what survives. The check targets `onnx-asr` now, so
+onnx installs stop reading as «gigaam: не установлен».
+
+The in-app «WordMute» header strip is gone: the OS title bar is the
+header, painted in the theme's chrome colors through DWM (caption,
+text and border; follows live theme switches; every dialog gets it on
+show). The tab scrolls as a whole — its groups outgrow a 760px window.
+
+*Deviation:* «Обновить все (N)» counts packages and models only; the
+app itself is a separate «Скачать» (it needs the installer), so the
+mock's «(2) · 17 МБ» reads «(1)» when only yt-dlp is stale. VRAM shows
+whole gigabytes («8 ГБ»), not the byte-exact 7,6.
+
+## Fourth round: Word Lists search + the tester row
+
+`wordlist-search-handoff.md`, option 1a with 1b: a floating find bar
+in the editor's top-right corner (Ctrl+F, the toolbar magnifier, a
+single-word selection prefills it; Esc closes; Enter/F3 next,
+Shift+Enter/Shift+F3 previous, wrap-around; «1 из 14» / «нет
+совпадений» with the search-vs-tester tooltip). Matching is substring,
+case-insensitive and ё = е like everything else in the app; matches
+are `QTextCharFormat` extra selections merged with the comment dimming
+(highlights are capped at 2000 — the count stays exact). «Совпадения»
+hides every non-matching line (block visibility), makes the editor
+read-only and shows the footer «показаны 14 из 4559 — фильтр по «апо»
+· редактирование выключено · Показать все»; closing the bar or «Показать
+все» restores everything. Typing in the bar scrolls the first match
+into view; edits in the editor recount without moving the caret.
+
+The tester is one full-width row now: check-circle icon, borderless
+input, verdict «заглушится ← колдова*» (accent text, monospace
+pattern, accent border — also while the input has focus) or «не
+заглушится — совпадений нет» (muted, never red), «· ещё в 1 списке»
+when another saved list hits too; the per-list breakdown is the row's
+tooltip. The «?» and magnifier are the mock's 24px boxes (the base
+QToolButton padding had inflated «?»).
+
+## Deliberate deviations from the handoff
+
+- State lives in the app's `settings.json` (`%APPDATA%\WordMute`), not
+  in `QSettings` — the wizard, the log dock and the per-list ribbon
+  dismissal all use the existing store.
+- i18n uses the app's own `tr()` dictionary rather than Qt `.qm`
+  catalogs; `qtbase_ru.qm` is loaded only for Qt's own dialogs.
+- Counts now resolve real Russian plural forms through `tr_plural()`
+  (one/few/many); the earlier plural-dodging phrasing is gone.

@@ -64,6 +64,19 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   button height), item widgets follow item sizeHint (QueueList syncs to
   viewport width), setItemWidget widgets die on drag-move (rebuild on
   rowsMoved), screenshots need show()+processEvents before grab.
+- INVIOLABLE thread rule: every QThread worker starts via
+  ui/threads.start_thread(owner, thread) and close-time waits go
+  through wait_thread(). A parentless QThread whose last Python ref is
+  dropped in its result slot (`self._worker = None`) is deleted while
+  Qt still counts it running → qFatal "QThread: Destroyed while thread
+  is still running" → the app vanishes with exit 0xC0000409, no
+  traceback. Reproduced on «Проверить обновления»; tests/test_threads.py
+  guards it. Second door, same abort: a close-time wait that times out
+  and then destroys the owner — close paths cancel first, wait briefly,
+  and hand stragglers to detach_thread(); main() collects them after
+  app.exec() and os._exit()s if any is still running. QDialog.reject()
+  (Esc) skips closeEvent — dialogs that own threads override reject()
+  to call close(); a dialog run with exec() releases threads in done().
 
 ## Commands
 - Tests: `python -m pytest tests` (150+, all offscreen/stubbed, no
@@ -81,7 +94,10 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   shadows the runtime fallback — yt-dlp broke on html.parser without
   this) and excludes all engine packages. Frozen diagnostics:
   `$env:WORDMUTE_RUNTIME_REPORT="r.json"; WordMute.exe` writes status
-  + import probes; `WORDMUTE_SMOKE=1` = start-and-exit smoke test.
+  + import probes; `WORDMUTE_SMOKE=1` = start-and-exit smoke test. Crash log (0.7.0+):
+  %APPDATA%\WordMute\wordmute.log — Qt messages, Python tracebacks from
+  every thread, faulthandler dumps; Настройки → «Открыть папку
+  журнала». Ask for it first when «the window just disappeared».
   docs/INSTALL_GUIDE.md ships in the installer — bilingual: RU user
   steps + EN "For the AI assistant" support brief (hosts, pitfalls,
   clean-retry = delete runtime dir). Keep it in sync with

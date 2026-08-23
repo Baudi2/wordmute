@@ -23,6 +23,10 @@ def _make_env(root, packages=(), ffmpeg=False, pip=True):
         (site / "pip").mkdir()
     for p in packages:
         (site / p).mkdir()
+        # an install = the package dir AND pip's dist-info RECORD
+        info = site / f"{p}-1.0.dist-info"
+        info.mkdir()
+        (info / "RECORD").write_text("", encoding="utf-8")
     if ffmpeg:
         (root / "ffmpeg").mkdir()
         (root / "ffmpeg" / "ffmpeg.exe").touch()

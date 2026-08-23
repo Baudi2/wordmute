@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
-    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -35,8 +34,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import config, gpu, models, runtime_env
+from ..core import config, gpu, models, proc, runtime_env
+from .dialogs import confirm
+from .formats import fmt_bytes, fmt_rate
 from .i18n import current_language, set_language, tr
+from .threads import detach_thread, start_thread, wait_thread
 
 STEP_KEYS = ("intro", "python", "whisper", "ytdlp", "ffmpeg", "gigaam",
              "review", "install")
@@ -82,11 +84,19 @@ class SetupWorker(QThread):
         super().__init__(parent)
         self._steps = steps  # [(stage_name, callable), ...]
         self._cancelled = False
+        self._ident = None
 
     def cancel(self):
         self._cancelled = True
+        # pip prints nothing while a wheel downloads, so the flag alone
+        # was not seen for minutes («Cancelling…» forever); kill the
+        # child, its read loop ends at once
+        if self._ident is not None:
+            proc.kill_child_of(self._ident)
 
     def run(self):
+        import threading
+        self._ident = threading.get_ident()
         try:
             for name, step in self._steps:
                 self.stage.emit(name)
@@ -158,20 +168,36 @@ class SelectCard(QFrame):
 
 
 class SetupDialog(QDialog):
-    def __init__(self, parent=None, first_run: bool = True):
+    def __init__(self, parent=None, first_run: bool = True,
+                 settings: dict = None):
         super().__init__(parent)
         self.setObjectName("setup_wizard")
         self.setWindowTitle(tr("WordMute components"))
         self.setModal(True)
-        self.resize(920, 620)
-        self.setMinimumSize(820, 560)
+        # clamped to the screen: on a 1366×768 laptop at 125 % the
+        # 620-px dialog hid its only «Next» button behind the taskbar
+        from PySide6.QtGui import QGuiApplication
+        screen = QGuiApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen else None
+        width = min(920, avail.width() - 24) if avail else 920
+        height = min(620, avail.height() - 48) if avail else 620
+        self.resize(max(width, 640), max(height, 480))
+        self.setMinimumSize(min(820, max(width, 640)),
+                            min(560, max(height, 480)))
         self._first_run = first_run
         self._worker = None
         self._done = False
-        self._settings = config.load_settings()
+        # the main window's live dict when opened from the Models tab:
+        # a private copy was written back wholesale by whoever saved
+        # last, reverting the model/device chosen here
+        self._settings = (settings if settings is not None
+                          else config.load_settings())
         self._status = runtime_env.status()
         self._gpus = gpu.detect_gpus()
         self._rows = {}          # component key -> install row widgets
+        self._active_row = None  # component currently downloading
+        self._stage_started = None   # (monotonic, bytes) for the rate
+        self._failed = False
         self._step = 0
         self._steps = list(STEP_KEYS)
 
@@ -318,7 +344,14 @@ class SetupDialog(QDialog):
         self.cpu_radio = QRadioButton(tr("CPU only"))
         for radio in (self.gpu_radio, self.cpu_radio):
             self.device_group.addButton(radio)
-        (self.gpu_radio if self._gpus else self.cpu_radio).setChecked(True)
+        # the saved choice first — re-entering the wizard on a laptop
+        # that had chosen «CPU only» used to flip the device back to
+        # cuda from GPU detection alone; detection only decides when
+        # nothing was chosen yet
+        saved = s.get("device") if st["faster_whisper"] else None
+        use_gpu = (saved == "cuda") if saved in ("cuda", "cpu") \
+            else bool(self._gpus)
+        (self.gpu_radio if use_gpu else self.cpu_radio).setChecked(True)
 
         self.model_group = QButtonGroup(self)
         self.model_radios = {}
@@ -357,7 +390,7 @@ class SetupDialog(QDialog):
             ("whisper", "Whisper", device, self._whisper_mb(),
              self.whisper_check.isChecked()),
             ("whisper_model", tr("Recognition model"), model, model_mb,
-             self.whisper_check.isChecked() or not st["faster_whisper"]),
+             self._needs_model(model, st)),
             ("ytdlp", "yt-dlp", tr("downloads by link"), YTDLP_MB,
              self.ytdlp_check.isChecked()),
             ("ffmpeg", "ffmpeg", tr("audio and video"), FFMPEG_MB,
@@ -507,6 +540,17 @@ class SetupDialog(QDialog):
         return holder
 
     def _make_page(self, key):
+        if key == "install":
+            # design 1b: the install page owns its own layout — inside
+            # the shared scroll area the log was just more flow content
+            # and fell below the fold exactly when it was opened
+            page = QWidget()
+            page.setObjectName("install_page")
+            box = QVBoxLayout(page)
+            box.setContentsMargins(24, 20, 24, 16)
+            box.setSpacing(12)
+            self._page_install(box)
+            return page
         scroll, box = self._page_shell()
         builder = getattr(self, f"_page_{key}")
         builder(box)
@@ -733,7 +777,7 @@ class SetupDialog(QDialog):
             free = shutil.disk_usage(target).free
         except OSError:
             return "—"
-        return models.fmt_size(free)
+        return fmt_bytes(free)
 
     def _page_install(self, box):
         head = QHBoxLayout()
@@ -750,15 +794,36 @@ class SetupDialog(QDialog):
         self.install_percent = QLabel("0%")
         self.install_percent.setObjectName("install_percent")
         head.addWidget(self.install_percent, alignment=Qt.AlignTop)
-        box.addLayout(head)
+        head_widget = QWidget()
+        head_widget.setObjectName("install_head")
+        head_widget.setLayout(head)
+        head.setContentsMargins(0, 0, 0, 0)
+        box.addWidget(head_widget)
         self.total_progress = QProgressBar()
         self.total_progress.setObjectName("total_progress")
         self.total_progress.setTextVisible(False)
         self.total_progress.setRange(0, 0)
         box.addWidget(self.total_progress)
-        self.rows_box = QVBoxLayout()
-        self.rows_box.setSpacing(7)
-        box.addLayout(self.rows_box)
+
+        # only the rows scroll; the dock below keeps its height
+        rows_scroll = QScrollArea()
+        rows_scroll.setObjectName("install_rows_scroll")
+        rows_scroll.setWidgetResizable(True)
+        rows_scroll.setFrameShape(QFrame.NoFrame)
+        rows_host = QWidget()
+        self.rows_box = QVBoxLayout(rows_host)
+        self.rows_box.setContentsMargins(0, 0, 0, 0)
+        self.rows_box.setSpacing(4)
+        rows_scroll.setWidget(rows_host)
+        box.addWidget(rows_scroll, stretch=1)
+
+        dock = QWidget()
+        dock.setObjectName("log_dock")
+        dock_box = QVBoxLayout(dock)
+        dock_box.setContentsMargins(0, 0, 0, 0)
+        dock_box.setSpacing(6)
+        disclosure = QHBoxLayout()
+        disclosure.setSpacing(10)
         self.log_toggle = QToolButton()
         self.log_toggle.setObjectName("log_toggle")
         self.log_toggle.setText(tr("Installation log"))
@@ -768,16 +833,57 @@ class SetupDialog(QDialog):
         self.log_toggle.toggled.connect(
             lambda on: self.log_toggle.setArrowType(
                 Qt.DownArrow if on else Qt.RightArrow))
-        box.addWidget(self.log_toggle, alignment=Qt.AlignLeft)
+        disclosure.addWidget(self.log_toggle)
+        disclosure.addStretch()
+        # the two reasons anyone opens the log: paste it somewhere, or
+        # dig through the whole thing in an editor
+        self.log_copy = QToolButton()
+        self.log_copy.setObjectName("log_copy")
+        self.log_copy.setText(tr("Copy"))
+        self.log_copy.clicked.connect(self._copy_log)
+        disclosure.addWidget(self.log_copy)
+        self.log_open = QToolButton()
+        self.log_open.setObjectName("log_open")
+        self.log_open.setText(tr("Open file"))
+        self.log_open.clicked.connect(self._open_log_file)
+        disclosure.addWidget(self.log_open)
+        dock_box.addLayout(disclosure)
         self.log = QPlainTextEdit()
         self.log.setObjectName("setup_log")
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(500)
         self.log.setVisible(False)
         self.log_toggle.toggled.connect(self.log.setVisible)
-        box.addWidget(self.log, stretch=1)
+        self.log_toggle.toggled.connect(self._remember_log_state)
+        for widget in (self.log_copy, self.log_open):
+            widget.setVisible(False)
+            self.log_toggle.toggled.connect(widget.setVisible)
+        dock_box.addWidget(self.log)
+        box.addWidget(dock)
         self.install_note = self._note(box, "", "error")
         self.install_note.setVisible(False)
+        self.log_toggle.setChecked(
+            bool(self._settings.get("setup_log_expanded")))
+
+    # ------------------------------------------------------- install log
+    def _remember_log_state(self, expanded: bool):
+        self._settings["setup_log_expanded"] = bool(expanded)
+        config.save_settings(self._settings)
+
+    def _copy_log(self):
+        from PySide6.QtWidgets import QApplication
+        QApplication.clipboard().setText(self.log.toPlainText())
+        self.log_copy.setText(tr("Copied"))
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(1500, lambda: self.log_copy.setText(tr("Copy")))
+
+    def _open_log_file(self):
+        """The log lives only in memory while setup runs — write it out
+        so it can be read, mailed or pasted after the fact."""
+        import os
+        path = config.data_dir() / "setup-log.txt"
+        path.write_text(self.log.toPlainText(), encoding="utf-8")
+        os.startfile(str(path))
 
     def _refresh_install_rows(self):
         while self.rows_box.count():
@@ -789,16 +895,20 @@ class SetupDialog(QDialog):
             row = QFrame()
             row.setProperty("installRow", True)
             row.setProperty("state", "todo" if on else "skipped")
+            # 30px rows (design 1b): the moving detail — file, size,
+            # speed — lives in #install_sub, so a row only needs its
+            # name, a hairline bar and a state word
+            row.setFixedHeight(30)   # QSS asks for it; make it exact
             line = QHBoxLayout(row)
-            line.setContentsMargins(12, 9, 12, 9)
+            line.setContentsMargins(12, 4, 12, 4)
             line.setSpacing(10)
             icon = QLabel("+" if on else "✕")
             icon.setObjectName("row_icon")
-            icon.setFixedWidth(16)
+            icon.setFixedWidth(13)
             line.addWidget(icon)
             name = QLabel(label)
             name.setObjectName("row_name")
-            name.setFixedWidth(190)
+            name.setFixedWidth(168)
             if not on:
                 name.setProperty("state", "skip")
             line.addWidget(name)
@@ -810,7 +920,7 @@ class SetupDialog(QDialog):
             line.addWidget(bar, stretch=1)
             state = QLabel(tr("waiting") if on else tr("skipped"))
             state.setObjectName("row_state")
-            state.setFixedWidth(132)
+            state.setFixedWidth(104)
             state.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             line.addWidget(state)
             self.rows_box.addWidget(row)
@@ -867,6 +977,7 @@ class SetupDialog(QDialog):
         self.btn_next.setText(
             tr("Install") if key == "review"
             else tr("Start working") if self._done
+            else tr("Retry") if installing and self._failed
             else tr("Abort") if installing else tr("Next"))
         self.btn_next.setProperty("danger", installing and not self._done)
         self.btn_next.style().unpolish(self.btn_next)
@@ -885,6 +996,11 @@ class SetupDialog(QDialog):
         elif key == "install":
             if self._done:
                 self.accept()
+            elif self._failed:
+                self._failed = False        # retry the whole plan
+                self.install_note.setVisible(False)
+                self._install()
+                self.set_step(self._step)
             else:
                 self._cancel_clicked()
         else:
@@ -923,6 +1039,16 @@ class SetupDialog(QDialog):
         self.set_step(self._step)
 
     # ---------------------------------------------------------- install
+    def _needs_model(self, model: str, st: dict) -> bool:
+        """Also when the chosen model's cache is incomplete: a download
+        stopped half-way read as «downloaded» and the wizard never
+        offered it again (snapshot_download resumes what is there)."""
+        if self.whisper_check.isChecked() or not st["faster_whisper"]:
+            return True
+        repo = models.WHISPER_REPOS.get(model)
+        return bool(repo) and not models.model_cache_complete(
+            models.repo_cache_dir(repo))
+
     def _build_steps(self):
         """[(stage key, callable)] for the worker, in download order."""
         st = runtime_env.status()
@@ -946,7 +1072,7 @@ class SetupDialog(QDialog):
         if packages:
             steps.append(("whisper", _packages_step(packages)))
         # model weights download HERE, not on the first video
-        if self.whisper_check.isChecked() or not st["faster_whisper"]:
+        if self._needs_model(model, st):
             steps.append(("whisper_model",
                           _wrap(runtime_env.install_whisper_model,
                                 model_name=model)))
@@ -967,6 +1093,10 @@ class SetupDialog(QDialog):
             return
         self._save_choices()
         self.total_progress.setRange(0, 0)
+        # switching the language rebuilds every page, including the
+        # live install page — its progress slots would then target
+        # deleted widgets
+        self.lang_button.setEnabled(False)
         self._worker = SetupWorker(steps)
         self._worker.log_line.connect(self.log.appendPlainText)
         self._worker.stage.connect(self._on_stage)
@@ -976,24 +1106,56 @@ class SetupDialog(QDialog):
                 tr("done")))
         self._worker.progress.connect(self._on_progress)
         self._worker.finished_ok.connect(self._on_finished)
-        self._worker.start()
+        start_thread(self, self._worker)
 
     def _on_stage(self, key: str):
         row_key = key if key in self._rows else "gigaam"
+        self._active_row = row_key
+        self._stage_started = None
         self._set_row_state(row_key, "run", tr("downloading…"))
-        self.install_sub.setText(tr("Installing: {}").format(key))
+        self.install_sub.setText(tr("Now: {}").format(self._row_label(row_key)))
+
+    def _row_label(self, key: str) -> str:
+        for row_key, label, _sub, _mb, _on in self._plan():
+            if row_key == key:
+                return label
+        return key
 
     def _on_progress(self, done: int, total: int):
-        if total:
-            pct = int(done / total * 100)
-            self.total_progress.setRange(0, 100)
-            self.total_progress.setValue(pct)
-            self.install_percent.setText(f"{pct}%")
-        else:
+        if not total:
             self.total_progress.setRange(0, 0)
+            return
+        pct = int(done / total * 100)
+        self.total_progress.setRange(0, 100)
+        self.total_progress.setValue(pct)
+        self.install_percent.setText(f"{pct}%")
+        # the row keeps just the percent; what is moving (component,
+        # bytes, speed) reads better on one line under the title
+        entry = self._rows.get(self._active_row)
+        if entry:
+            entry[2].setRange(0, 100)
+            entry[2].setValue(pct)
+            entry[3].setText(f"{pct}%")
+        self.install_sub.setText(self._progress_line(done, total))
+
+    def _progress_line(self, done: int, total: int) -> str:
+        """«Сейчас: Whisper · 1,0 из 1,6 ГБ · 8,2 МБ/с»"""
+        import time
+        parts = [tr("Now: {}").format(self._row_label(self._active_row)),
+                 tr("{} of {}").format(fmt_bytes(done), fmt_bytes(total))]
+        now = time.monotonic()
+        if self._stage_started is None:
+            self._stage_started = (now, done)
+        elapsed = now - self._stage_started[0]
+        if elapsed > 1.5:
+            rate = fmt_rate((done - self._stage_started[1]) / elapsed)
+            if rate:
+                parts.append(rate)
+        return " · ".join(parts)
 
     def _on_finished(self, ok: bool, message: str):
         self._worker = None
+        self.lang_button.setEnabled(True)
         if ok:
             runtime_env.activate()
             self._done = True
@@ -1004,13 +1166,17 @@ class SetupDialog(QDialog):
                 tr("Done — everything is installed and ready."))
             self.install_note.setVisible(False)
         else:
+            self._failed = True
             self.install_note.label.setText(
                 tr("Setup failed: {}").format(message))
             self.install_note.setVisible(True)
             self.log.appendPlainText(message)
-            for key, entry in self._rows.items():
-                if entry[2].text() == tr("downloading…"):
-                    self._set_row_state(key, "err", tr("failed"))
+            # the row that was running is the one that failed — entry[3]
+            # is the state label (entry[2] is the bar, whose text() is a
+            # percent, so this comparison never matched before)
+            if self._active_row in self._rows:
+                self._set_row_state(self._active_row, "err", tr("failed"))
+            self.install_sub.setText(tr("Setup stopped — see the log."))
         self.set_step(self._step)
 
     def _save_choices(self):
@@ -1033,19 +1199,32 @@ class SetupDialog(QDialog):
 
     def _cancel_clicked(self):
         if self._worker is not None:
-            if QMessageBox.question(
-                    self, "WordMute",
-                    tr("Stop the installation? Downloaded parts are "
-                       "kept and setup resumes next time.")) \
-                    != QMessageBox.StandardButton.Yes:
+            if not confirm(self, title=tr("Stop the installation?"),
+                           body=tr("Downloaded parts are kept and setup "
+                                   "resumes next time."),
+                           ok_text=tr("Stop installing")):
                 return
             self._worker.cancel()
             self.install_sub.setText(tr("Cancelling…"))
             return
         (self.accept if self._done else self.reject)()
 
+    def reject(self):
+        """Esc goes through QDialog.reject(), which skips closeEvent:
+        the wizard vanished, pip kept installing headless and the
+        dialog was destroyed under its running thread (process abort).
+        One path owns closing."""
+        self.close()
+
     def closeEvent(self, event):
         if self._worker is not None:
+            if not confirm(self, title=tr("Stop the installation?"),
+                           body=tr("Downloaded parts are kept and setup "
+                                   "resumes next time."),
+                           ok_text=tr("Stop installing")):
+                event.ignore()
+                return
             self._worker.cancel()
-            self._worker.wait(30000)
+            if not wait_thread(self._worker, 10000):
+                detach_thread(self._worker)   # never dies with the dialog
         event.accept()

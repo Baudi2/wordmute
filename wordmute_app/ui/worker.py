@@ -8,18 +8,33 @@ processing. Only one worker runs at a time (the engine's reporter is
 module-global)."""
 
 import dataclasses
+import sys
 import threading
 import time
+import traceback
 
 from PySide6.QtCore import QThread, Signal
 
 from ..core import downloader, history, review
+from .i18n import tr
 from ..engine import wordmute as engine
 
 
 class JobCancelled(Exception):
     pass
 
+
+
+def humanize_download_error(text: str) -> str:
+    """Attach a fix to the errors users can actually act on. A bare
+    «HTTP Error 403: Forbidden» made a real user conclude YouTube
+    downloads were dead — the actual cure was updating yt-dlp."""
+    if "403" in text and "forbidden" in text.lower():
+        return (text + " — " +
+                tr("this usually means yt-dlp needs updating: Models "
+                   "tab → Check for updates → Update all, then restart "
+                   "the app. Retrying once also sometimes helps."))
+    return text
 
 class _DownloadPump(threading.Thread):
     """Downloads every URL item in queue order, back to back. Each
@@ -102,6 +117,8 @@ class ProcessWorker(QThread):
             self._cur_engine = data["engine"]
         elif event == "match_found":
             self._record_intervals(data["intervals"])
+        elif event == "mute_done":
+            self._wrote_output = True
         self._time_stage(event, data)
         self.engine_event.emit(event, data)
 
@@ -201,27 +218,70 @@ class ProcessWorker(QThread):
         except OSError:
             pass  # history must never break processing
 
+    def _finish(self, index: int, ok: bool, message: str):
+        self._finished.add(index)
+        self.file_finished.emit(index, ok, message)
+
+    def _output_path(self, path, total: int, used: set):
+        out = engine.output_for(path, self._output_dir, multi=total > 1)
+        if self._output_dir is not None:
+            # folder mode keys the output by file name alone: two
+            # «01.mp4» from different folders (Season 1 / Season 2)
+            # silently overwrote each other's result and review sidecar
+            base, n = out, 2
+            while out in used:
+                out = base.with_name(f"{path.stem} ({n}).clean{path.suffix}")
+                n += 1
+        used.add(out)
+        return out
+
     def run(self):
-        engine.set_reporter(self._report)
+        # the engine reporter is process-global. Route by thread: our
+        # own events come here, anything another thread raises (a
+        # review re-render that was already running when Start was
+        # pressed) keeps flowing to whatever was installed before —
+        # replacing it outright sent the re-render's progress onto the
+        # active card and Cancel killed the re-render
+        prev = engine._reporter
+        ident = threading.get_ident()
+
+        def reporter(event, data):
+            if threading.get_ident() == ident:
+                self._report(event, data)
+            elif prev is not None:
+                prev(event, data)
+
+        engine.set_reporter(reporter)
         done = 0
         total = len(self._items)
-        url_jobs = [(i, item) for i, item in enumerate(self._items)
-                    if item.kind == "url"]
-        pump = _DownloadPump(self, url_jobs) if url_jobs else None
-        if pump is not None:
-            pump.start()
-
-        # output_for treats an out path as a file unless it's an existing
-        # directory, so a configured output folder must exist up front
-        if self._output_dir is not None:
-            self._output_dir.mkdir(parents=True, exist_ok=True)
+        self._finished = set()
+        used_outputs = set()
+        pump = None
         try:
+            # output_for treats an out path as a file unless it's an
+            # existing directory, so a configured output folder must
+            # exist up front — and an unreachable one (unplugged drive,
+            # a typo) must fail visibly: an exception escaping run()
+            # left the window stuck in «running» with no reason shown
+            if self._output_dir is not None:
+                try:
+                    self._output_dir.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    raise RuntimeError(
+                        tr("Output folder is not available: {}")
+                        .format(exc)) from exc
+            url_jobs = [(i, item) for i, item in enumerate(self._items)
+                        if item.kind == "url"]
+            pump = _DownloadPump(self, url_jobs) if url_jobs else None
+            if pump is not None:
+                pump.start()
             for i, item in enumerate(self._items):
                 if self._cancelled:
-                    self.file_finished.emit(i, False, "cancelled")
+                    self._finish(i, False, "cancelled")
                     continue
                 self.file_started.emit(i, item.display_name)
                 self._records = []
+                self._wrote_output = False
                 self._cur_pass = 1
                 dl_bytes = 0
                 item_t0 = time.monotonic()
@@ -247,37 +307,58 @@ class ProcessWorker(QThread):
                             dl_bytes = path.stat().st_size
                         except OSError:
                             dl_bytes = 0
-                    out = engine.output_for(path, self._output_dir,
-                                            multi=total > 1)
+                    out = self._output_path(path, total, used_outputs)
                     engine.process_file(path, out, wordlist,
                                         options, plan)
                 except (JobCancelled, downloader.DownloadCancelled):
                     self._log_history(item, "cancelled", "", source=path,
                                       dl_bytes=dl_bytes,
                                       stages=self._finish_timing(i, item_t0))
-                    self.file_finished.emit(i, False, "cancelled")
+                    self._finish(i, False, "cancelled")
                 except Exception as exc:
-                    self._log_history(item, "error", str(exc), source=path,
+                    message = humanize_download_error(str(exc))
+                    self._log_history(item, "error", message, source=path,
                                       dl_bytes=dl_bytes,
                                       stages=self._finish_timing(i, item_t0))
-                    self.file_finished.emit(i, False, str(exc))
+                    self._finish(i, False, message)
                 else:
                     done += 1
-                    if out.exists():  # nothing muted -> no output file
+                    # only what THIS run wrote counts: a .clean file
+                    # left by an earlier run (older word list) used to
+                    # be presented as this run's result when nothing
+                    # matched now
+                    if self._wrote_output:
                         self.engine_event.emit("item_output",
                                                {"path": str(out)})
                     if self._records:  # something was muted -> reviewable
-                        rp = review.save_review(path, out, self._options.pad,
-                                                self._records,
-                                                beep_hz=self._options.beep_hz)
-                        self.engine_event.emit("review_saved",
-                                               {"path": str(rp)})
-                    self._log_history(item, "ok", "", output=out,
+                        try:
+                            rp = review.save_review(
+                                path, out, self._options.pad, self._records,
+                                beep_hz=self._options.beep_hz)
+                        except OSError as exc:   # the item itself is fine
+                            print(f"review sidecar not written: {exc}",
+                                  file=sys.stderr)
+                        else:
+                            self.engine_event.emit("review_saved",
+                                                   {"path": str(rp)})
+                    self._log_history(item, "ok", "",
+                                      output=out if self._wrote_output
+                                      else None,
                                       source=path, dl_bytes=dl_bytes,
                                       stages=self._finish_timing(i, item_t0))
-                    self.file_finished.emit(i, True, "")
+                    self._finish(i, True, "")
+        except Exception as exc:
+            # a run-level failure ends every item that has no verdict yet
+            # instead of escaping run() — that killed the thread before
+            # the finally, with all_finished never emitted
+            print(traceback.format_exc(), file=sys.stderr)
+            message = humanize_download_error(str(exc))
+            for i in range(total):
+                if i not in self._finished:
+                    self._finish(i, False, message)
         finally:
             if pump is not None:  # cancel mid-run: let it wind down
                 pump.join()
-            engine.set_reporter(None)
+            if engine._reporter is reporter:   # still ours: hand back
+                engine.set_reporter(prev)
             self.all_finished.emit(done, total)

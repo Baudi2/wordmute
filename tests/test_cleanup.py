@@ -139,7 +139,8 @@ def test_related_files_skips_missing(tmp_path):
                                  include_output=True) == []
 
 
-def test_history_tab_delete_actions(qapp, tmp_path, monkeypatch, processed):
+def test_history_tab_delete_actions(qapp, tmp_path, monkeypatch, processed,
+                                    confirm_yes):
     src, out = processed
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     from wordmute_app.core import history
@@ -158,9 +159,6 @@ def test_history_tab_delete_actions(qapp, tmp_path, monkeypatch, processed):
 
     recycled = []
     monkeypatch.setattr(cleanup, "send_to_recycle_bin", recycled.extend)
-    from PySide6.QtWidgets import QMessageBox
-    monkeypatch.setattr(QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.StandardButton.Yes)
     tab._delete_row_files(0, include_output=False)
     assert {f.name for f in recycled} == {
         "v.mp4", "v.mp4.words.json", "v.mp4.gigaam.words.json",
@@ -205,13 +203,11 @@ def test_history_tab_shows_files_glyph(qapp, tmp_path, monkeypatch,
 
 
 def test_confirm_declined_deletes_nothing(qapp, monkeypatch, processed):
+    """no_modal_dialogs answers Cancel by default — nothing is touched."""
     src, out = processed
     from wordmute_app.ui import file_delete
-    from PySide6.QtWidgets import QMessageBox
 
     recycled = []
     monkeypatch.setattr(cleanup, "send_to_recycle_bin", recycled.extend)
-    monkeypatch.setattr(QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.StandardButton.No)
     assert not file_delete.confirm_and_recycle(None, [src])
     assert recycled == []

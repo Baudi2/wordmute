@@ -70,6 +70,10 @@ _FOF_SILENT = 0x0004
 _FOF_NOCONFIRMATION = 0x0010
 _FOF_ALLOWUNDO = 0x0040
 _FOF_NOERRORUI = 0x0400
+# network shares and exFAT/FAT removable drives have no Recycle Bin:
+# there ALLOWUNDO is silently ignored and the file is destroyed. This
+# flag partially overrides NOCONFIRMATION so the shell warns first.
+_FOF_WANTNUKEWARNING = 0x4000
 
 
 class _SHFILEOPSTRUCTW(ctypes.Structure):
@@ -98,7 +102,8 @@ def send_to_recycle_bin(paths) -> None:
     joined = "\0".join(str(Path(p).resolve()) for p in paths) + "\0"
     op = _SHFILEOPSTRUCTW(
         None, _FO_DELETE, joined, None,
-        _FOF_ALLOWUNDO | _FOF_NOCONFIRMATION | _FOF_SILENT | _FOF_NOERRORUI,
+        _FOF_ALLOWUNDO | _FOF_NOCONFIRMATION | _FOF_SILENT | _FOF_NOERRORUI
+        | _FOF_WANTNUKEWARNING,
         0, None, None)
     code = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
     if code or op.fAnyOperationsAborted:

@@ -98,7 +98,6 @@ class SettingsTab(QWidget):
         self.pad_spin = QSpinBox()
         self.pad_spin.setRange(0, 1000)
         self.pad_spin.setSingleStep(10)
-        self.pad_spin.setSuffix(" ms")
         self.pad_spin.setValue(settings["pad_ms"])
         self.pad_spin.setToolTip(
             tr("Extra silence around each muted word; never bleeds into "
@@ -117,7 +116,6 @@ class SettingsTab(QWidget):
         self.beep_spin = QSpinBox()
         self.beep_spin.setRange(200, 4000)
         self.beep_spin.setSingleStep(100)
-        self.beep_spin.setSuffix(" Hz")
         self.beep_spin.setValue(settings.get("beep_hz", 0) or 1000)
         self.beep_spin.setEnabled(self.beep_check.isChecked())
         self.beep_check.toggled.connect(self.beep_spin.setEnabled)
@@ -202,6 +200,17 @@ class SettingsTab(QWidget):
         ui_lang_row.addWidget(restart_note)
         ui_lang_row.addStretch()
         files_form.addRow(tr("Interface language:"), ui_lang_row)
+
+        # the crash log (main._install_crash_log) is what to send when
+        # «the window just disappeared» — make it reachable
+        log_row = QHBoxLayout()
+        log_button = QPushButton(tr("Open log folder"))
+        log_button.setToolTip(tr("wordmute.log — attach it when "
+                                 "reporting a problem."))
+        log_button.clicked.connect(self._open_log_folder)
+        log_row.addWidget(log_button)
+        log_row.addStretch()
+        files_form.addRow(tr("Diagnostics:"), log_row)
         outer.addWidget(files_box)
 
         self.saved_label = QLabel("")
@@ -215,6 +224,7 @@ class SettingsTab(QWidget):
         self._saved_timer.timeout.connect(
             lambda: self.saved_label.setText(""))
 
+        self.retranslate_ui()
         self._loading = False
         for signal in (
             self.model_combo.currentTextChanged,
@@ -235,22 +245,59 @@ class SettingsTab(QWidget):
         ):
             signal.connect(self._apply)
 
+    def reload(self):
+        """Re-read the fields another writer shares with us (the
+        component wizard picks model/device/language into the same
+        dict): the widgets must follow, or the next keystroke here
+        writes their stale values back over the wizard's choice."""
+        self._loading = True
+        try:
+            s = self._settings
+            if s.get("model") in WHISPER_MODELS:
+                self.model_combo.setCurrentText(s["model"])
+            if s.get("gigaam_model") in GIGAAM_MODELS:
+                self.gigaam_combo.setCurrentText(s["gigaam_model"])
+            if s.get("device") in ("cuda", "cpu"):
+                self.device_combo.setCurrentText(s["device"])
+            index = self.ui_language_combo.findData(s.get("ui_language"))
+            if index >= 0:
+                self.ui_language_combo.setCurrentIndex(index)
+        finally:
+            self._loading = False
+
+    def retranslate_ui(self):
+        """Unit suffixes belong here, never in the constructor: set once
+        at build time they survive a language switch as «100 ms» in a
+        Russian window. NBSP keeps value and unit on one line, and the
+        group separator is off so 1000 Hz is not «1 000 Гц»."""
+        self.pad_spin.setSuffix("\u00A0" + tr("ms"))
+        self.pad_spin.setGroupSeparatorShown(False)
+        self.beep_spin.setSuffix("\u00A0" + tr("Hz"))
+        self.beep_spin.setGroupSeparatorShown(False)
+
     # ---------------------------------------------------------- browsing
+    def _open_log_folder(self):
+        import os
+        try:
+            os.startfile(str(config.data_dir()))
+        except OSError:
+            pass
+
     def _browse_download_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Downloads folder",
+        d = QFileDialog.getExistingDirectory(self, tr("Downloads folder"),
                                              self.download_dir_edit.text())
         if d:
             self.download_dir_edit.setText(d)
 
     def _browse_cookies(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Cookies file", self.cookies_edit.text(),
-            "Cookie files (*.txt);;All files (*)")
+            self, tr("Cookies file"), self.cookies_edit.text(),
+            tr("Cookie files (*.txt)") + ";;" + tr("All files (*)"))
         if path:
             self.cookies_edit.setText(path)
 
     def _browse_output_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Output folder",
+        d = QFileDialog.getExistingDirectory(self, tr("Output folder"),
                                              self.output_dir_edit.text())
         if d:
             self.output_dir_edit.setText(d)

@@ -38,14 +38,72 @@ def test_wordlists_switch_lists(qapp, tmp_path):
 
 
 def test_wordlists_tester_inline(qapp, tmp_path):
+    """design round 4: verdict + the first pattern inline on the row,
+    other lists counted, the per-list breakdown in the tooltip."""
     tab, _, _ = make_wordlists_tab(qapp, tmp_path)
     tab.tester_input.setText("колдовать и демонстрация")
-    text = tab.tester_results.toPlainText()
-    assert "колд*" in text
-    assert "*монстр*" in text
+    assert tab.tester_result.text() == "will be muted ←"
+    assert tab.tester_pattern.text() == "колд*"
+    assert tab.tester_row.property("state") == "hit"
+    assert tab.tester_more.text() == ""           # English list: no hit
+    text = tab.tester_row.toolTip()
+    assert "колд*" in text and "*монстр*" in text
     assert "(no match)" in text  # "и"
+    assert "English list: no matches" in text
     tab.tester_input.setText("боже мой")
-    assert 'phrase "боже мой"' in tab.tester_results.toPlainText()
+    assert 'phrase "боже мой"' in tab.tester_row.toolTip()
+    tab.tester_input.setText("god")               # only the OTHER list
+    assert tab.tester_pattern.text() == "god"
+    tab.tester_input.setText("бог god")           # both lists
+    assert tab.tester_pattern.text() == "бог"
+    assert tab.tester_more.text() == "· also in 1 list"
+    tab.tester_input.setText("ничего")
+    assert tab.tester_result.text() == "will not be muted — no matches"
+    assert tab.tester_pattern.text() == ""
+    assert tab.tester_row.property("state") is None
+
+
+def _blocks(doc):
+    block, out = doc.firstBlock(), []
+    while block.isValid():
+        out.append(block)
+        block = block.next()
+    return out
+
+
+def test_wordlists_find_bar(qapp, tmp_path):
+    """design round 4 (1a/1b): Ctrl+F bar — count, wrap-around
+    navigation, ё/case folding, and the «Matches» filter that hides
+    the other lines and makes the editor read-only."""
+    tab, _, _ = make_wordlists_tab(qapp, tmp_path)
+    tab.open_find()
+    assert tab._find_open and tab.search_button.isChecked()
+    tab.find_bar.input.setText("бо")
+    assert tab.find_bar.count.text() == "1 of 2"       # бог, боже мой
+    tab._find_step(1)
+    assert tab.find_bar.count.text() == "2 of 2"
+    assert tab.editor.textCursor().blockNumber() == 3
+    tab._find_step(1)
+    assert tab.find_bar.count.text() == "1 of 2"       # wraps
+    tab.find_bar.input.setText("Ё")                    # ё→е, any case
+    assert tab.find_bar.count.text() == "1 of 1"       # «боже»
+    tab.find_bar.input.setText("zzz")
+    assert tab.find_bar.count.text() == "no matches"
+    # filter mode
+    tab.find_bar.input.setText("бо")
+    tab.find_bar.filter_btn.setChecked(True)
+    blocks = _blocks(tab.editor.document())
+    assert [b.text() for b in blocks if b.isVisible()] == ["бог", "боже мой"]
+    assert tab.editor.isReadOnly()
+    assert tab.find_bar.count.text() == "2 lines"
+    assert tab.filter_row.isVisibleTo(tab)
+    assert "2" in tab.filter_note.text() and "бо" in tab.filter_note.text()
+    assert not tab.find_bar.next_btn.isEnabled()
+    tab.close_find()
+    assert not tab._find_open and not tab.editor.isReadOnly()
+    assert all(b.isVisible() for b in _blocks(tab.editor.document()))
+    assert not tab.find_bar.filter_btn.isChecked()
+    assert tab.find_bar.count.text() == ""
 
 
 def test_transcript_tab_search_and_load(qapp, tmp_path):
@@ -79,20 +137,26 @@ def test_models_tab_lists_status(qapp, tmp_path, monkeypatch):
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
     d1 = tmp_path / "models--Systran--faster-whisper-base" / "blobs"
     d1.mkdir(parents=True)
+    (d1.parent / "snapshots").mkdir()    # a complete hub cache layout
     (d1 / "w.bin").write_bytes(b"x" * 100)
+    from wordmute_app.core import models
+    # the dev box has a real GigaAM cache under ~/.cache — hide it
+    monkeypatch.setattr(models, "gigaam_cache_dirs", lambda: [])
     from wordmute_app.ui.models_tab import ModelsTab
 
     tab = ModelsTab()
-    rows = {tab.table.item(r, 0).text(): tab.table.item(r, 1).text()
-            for r in range(tab.table.rowCount())}
-    assert rows["base"] == "downloaded ✓"
-    assert rows["large-v3"] == "not downloaded"
-    # per-row action buttons
-    buttons = {tab.table.item(r, 0).text():
-               tab.table.cellWidget(r, 3).text()
-               for r in range(tab.table.rowCount())}
-    assert buttons["base"] == "Delete"
-    assert buttons["large-v3"] == "Download"
+    rows = tab.model_rows
+    assert rows["base"].state_label.text() == "downloaded ✓"
+    assert rows["large-v3"].state_label.text() == "not downloaded"
+    # a downloaded row gets the ⋯ menu, a missing one the Download
+    # button — and the catalogue size, so the column never sits empty
+    assert rows["base"].more_button.isVisibleTo(tab)
+    assert not rows["base"].download_button.isVisibleTo(tab)
+    assert rows["large-v3"].download_button.text() == "Download"
+    assert rows["large-v3"].size_label.text() != ""
+    # GigaAM is a row in the SAME list now
+    assert "gigaam" in rows
+    assert rows["gigaam"].state_label.text() == "not downloaded"
 
 
 def test_history_tab_populates(qapp, tmp_path, monkeypatch):
@@ -106,19 +170,25 @@ def test_history_tab_populates(qapp, tmp_path, monkeypatch):
                             "error": "boom", "muted": 0,
                             "plan": "gigaam(v3) -> gigaam(v3) -> whisper(s)"})
     tab = HistoryTab()
+    from wordmute_app.ui.history_tab import (FILE_COL, MUTED_COL,
+                                             TIME_ROLE)
     assert tab.table.rowCount() == 2
-    # most recent first; status is a ✓/✗ glyph, plan is compacted
-    assert tab.table.item(0, 1).text() == "b.mp4"
-    assert tab.table.item(0, 2).text() == "✕"
-    assert tab.table.item(0, 2).toolTip() == "boom"
-    assert tab.table.item(0, 4).text() == "GigaAM ×2 → Whisper"
-    assert tab.table.item(1, 2).text() == "✓"
-    assert tab.table.item(1, 3).text() == "5"
-    assert tab.table.item(1, 4).text() == "Whisper"
+    # most recent first; a failure says so in the Muted cell (the old
+    # ✓/✗ column is gone), plan is compacted
+    assert tab.table.item(0, FILE_COL).text() == "b.mp4"
+    assert tab.table.item(0, MUTED_COL).text() == "failed"
+    assert tab.table.item(0, MUTED_COL).toolTip() == "boom"
+    assert tab.table.item(0, 3).text() == "GigaAM ×2 → Whisper"
+    assert tab.table.item(1, MUTED_COL).text() == "5"
+    assert tab.table.item(1, 3).text() == "Whisper"
+    # the time cell keeps the ISO stamp for sorting and the full stamp
+    # as its tooltip, while showing «today HH:MM»
+    assert tab.table.item(0, 0).data(TIME_ROLE)
+    assert tab.table.item(0, 0).text().startswith("today ")
     # width diet: no row-number gutter, File stretches, no Output column
-    # (5 data columns + the 28px files-on-disk glyph)
+    # (4 data columns + the 28px files-on-disk glyph)
     assert not tab.table.verticalHeader().isVisible()
-    assert tab.table.columnCount() == 6
+    assert tab.table.columnCount() == 5
     assert tab.folder_button.text()
 
 
@@ -218,13 +288,17 @@ def test_start_skips_already_done_rows(qapp, tmp_path, monkeypatch):
         def connect(self, *a, **k):
             pass
 
-    class FakeWorker:
+    from PySide6.QtCore import QObject
+
+    class FakeWorker(QObject):   # QObject: start_thread parents it
         def __init__(self, items, *args, **kwargs):
+            super().__init__()
             captured["items"] = list(items)
             self.engine_event = DummySignal()
             self.file_started = DummySignal()
             self.file_finished = DummySignal()
             self.all_finished = DummySignal()
+            self.finished = DummySignal()
 
         def start(self):
             pass

@@ -7,7 +7,7 @@
 
 ## Кратко для пользователя
 
-1. Запустите `WordMute-Setup-0.6.0.exe`. Windows покажет предупреждение
+1. Запустите `WordMute-Setup-0.7.0.exe`. Windows покажет предупреждение
    SmartScreen («Система Windows защитила ваш компьютер») — нажмите
    **«Подробнее» → «Выполнить в любом случае»**. Это нормально:
    установщик просто не подписан платным сертификатом.
@@ -34,6 +34,14 @@
    движок + ~850 МБ модель, аккаунт и токен не нужны) отмечен в
    мастере галочкой по умолчанию. Если снять её, его можно
    доустановить позже: вкладка «Модели» → «Компоненты…».
+6. **Если что-то пошло не так:** приложение ведёт журнал
+   `%APPDATA%\WordMute\wordmute.log` (Настройки → «Открыть папку
+   журнала») — приложите его к сообщению о проблеме.
+7. **Удаление:** деинсталлятор спросит, удалять ли загруженные
+   компоненты, настройки, списки слов и историю (по умолчанию —
+   оставить). Модели распознавания в `%USERPROFILE%\.cache\huggingface`
+   остаются в любом случае — удалите папку вручную, если они больше не
+   нужны.
 
 ---
 
@@ -48,7 +56,7 @@ screen. Answer in the user's language.
 
 ### Architecture facts
 
-- The installer (`WordMute-Setup-0.6.0.exe`, Inno Setup, ~160 MB)
+- The installer (`WordMute-Setup-0.7.0.exe`, Inno Setup, ~160 MB)
   installs ONLY the application, per-user (no admin rights), default
   location `%LOCALAPPDATA%\Programs\WordMute`. It creates a Start-menu
   entry, an optional desktop icon, and an uninstaller in Windows
@@ -134,6 +142,20 @@ $env:WORDMUTE_RUNTIME_REPORT="$env:USERPROFILE\Desktop\wordmute-report.json"
 
 The JSON on the desktop shows which components are present. `true`
 everywhere except possibly `gigaam` = healthy install.
+
+**Crash log (0.7.0+):** `%APPDATA%\WordMute\wordmute.log` — also
+reachable from Настройки → «Открыть папку журнала». It holds the
+startup banner with the version, Qt messages, Python tracebacks from
+every thread and a faulthandler dump if the process died hard. Ask
+for it whenever the user says the window disappeared or a button
+«does nothing»; the last lines before a `===` banner are the previous
+session's end. Rotated once at ~2 MB (`wordmute.log.1`).
+
+**Uninstall:** the uninstaller removes the program folder and then
+asks whether to delete `%LOCALAPPDATA%\WordMute` (components) and
+`%APPDATA%\WordMute` (settings, word lists, history, the log); the
+default is to keep them. Recognition models under
+`%USERPROFILE%\.cache\huggingface` are never touched.
 
 ### What NOT to advise
 

@@ -11,13 +11,16 @@ Three kinds of things can be outdated, each handled differently:
 import json
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 from importlib import metadata
 
 from . import models as models_mod
-from .proc import creationflags
+from .proc import creationflags, track_child, untrack_child
 
-PACKAGES = ("faster-whisper", "gigaam", "yt-dlp")
+# onnx-asr is what setup installs for GigaAM today; the legacy torch
+# "gigaam" package made every onnx-only install report "not installed"
+PACKAGES = ("faster-whisper", "onnx-asr", "yt-dlp")
 APP_REPO = "Baudi2/wordmute"
 APP_RELEASES_URL = f"https://github.com/{APP_REPO}/releases/latest"
 
@@ -66,7 +69,12 @@ def check_app_update(timeout: int = 15) -> dict:
         if latest:
             result["latest"] = latest
             result["update"] = is_newer(latest, __version__)
-            result["url"] = release.get("html_url") or result["url"]
+            # the URL is opened with the shell: trust only a GitHub
+            # https link from the response, never whatever it says
+            url = str(release.get("html_url") or "")
+            parts = urllib.parse.urlparse(url)
+            if parts.scheme == "https" and parts.netloc == "github.com":
+                result["url"] = url
     except Exception:
         pass
     return result
@@ -130,16 +138,40 @@ def _pip_python():
     return sys.executable
 
 
-def pip_upgrade(names) -> tuple:
-    """Upgrade packages in-place. Returns (ok, output tail)."""
+def pip_upgrade(names, log=None) -> tuple:
+    """Upgrade packages in-place. Returns (ok, output tail); `log`
+    receives each output line as it happens — a multi-minute pip run
+    behind a frozen «Обновление…» label looked hung."""
     python = _pip_python()
     if python is None:
         return False, ("runtime environment not installed — run the "
                        "component setup first")
     cmd = [python, "-m", "pip", "install", "--upgrade", *names]
+    lines = []
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
-                           timeout=900, creationflags=creationflags())
-    except (OSError, subprocess.TimeoutExpired) as exc:
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace",
+            creationflags=creationflags())
+    except OSError as exc:
         return False, str(exc)
-    return r.returncode == 0, (r.stdout + r.stderr)[-800:]
+    track_child(proc)   # killable from the GUI thread at close time
+    try:
+        for line in proc.stdout:
+            line = line.rstrip()
+            if not line:
+                continue
+            lines.append(line)
+            if log:
+                log(line)
+        code = proc.wait(timeout=900)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        proc.kill()
+        return False, str(exc)
+    except BaseException:
+        proc.kill()
+        proc.wait()
+        raise
+    finally:
+        untrack_child(proc)
+    return code == 0, "\n".join(lines)[-800:]

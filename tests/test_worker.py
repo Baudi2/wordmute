@@ -19,6 +19,7 @@ def make_worker(files, monkeypatch, words=None, fail_for=(), plan=None):
 
     def fake_mute(media, intervals, out, beep_hz=None):
         Path(out).write_bytes(b"muted")
+        engine._emit("mute_done", out=str(out))   # as the real one does
 
     monkeypatch.setattr(engine, "transcribe", fake_transcribe)
     monkeypatch.setattr(engine, "mute", fake_mute)

@@ -33,7 +33,7 @@ class FakeYDL:
     def __exit__(self, *exc):
         return False
 
-    def extract_info(self, url, download=False):
+    def extract_info(self, url, download=False, process=True):
         if download:
             for hook in FakeYDL.captured_opts.get("progress_hooks", []):
                 hook({"status": "downloading", "downloaded_bytes": 50,
@@ -41,6 +41,10 @@ class FakeYDL:
                 hook({"status": "finished"})
             return {"requested_downloads": [{"filepath": r"C:\dl\video.mp4"}]}
         return dict(FakeYDL.info)
+
+    def process_ie_result(self, info, download=False):
+        # download() extracts first (process=False) and downloads second
+        return self.extract_info("", download=download)
 
 
 @pytest.fixture
@@ -111,16 +115,35 @@ def test_download_cancellation(fake_ydl, tmp_path):
                             cancelled=lambda: True)
 
 
-def test_cookies_passed_to_ytdlp(fake_ydl, tmp_path):
+def test_cookies_loaded_into_a_jar_not_handed_as_a_file(fake_ydl, tmp_path):
+    """Audit fix: as `cookiefile` the user's export was rewritten by
+    every yt-dlp session close — three ran concurrently and one
+    truncated the jar another had just loaded."""
     cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
     downloader.list_formats("https://example.com/v", cookies=cookies)
-    assert FakeYDL.captured_opts["cookiefile"] == str(cookies)
+    assert "cookiefile" not in FakeYDL.captured_opts
+    assert FakeYDL.captured_opts["cookiejar"].filename == str(cookies)
 
     downloader.download("https://example.com/v", "", tmp_path / "dl",
                         cookies=cookies)
-    assert FakeYDL.captured_opts["cookiefile"] == str(cookies)
+    assert FakeYDL.captured_opts["cookiejar"].filename == str(cookies)
 
 
 def test_no_cookies_key_when_unset(fake_ydl):
     downloader.list_formats("https://example.com/v")
     assert "cookiefile" not in FakeYDL.captured_opts
+    assert "cookiejar" not in FakeYDL.captured_opts
+
+
+def test_download_refuses_playlists_before_downloading(fake_ydl, tmp_path):
+    """A watch?v=…&list=… link downloaded the whole playlist (hours,
+    gigabytes) and then failed with a bogus error."""
+    assert FakeYDL.captured_opts is None or True
+    FakeYDL.info = {"_type": "playlist", "title": "list", "entries": []}
+    seen = []
+    with pytest.raises(ValueError, match="[Pp]laylist"):
+        downloader.download("https://example.com/list", "", tmp_path,
+                            progress=seen.append)
+    assert seen == []                       # nothing was fetched
+    assert FakeYDL.captured_opts["noplaylist"] is True

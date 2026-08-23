@@ -17,7 +17,9 @@ def test_is_newer_semver_and_dates():
 
 
 def test_check_packages_states(monkeypatch):
-    versions = {"faster-whisper": "1.1.0", "gigaam": None,
+    # onnx-asr is the GigaAM package setup installs today (the legacy
+    # torch "gigaam" made every onnx-only install read "not installed")
+    versions = {"faster-whisper": "1.1.0", "onnx-asr": None,
                 "yt-dlp": "2026.07.04"}
     latest = {"faster-whisper": "1.1.0", "yt-dlp": "2026.08.01"}
     monkeypatch.setattr(updates, "installed_version", versions.get)
@@ -26,8 +28,8 @@ def test_check_packages_states(monkeypatch):
 
     result = {p["name"]: p for p in updates.check_packages()}
     assert result["faster-whisper"]["update"] is False
-    assert result["gigaam"]["installed"] is None
-    assert result["gigaam"]["latest"] is None  # never queried
+    assert result["onnx-asr"]["installed"] is None
+    assert result["onnx-asr"]["latest"] is None  # never queried
     assert result["yt-dlp"]["update"] is True
 
 
@@ -45,6 +47,7 @@ def test_check_whisper_models_only_downloaded(tmp_path, monkeypatch):
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
     d = tmp_path / "models--Systran--faster-whisper-small"
     (d / "blobs").mkdir(parents=True)
+    (d / "snapshots").mkdir()            # a complete hub cache layout
     (d / "blobs" / "w.bin").write_bytes(b"x")
     (d / "refs").mkdir()
     (d / "refs" / "main").write_text("oldsha", encoding="utf-8")
@@ -92,10 +95,19 @@ def test_models_tab_renders_update_results(qapp, tmp_path, monkeypatch):
         ],
         "models": [{"model": "large-v3", "repo": "r", "update": True}],
     })
-    text = tab.updates_label.text()
-    assert "faster-whisper: 1.1.0 ✓" in text
-    assert "2026.07.04 → 2026.08.01" in text
-    assert "large-v3" in text
-    assert tab.update_all_button.isVisible() or True  # hidden window
+    rows = tab._update_rows
+    assert rows["faster-whisper"].state_label.text() == "up to date"
+    assert rows["faster-whisper"].property("state") == "ok"
+    assert rows["yt-dlp"].old_label.text() == "2026.07.04"
+    assert rows["yt-dlp"].new_label.text() == "→ 2026.08.01"
+    assert rows["yt-dlp"].button.text() == "Update"
+    assert rows["yt-dlp"].property("state") == "new"
+    assert "model:large-v3" in rows
+    # one button morphs instead of a second one appearing
+    assert tab.btn_check.property("mode") == "update"
+    assert tab.btn_check.text() == "Update all (2)"
     assert tab._outdated_packages == ["yt-dlp"]
     assert tab._outdated_models == ["large-v3"]
+    # the result is remembered, so the tab never opens empty again
+    from wordmute_app.core import config
+    assert config.load_settings()["updates_last"]["result"]["packages"]

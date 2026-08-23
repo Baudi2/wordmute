@@ -10,13 +10,13 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
-    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -31,9 +31,12 @@ from ..core.jobs import (JobOptions, QueueItem, build_plan, expand_inputs,
                          scan_watch_dir)
 from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
+from .dialogs import (confirm, inform, mark_danger, repolish,
+                      themed_menu)
 from .events import format_event
+from .formats import fmt_rate
 from .history_tab import HistoryTab
-from .i18n import tr
+from .i18n import tr, tr_plural
 from .models_tab import ModelsTab
 from .plan_widget import PassPlanWidget
 from .queue_card import QueueCard
@@ -43,6 +46,7 @@ from .sidebar import SidebarNav
 from .transcript_tab import TranscriptTab
 from .url_dialog import AddUrlDialog
 from .wordlists_tab import WordListsTab
+from .threads import detach_thread, start_thread, wait_thread
 from .worker import ProcessWorker
 
 # data roles on each queue QListWidgetItem. Cards are rebuilt from
@@ -85,9 +89,10 @@ def fmt_eta(sec: float) -> str:
 
 
 def _initial_size(avail_w: int, avail_h: int) -> tuple:
-    """Preferred 960x720, shrunk to fit the available desktop (with a
-    small margin for window chrome); 0/negative = unknown screen."""
-    width, height = 960, 720
+    """Preferred 1100x760 (the Models groups need ~900 of content
+    width), shrunk to fit the available desktop (with a small margin
+    for window chrome); 0/negative = unknown screen."""
+    width, height = 1100, 760
     if avail_w > 0:
         width = max(480, min(width, avail_w - 24))
     if avail_h > 0:
@@ -96,10 +101,9 @@ def _initial_size(avail_w: int, avail_h: int) -> tuple:
 
 
 def fmt_speed(bps) -> str:
-    if not bps:
-        return ""
-    mbps = bps / (1024 * 1024)
-    return f"{mbps:.1f} MB/s" if mbps >= 1 else f"{bps / 1024:.0f} KB/s"
+    """Kept as a thin alias: the queue cards and the download pump both
+    call it, the units and decimal comma now come from the locale."""
+    return fmt_rate(bps)
 
 
 class AppUpdateWorker(QThread):
@@ -125,16 +129,99 @@ class MediaProbeWorker(QThread):
         self._jobs.put(item)
 
     def stop(self):
+        # the sentinel used to queue BEHIND every pending job, so a
+        # bulk add of 50 files meant 50 more probes before the thread
+        # could stop — and the window's wait timed out
+        self._stopping = True
         self._jobs.put(None)
 
     def run(self):
+        self._stopping = False
         while True:
             item = self._jobs.get()
-            if item is None:
+            if item is None or self._stopping:
                 return
             duration = media_duration(item.path)
             thumb = thumbs.thumbnail_path(item.path)
             self.ready.emit(item, duration, str(thumb) if thumb else "")
+
+
+class UrlProbeWorker(QThread):
+    """Batch-added links used to sit as bare URLs with no thumbnail
+    until their download finished — with mixed RU/EN queues there was
+    no way to tell which video to give a language profile to. This
+    fetches the real title, duration and poster image right after the
+    card appears (one yt-dlp metadata call per link, no download)."""
+    ready = Signal(object, str, object, str)  # item, title, dur, thumb
+
+    def __init__(self, cookies=None, parent=None):
+        super().__init__(parent)
+        from queue import SimpleQueue
+        self._jobs = SimpleQueue()
+        self._cookies = cookies
+
+    def enqueue(self, item):
+        self._jobs.put(item)
+
+    def stop(self):
+        self._stopping = True          # see MediaProbeWorker.stop
+        self._jobs.put(None)
+
+    def run(self):
+        from ..core import downloader, thumbs
+        self._stopping = False
+        while True:
+            item = self._jobs.get()
+            if item is None or self._stopping:
+                return
+            try:
+                info = downloader.probe_url(item.url,
+                                            cookies=self._cookies)
+            except Exception:      # site down, bad link — card stays
+                self.ready.emit(item, "", None, "")   # stop the shimmer
+                continue
+            thumb = thumbs.remote_thumbnail_path(
+                item.url, info.get("thumbnail_url", ""))
+            self.ready.emit(item, info.get("title") or "",
+                            info.get("duration"),
+                            str(thumb) if thumb else "")
+
+
+class DropZone(QFrame):
+    """The empty queue as a drop target (design 1g): the dashed frame
+    sits exactly where files land, and a hovering drag says how many
+    of them will be taken. The window feeds it the events — a QFrame
+    under a stacked page never sees the drag itself."""
+
+    def __init__(self, describe, parent=None):
+        super().__init__(parent)
+        self._describe = describe        # mime -> (title, body) | None
+        self._resting = None             # (title, body) before the drag
+
+    def begin_drag(self, mime):
+        described = self._describe(mime)
+        if described is None:
+            return
+        window = self.window()
+        if self._resting is None:
+            self._resting = (window.empty_title.text(),
+                             window.empty_body.text())
+        window.empty_title.setText(described[0])
+        window.empty_body.setText(described[1])
+        self.setProperty("dragOver", True)
+        repolish(self)
+        repolish(window.empty_icon)
+
+    def end_drag(self):
+        if self._resting is None:
+            return
+        window = self.window()
+        window.empty_title.setText(self._resting[0])
+        window.empty_body.setText(self._resting[1])
+        self._resting = None
+        self.setProperty("dragOver", False)
+        repolish(self)
+        repolish(window.empty_icon)
 
 
 class MainWindow(QMainWindow):
@@ -162,12 +249,17 @@ class MainWindow(QMainWindow):
             self._tray = QSystemTrayIcon(self.windowIcon(), self)
             self._tray.setToolTip("WordMute")
             self._tray.activated.connect(self._on_tray_activated)
+            # messageClicked is not per-balloon: one slot dispatches
+            # the action of the LAST balloon shown (see _show_balloon)
+            self._tray.messageClicked.connect(self._on_balloon_clicked)
             self._tray.show()
+        self._balloon_action = None
         # quiet self-update check, a few seconds after startup
         self._app_update_worker = None
         self._update_url = None
         QTimer.singleShot(3000, self._start_update_check)
         self._probe_worker = None  # lazy: bulk-add duration/thumb jobs
+        self._url_probe_worker = None  # lazy: link title/poster fetches
         self._wordlist_paths = config.ensure_user_wordlists()
         self._settings = config.load_settings()
         self._gpus = gpu.detect_gpus()
@@ -178,25 +270,18 @@ class MainWindow(QMainWindow):
         self._watch_timer.setInterval(5000)
         self._watch_timer.timeout.connect(self._watch_tick)
 
-        # --- shell: header strip + sidebar navigation (no menu bar)
-        from .theme import app_icon
+        # --- shell: sidebar navigation (no menu bar). The app name and
+        # icon live in the OS title bar, which theme.apply_titlebar paints
+        # in the theme's chrome colors — the old in-app header strip
+        # duplicated it one row below
         container = QWidget()
+        # 1px rule under the caption (QSS border-top): the sidebar's
+        # vertical divider terminates into it instead of running off
+        # into the title bar
+        container.setObjectName("shell_body")
         shell = QVBoxLayout(container)
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)
-        header_bar = QWidget()
-        header_bar.setObjectName("header_bar")
-        header_layout = QHBoxLayout(header_bar)
-        header_layout.setContentsMargins(16, 8, 16, 8)
-        header_layout.setSpacing(8)
-        icon_label = QLabel()
-        icon_label.setPixmap(app_icon().pixmap(20, 20))
-        header_layout.addWidget(icon_label)
-        title_label = QLabel("WordMute")
-        title_label.setObjectName("app_title")
-        header_layout.addWidget(title_label)
-        header_layout.addStretch()
-        shell.addWidget(header_bar)
         self.tabs = SidebarNav()
         shell.addWidget(self.tabs, stretch=1)
         self.setCentralWidget(container)
@@ -264,28 +349,48 @@ class MainWindow(QMainWindow):
                 self.queue.row(self.queue.itemAt(pos)),
                 self.queue.viewport().mapToGlobal(pos)))
 
-        # empty state shown until the first item is queued
+        # empty state shown until the first item is queued — design 1g:
+        # a real drop zone, occupying exactly where files land, with
+        # live feedback while a drag hovers
         empty = QWidget()
-        empty_layout = QVBoxLayout(empty)
+        empty_outer = QVBoxLayout(empty)
+        empty_outer.setContentsMargins(0, 0, 0, 0)
+        self.drop_zone = DropZone(self._describe_drag)
+        self.drop_zone.setObjectName("drop_zone")
+        empty_outer.addWidget(self.drop_zone)
+        empty_layout = QVBoxLayout(self.drop_zone)
         empty_layout.addStretch()
-        empty_title = QLabel(tr("Drop video or audio files here"))
-        empty_title.setObjectName("empty_state_title")
-        empty_title.setAlignment(Qt.AlignCenter)
-        empty_body = QLabel(tr(
-            "…or paste a link with Add URL. Matched words from your word "
-            "lists are muted; the video stays untouched.\n"
-            "Everything runs on this computer — nothing is uploaded."))
-        empty_body.setObjectName("empty_state_body")
-        empty_body.setAlignment(Qt.AlignCenter)
-        empty_body.setWordWrap(True)
-        empty_layout.addWidget(empty_title)
-        empty_layout.addWidget(empty_body)
+        self.empty_icon = QLabel()
+        self.empty_icon.setObjectName("empty_icon")
+        self.empty_icon.setAlignment(Qt.AlignCenter)
+        from .theme import ui_icon
+        self.empty_icon.setPixmap(
+            ui_icon("drop-files", 21, "#d2cefd").pixmap(21, 21))
+        icon_row = QHBoxLayout()
+        icon_row.addStretch()
+        icon_row.addWidget(self.empty_icon)
+        icon_row.addStretch()
+        empty_layout.addLayout(icon_row)
+        empty_layout.addSpacing(12)
+        self.empty_title = QLabel(tr("Drop video or audio here"))
+        self.empty_title.setObjectName("empty_title")
+        self.empty_title.setAlignment(Qt.AlignCenter)
+        # ONE line: the muting explanation moved to the Start tooltip
+        self.empty_body = QLabel(tr(
+            "Or paste a link. Everything runs on this computer."))
+        self.empty_body.setObjectName("empty_body")
+        self.empty_body.setAlignment(Qt.AlignCenter)
+        self.empty_body.setWordWrap(True)
+        empty_layout.addWidget(self.empty_title)
+        empty_layout.addWidget(self.empty_body)
         empty_buttons = QHBoxLayout()
         empty_buttons.addStretch()
         empty_add = QPushButton(tr("Add Files"))
+        empty_add.setObjectName("btn_empty_primary")
         empty_add.setProperty("primary", True)
         empty_add.clicked.connect(self._pick_files)
         empty_view_lists = QPushButton(tr("View word lists"))
+        empty_view_lists.setObjectName("btn_empty_secondary")
         empty_view_lists.clicked.connect(
             lambda: self.tabs.setCurrentWidget(self.wordlists_tab))
         empty_buttons.addWidget(empty_add)
@@ -368,6 +473,10 @@ class MainWindow(QMainWindow):
         run_row.setSpacing(8)
         self.start_button = QPushButton(tr("Start"))
         self.start_button.setProperty("primary", True)
+        # the explanation the empty state used to carry (design 1g)
+        self.start_button.setToolTip(
+            tr("Words from your lists are muted in the audio; the video "
+               "itself is copied untouched."))
         self.start_button.clicked.connect(lambda: self._start())
         self.cancel_button = QPushButton(tr("Cancel"))
         self.cancel_button.clicked.connect(self._cancel)
@@ -425,7 +534,7 @@ class MainWindow(QMainWindow):
         self.transcript_tab = TranscriptTab()
         self.tabs.addTab(self.transcript_tab, tr("Transcript"),
                          nav_icon("transcript"))
-        self.models_tab = ModelsTab()
+        self.models_tab = ModelsTab(self._settings)
         self.tabs.addTab(self.models_tab, tr("Models"), nav_icon("models"))
         self.history_tab = HistoryTab()
         self.tabs.addTab(self.history_tab, tr("History"),
@@ -490,7 +599,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText(tr("Ready."))
             return
         d = QFileDialog.getExistingDirectory(
-            self, "Watch folder", self._settings.get("watch_dir", ""))
+            self, tr("Watch folder"), self._settings.get("watch_dir", ""))
         if not d:
             return
         self._watch_dir = Path(d)
@@ -577,7 +686,7 @@ class MainWindow(QMainWindow):
         card.set_actions(
             review=done and bool(review and Path(review).exists()),
             open_=done and bool(out and Path(out).exists()),
-            retry=status.startswith("error"))
+            retry=list_item.data(STATE_ROLE) == "err")
         card.review_clicked.connect(
             lambda c=card: self._card_review(self._row_of_card(c)))
         card.open_clicked.connect(
@@ -703,9 +812,90 @@ class MainWindow(QMainWindow):
             if thumb:
                 card.set_thumb(thumb)
 
+    @staticmethod
+    def _url_key(url: str) -> str:
+        """The same video under two spellings (youtu.be/ID vs
+        watch?v=ID, trailing whitespace) must count as one queue
+        item: two items downloaded into ONE file while the first was
+        being processed."""
+        from urllib.parse import parse_qs, urlparse
+        url = (url or "").strip()
+        parts = urlparse(url)
+        host = parts.netloc.lower().removeprefix("www.")
+        if host == "youtu.be" and parts.path.strip("/"):
+            return "yt:" + parts.path.strip("/").split("/")[0]
+        if host in ("youtube.com", "m.youtube.com") and parts.path == "/watch":
+            video = parse_qs(parts.query).get("v", [""])[0]
+            if video:
+                return "yt:" + video
+        return parts._replace(fragment="").geturl()
+
     def _add_url_row(self, item: QueueItem):
+        key = self._url_key(item.url)
+        for existing in self._items():
+            if existing.kind == "url" and self._url_key(existing.url) == key:
+                self._append_log(tr("Already in the queue: {}")
+                                 .format(item.url))
+                return
         self._insert_row(item,
                          status=f"{tr('queued')} ({item.format_label})")
+        # pulse the thumbnail while the title/poster probe runs — with
+        # nothing moving, a fresh link card looked stuck
+        card = self._card(self.queue.count() - 1)
+        if card:
+            card.set_loading(True)
+        self._probe_url_in_background(item)
+
+    def _probe_url_in_background(self, item: QueueItem):
+        """Real title + poster for a link card, without downloading."""
+        if os.environ.get("WORDMUTE_SYNC_PROBE"):  # tests: no threads
+            from ..core import downloader
+            try:
+                info = downloader.probe_url(
+                    item.url, cookies=self._settings.get("cookies_file")
+                    or None)
+            except Exception:
+                self._on_url_probed(item, "", None, "")
+                return
+            thumb = thumbs.remote_thumbnail_path(
+                item.url, info.get("thumbnail_url", ""))
+            self._on_url_probed(item, info.get("title") or "",
+                                info.get("duration"),
+                                str(thumb) if thumb else "")
+            return
+        if self._url_probe_worker is None:
+            self._url_probe_worker = UrlProbeWorker(
+                cookies=self._settings.get("cookies_file") or None,
+                parent=self)
+            self._url_probe_worker.ready.connect(self._on_url_probed)
+            self._url_probe_worker.start()
+        self._url_probe_worker.enqueue(item)
+
+    def _on_url_probed(self, item: QueueItem, title: str, duration,
+                       thumb: str):
+        row = self._row_of_item(item)
+        if row < 0:
+            return          # removed from the queue meanwhile
+        if title and not item.title:
+            item.title = title
+        if duration and not item.duration:
+            item.duration = duration
+        list_item = self.queue.item(row)
+        # the download's own backfill may already have written the real
+        # local file name — never overwrite it with the probe's title
+        if title and list_item.data(TITLE_ROLE) in (item.url, "", None):
+            list_item.setData(TITLE_ROLE, title)
+        list_item.setData(DURATION_ROLE, item.duration)
+        list_item.setData(META_ROLE, self._card_meta(item))
+        if thumb and not list_item.data(THUMB_ROLE):
+            list_item.setData(THUMB_ROLE, thumb)
+        card = self._card(row)
+        if card:
+            card.set_loading(False)
+            card.set_title(list_item.data(TITLE_ROLE))
+            card.set_meta(self._card_meta(item))
+            if thumb:
+                card.set_thumb(thumb)
 
     def _add_url(self, url: str = ""):
         if not isinstance(url, str):  # a stray signal bool must never win
@@ -727,11 +917,12 @@ class MainWindow(QMainWindow):
         from ..engine.wordmute import MEDIA_EXTS
         exts = " ".join(f"*{e}" for e in sorted(MEDIA_EXTS))
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Add media files", "", f"Media files ({exts});;All files (*)")
+            self, tr("Add media files"), "",
+            tr("Media files ({})").format(exts) + ";;" + tr("All files (*)"))
         self._add_files(files)
 
     def _pick_folder(self):
-        d = QFileDialog.getExistingDirectory(self, "Add folder")
+        d = QFileDialog.getExistingDirectory(self, tr("Add folder"))
         if d:
             self._add_files([d])
 
@@ -751,11 +942,40 @@ class MainWindow(QMainWindow):
             if card:
                 card.set_selected(self.queue.item(row).isSelected())
 
+    def _accepted_media(self, mime) -> int:
+        """How many dropped entries the queue would actually take —
+        media files and folders; links count too."""
+        from ..core.jobs import expand_inputs
+        paths = [Path(u.toLocalFile()) for u in mime.urls()
+                 if u.isLocalFile()]
+        count = len(expand_inputs(paths)) if paths else 0
+        count += sum(1 for u in mime.urls()
+                     if u.scheme() in ("http", "https"))
+        if not count and mime.hasText():
+            from .url_dialog import extract_urls
+            count = len(extract_urls(mime.text()))
+        return count
+
+    def _describe_drag(self, mime):
+        """(title, body) shown on the drop zone while a drag hovers, or
+        None when nothing in it can be queued."""
+        count = self._accepted_media(mime)
+        if not count:
+            return None
+        return (tr_plural("{} files join the queue", count),
+                tr("mp4 · mkv · mp3 — anything else is skipped"))
+
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls() or event.mimeData().hasText():
+            self.drop_zone.begin_drag(event.mimeData())
             event.acceptProposedAction()
 
+    def dragLeaveEvent(self, event):
+        self.drop_zone.end_drag()
+        super().dragLeaveEvent(event)
+
     def dropEvent(self, event):
+        self.drop_zone.end_drag()
         mime = event.mimeData()
         self._add_files(u.toLocalFile() for u in mime.urls()
                         if u.isLocalFile())
@@ -808,8 +1028,7 @@ class MainWindow(QMainWindow):
         """(menu, actions) for the card ⋯ menu — split out of
         _card_menu so it can be built without exec()ing it (tests and
         the screenshot script)."""
-        from PySide6.QtWidgets import QMenu
-        menu = QMenu(self)
+        menu = themed_menu(self, "card_menu")
         out = self._output_path_for_row(row)
         out_ok = bool(out and Path(out).exists())
         act_open = menu.addAction(tr("Open output"))
@@ -823,9 +1042,11 @@ class MainWindow(QMainWindow):
         # per-item language: force the RU/EN list+plan for this video
         row_item = self.queue.item(row)
         queue_obj = row_item.data(ITEM_ROLE) if row_item else None
-        lang_menu = menu.addMenu(tr("Processing language"))
-        # addMenu(str) hands ownership to Python: without a reference
-        # the submenu is collected as soon as the builder returns
+        lang_menu = themed_menu(menu, "card_menu_language")
+        lang_menu.setTitle(tr("Processing language"))
+        menu.addMenu(lang_menu)
+        # addMenu hands ownership to Python: without a reference the
+        # submenu is collected as soon as the builder returns
         menu._lang_menu = lang_menu
         current = getattr(queue_obj, "lang_profile", "auto") or "auto"
         for key, label in (("auto", tr("Auto (main setup)")),
@@ -838,13 +1059,15 @@ class MainWindow(QMainWindow):
                 lambda _=False, k=key, r=row: self._set_item_lang(r, k))
         menu.addSeparator()
         deletable = self._worker is None
-        act_del_src = menu.addAction(tr("Delete source video and JSONs"))
+        # short labels: the confirmation lists the exact files anyway
+        act_del_src = menu.addAction(tr("Delete source and JSONs"))
         act_del_src.setEnabled(
             deletable and bool(self._files_for_row(row, False)))
-        act_del_all = menu.addAction(
-            tr("Delete all files (source, clean, JSONs)"))
+        mark_danger(act_del_src)
+        act_del_all = menu.addAction(tr("Delete all files"))
         act_del_all.setEnabled(
             deletable and bool(self._files_for_row(row, True)))
+        mark_danger(act_del_all)
         menu.addSeparator()
         act_remove = menu.addAction(tr("Remove"))
         act_remove.setEnabled(deletable)
@@ -916,8 +1139,19 @@ class MainWindow(QMainWindow):
                     self._apply_status(row, tr("files deleted"))
 
     def _open_review(self, path):
+        # one dialog per file: a second one (double-click + the Review
+        # button) could re-render the same output concurrently
+        for open_dialog in list(self._review_windows):
+            try:
+                if open_dialog._review_path == str(path):
+                    open_dialog.raise_()
+                    open_dialog.activateWindow()
+                    return
+            except RuntimeError:
+                continue
         # non-modal: the queue stays visible/alive while reviewing
         dialog = ReviewDialog(path, self)
+        dialog._review_path = str(path)
         dialog.setWindowModality(Qt.NonModal)
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         self._review_windows.append(dialog)
@@ -931,21 +1165,21 @@ class MainWindow(QMainWindow):
         if path and Path(path).exists():
             self._open_review(path)
         else:
-            QMessageBox.information(
-                self, "WordMute",
-                tr("No review data for this row yet — it appears after "
-                   "the file has been processed and something was muted."))
+            inform(self, title=tr("Nothing to review yet"),
+                   body=tr("Review data appears after the file has been "
+                           "processed and something was muted."))
 
     def _pick_review(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open review file", "",
-            "WordMute review (*.wordmute.json);;All files (*)")
+            self, tr("Open review file"), "",
+            tr("WordMute review (*.wordmute.json)") + ";;"
+            + tr("All files (*)"))
         if path:
             try:
                 self._open_review(path)
             except Exception as exc:
-                QMessageBox.warning(self, "WordMute",
-                                    f"Could not open review file: {exc}")
+                inform(self, title=tr("Could not open the review file"),
+                       body=str(exc))
 
     # ---------------------------------------------------------- warnings
     @staticmethod
@@ -972,9 +1206,12 @@ class MainWindow(QMainWindow):
 
     def _refresh_warnings(self):
         warnings = self._current_warnings()
-        self.warnings_label.setText("\n".join(f"⚠ {w}" for w in warnings))
-        self.warnings_label.setVisible(bool(warnings))
+        # severity is decided on the SOURCE (English) text; the label
+        # shows the translation — gpu.py's warnings never reached tr()
         severe = any("will fail" in w for w in warnings)
+        self.warnings_label.setText(
+            "\n".join(f"⚠ {tr(w)}" for w in warnings))
+        self.warnings_label.setVisible(bool(warnings))
         if self.warnings_label.property("severity") != \
                 ("error" if severe else None):
             self.warnings_label.setProperty(
@@ -1036,36 +1273,36 @@ class MainWindow(QMainWindow):
         # must finish before rows are cleared/captured, or the worker's
         # row mapping desyncs from the queue
         self._queue_reorder.abort()
+        # the run reads the lists from disk; unsaved edits the tester
+        # just said «will be muted» for would silently not count
+        if not auto and not self.wordlists_tab.maybe_save():
+            return
         if auto:
             # watch-folder runs: keep only still-queued rows so earlier
             # results are never reprocessed
             self._clear_finished_rows()
         if not self.queue.count():
             if not auto:
-                QMessageBox.information(self, "WordMute",
-                                        tr("Add some files first."))
+                inform(self, title=tr("Add some files first."))
             return
         pending = self._pending_rows()
         if not pending:
             if not auto:
-                QMessageBox.information(
-                    self, "WordMute",
-                    tr("Everything in the queue is already processed — "
-                       "add new files or use Retry on a failed one."))
+                inform(self, title=tr("Everything is processed already"),
+                       body=tr("Add new files, or use Retry on a failed "
+                               "one."))
             return
         items = [self.queue.item(r).data(ITEM_ROLE) for r in pending]
         lists = self._selected_wordlists()
         if not lists:
             if not auto:
-                QMessageBox.information(
-                    self, "WordMute", tr("Select at least one word list."))
+                inform(self, title=tr("Select at least one word list."))
             return
         engines = self.plan.engines()
         if not engines:
             if not auto:
-                QMessageBox.information(
-                    self, "WordMute",
-                    tr("Add at least one pass to the plan."))
+                inform(self, title=tr("Add at least one pass to the "
+                                      "plan."))
             return
         gigaam_backend = self._pick_gigaam_backend(self._settings)
         # No Hugging Face account is needed any more: setup installs
@@ -1127,7 +1364,7 @@ class MainWindow(QMainWindow):
         plan_text = " -> ".join(f"{e}({m})" for e, m in plan)
         self._append_log(f"Word list: {n} entries. Plan: {plan_text}."
                          + (f" Output: {output_dir}" if output_dir else ""))
-        self._worker.start()
+        start_thread(self, self._worker)
 
     def _cancel(self):
         if self._worker is not None:
@@ -1192,7 +1429,7 @@ class MainWindow(QMainWindow):
 
     def _pass_prefix(self) -> str:
         if self._pass_total > 1:
-            return f"pass {self._pass_n}/{self._pass_total} · "
+            return tr("pass {}/{} · ").format(self._pass_n, self._pass_total)
         return ""
 
     # ---------------------------------------------------------- worker events
@@ -1229,16 +1466,21 @@ class MainWindow(QMainWindow):
             self._asr_wall_start = time.monotonic()
             engine_name = data["engine"]
             self._set_row_status(
-                f"{self._pass_prefix()}transcribing ({engine_name})…")
+                self._pass_prefix()
+                + tr("transcribing ({})…").format(engine_name))
         elif event == "asr_progress":
             self._on_asr_progress(data["minutes"])
             return
+        elif event in ("cache_stale", "cache_invalid"):
+            self._append_log(tr("Cached transcript ignored ({}): {}").format(
+                tr("older than the media") if event == "cache_stale"
+                else tr("unreadable"), data.get("cache", "")))
         elif event == "cache_hit":
             self._pass_pct = 0.9
             self._update_overall_progress()
         elif event == "words_count":
             self._pass_pct = max(self._pass_pct, 0.9)
-            self._set_row_status(f"{self._pass_prefix()}matching…")
+            self._set_row_status(self._pass_prefix() + tr("matching…"))
             self._update_overall_progress()
         elif event == "mute_start":
             self._set_row_status(f"{self._pass_prefix()}{tr('muting…')}")
@@ -1290,7 +1532,12 @@ class MainWindow(QMainWindow):
             card.set_meta(meta)
             if thumb:
                 card.set_thumb(thumb)
-        if row != self._current_row:  # prefetched: waiting for its turn
+        if (row != self._current_row          # prefetched: waiting its turn
+                and self.status_text(row).startswith(
+                    (tr("queued"), tr("downloading")))):
+            # never overwrite a terminal status: a download finishing
+            # right after Cancel turned «cancelled» into «downloaded ·
+            # waiting», which Start then skipped forever
             self._apply_status(row, tr("downloaded · waiting"))
 
     def _on_mute_progress(self, seconds: float):
@@ -1359,7 +1606,7 @@ class MainWindow(QMainWindow):
             state = "ok"
         else:
             text = (tr("cancelled") if error == "cancelled"
-                    else f"error: {error}")
+                    else tr("error: {}").format(error))
             state = None if error == "cancelled" else "err"
         self._apply_status(row, text, state=state)
         if card:
@@ -1387,9 +1634,28 @@ class MainWindow(QMainWindow):
     def _on_tray_activated(self, reason):
         from PySide6.QtWidgets import QSystemTrayIcon
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
-            self.showNormal()
-            self.raise_()
-            self.activateWindow()
+            self._raise_window()
+
+    def _raise_window(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _show_balloon(self, body: str, action, msecs: int):
+        """A click on the «Finished» balloon used to open the GitHub
+        releases page when an update balloon had been shown earlier:
+        QSystemTrayIcon.messageClicked fires for ANY balloon and the
+        update handler stayed connected. Each balloon brings its own
+        action; a click runs the latest one."""
+        from PySide6.QtWidgets import QSystemTrayIcon
+        self._balloon_action = action
+        self._tray.showMessage("WordMute", body,
+                               QSystemTrayIcon.Information, msecs)
+
+    def _on_balloon_clicked(self):
+        action, self._balloon_action = self._balloon_action, None
+        if action is not None:
+            action()
 
     def _notify_finished(self, summary: str):
         """Active window gets an in-app toast; a backgrounded one gets
@@ -1398,11 +1664,10 @@ class MainWindow(QMainWindow):
             from .toasts import show_toast
             show_toast(self, summary, duration_ms=7000)
             return
-        from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+        from PySide6.QtWidgets import QApplication
         QApplication.alert(self)
         if self._tray is not None:
-            self._tray.showMessage("WordMute", summary,
-                                   QSystemTrayIcon.Information, 8000)
+            self._show_balloon(summary, self._raise_window, 8000)
 
     # ------------------------------------------------------ app updates
     def _start_update_check(self):
@@ -1415,7 +1680,7 @@ class MainWindow(QMainWindow):
             return
         self._app_update_worker = AppUpdateWorker()
         self._app_update_worker.result.connect(self._on_app_update_result)
-        self._app_update_worker.start()
+        start_thread(self, self._app_update_worker)
 
     def _on_app_update_result(self, info: dict):
         if not info.get("update"):
@@ -1425,16 +1690,9 @@ class MainWindow(QMainWindow):
             .format(info["latest"], info["current"])
         self._append_log(line + f" — {info['url']}")
         if self._tray is not None:
-            from PySide6.QtWidgets import QSystemTrayIcon
-            try:
-                self._tray.messageClicked.disconnect(self._open_update_page)
-            except (TypeError, RuntimeError):
-                pass
-            self._tray.messageClicked.connect(self._open_update_page)
-            self._tray.showMessage(
-                "WordMute", line + "\n"
-                + tr("Click to open the download page."),
-                QSystemTrayIcon.Information, 10000)
+            self._show_balloon(
+                line + "\n" + tr("Click to open the download page."),
+                self._open_update_page, 10000)
 
     def _open_update_page(self):
         if getattr(self, "_update_url", None):
@@ -1444,24 +1702,49 @@ class MainWindow(QMainWindow):
 
     # ---------------------------------------------------------- lifecycle
     def closeEvent(self, event):
+        # questions first, all of them, before anything is cancelled
         if self._worker is not None:
-            if QMessageBox.question(
-                    self, "WordMute",
-                    tr("Processing is still running. Cancel and quit?")) \
-                    != QMessageBox.StandardButton.Yes:
+            if not confirm(self,
+                           title=tr("Processing is still running."),
+                           body=tr("Quitting cancels the current file; "
+                                   "finished files are kept."),
+                           ok_text=tr("Cancel and quit")):
                 event.ignore()
                 return
-            self._worker.cancel()
-            self._worker.wait(15000)
+        busy = self.models_tab.busy_description()
+        if busy and not confirm(self, title=busy,
+                                body=tr("Quitting interrupts it; you can "
+                                        "run it again later."),
+                                ok_text=tr("Quit anyway")):
+            event.ignore()
+            return
         if not self.wordlists_tab.maybe_save():
             event.ignore()
             return
-        self.models_tab.shutdown()
-        if self._app_update_worker is not None:
-            self._app_update_worker.wait(5000)
-        if self._probe_worker is not None:
-            self._probe_worker.stop()
-            self._probe_worker.wait(10000)
+        # a review dialog refuses to close during its re-render
+        for dialog in list(self._review_windows):
+            try:
+                if not dialog.close():
+                    event.ignore()
+                    return
+            except RuntimeError:
+                pass
+        # every dialog above ran a nested event loop in which the run
+        # may have finished and cleared self._worker — re-read it
+        stragglers = []
+        worker = self._worker
+        if worker is not None:
+            worker.cancel()
+            if not wait_thread(worker, 15000):
+                stragglers.append(worker)
+        stragglers += self.models_tab.shutdown()
+        if not wait_thread(self._app_update_worker, 3000):
+            stragglers.append(self._app_update_worker)
+        for probe in (self._probe_worker, self._url_probe_worker):
+            if probe is not None:
+                probe.stop()
+                if not wait_thread(probe, 5000):
+                    stragglers.append(probe)
         self._settings.update({
             "use_russian": self.russian_check.isChecked(),
             "use_english": self.english_check.isChecked(),
@@ -1469,4 +1752,9 @@ class MainWindow(QMainWindow):
             "force_passes": self.force_passes_check.isChecked(),
         })
         config.save_settings(self._settings)
+        # a worker that ignored its cancel (model load, stalled network)
+        # must not be destroyed with the window — Qt aborts the process;
+        # main() gives the stragglers one more moment at exit
+        for thread in stragglers:
+            detach_thread(thread)
         event.accept()

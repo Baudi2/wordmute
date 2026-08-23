@@ -305,6 +305,10 @@ QPlainTextEdit#log_pane {
 /* Header bar (proposed) — app title strip above the queue */
 QWidget#header_bar { background: #161826; border-bottom: 1px solid #292b31; }
 QLabel#app_title { font-size: 15px; font-weight: 500; letter-spacing: -0.2px; }
+/* local merge: the header strip is gone (the OS caption is the header);
+   this rule under the caption is what the sidebar's vertical divider
+   terminates into — same color as that divider and the DWM frame */
+QWidget#shell_body { border-top: 1px solid #292b31; }
 
 /* Collapsed setup summary bar (proposed, main window) */
 QWidget#setup_bar {

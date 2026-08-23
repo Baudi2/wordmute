@@ -368,12 +368,31 @@ def configure_fast_mode(on: bool) -> None:
     FAST_MODE = bool(on)
 
 
+def _load_cache(cache: Path, media: Path):
+    """None = treat the cache as a miss. Unreadable: a kill mid-write
+    left a truncated file, and every retry then failed with a JSON
+    error nothing explained. Older than the media: the file was
+    re-exported / re-recorded under the same name, and the old word
+    timings muted the wrong moments."""
+    try:
+        if media.stat().st_mtime > cache.stat().st_mtime + 1:
+            _emit("cache_stale", cache=cache.name)
+            return None
+        words = json.loads(cache.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        _emit("cache_invalid", cache=cache.name)
+        return None
+    return words if isinstance(words, list) else None
+
+
 def transcribe(media: Path, engine: str, model_name: str, device: str, language: str,
                force: bool = False, vad: bool = True):
     cache = _cache_path(media, engine)
     if cache.exists() and not force:
-        _emit("cache_hit", engine=engine, cache=cache.name)
-        return json.loads(cache.read_text(encoding="utf-8"))
+        cached = _load_cache(cache, media)
+        if cached is not None:
+            _emit("cache_hit", engine=engine, cache=cache.name)
+            return cached
 
     _emit("asr_start", file=media.name, engine=engine)
 
@@ -412,7 +431,11 @@ def transcribe(media: Path, engine: str, model_name: str, device: str, language:
     # closes the pass for the stage-timing report (all engines)
     _emit("asr_progress_end")
 
-    cache.write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
+    # temp file + replace: a crash mid-write never leaves a truncated
+    # cache that reads as valid on the next run
+    tmp = cache.with_name(cache.name + ".tmp")
+    tmp.write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, cache)
     _emit("cache_saved", cache=cache.name)
     return words
 
@@ -496,15 +519,24 @@ def _run_ffmpeg_with_progress(cmd) -> None:
                                 text=True, encoding="utf-8",
                                 errors="replace",
                                 creationflags=_creationflags())
-        for line in proc.stdout:
-            if line.startswith("out_time="):
-                try:
-                    h, m, s = line.strip().split("=", 1)[1].split(":")
-                    _emit("mute_progress",
-                          seconds=int(h) * 3600 + int(m) * 60 + float(s))
-                except ValueError:
-                    continue  # "out_time=N/A" etc.
-        proc.wait()
+        try:
+            for line in proc.stdout:
+                if line.startswith("out_time="):
+                    try:
+                        h, m, s = line.strip().split("=", 1)[1].split(":")
+                        _emit("mute_progress",
+                              seconds=int(h) * 3600 + int(m) * 60 + float(s))
+                    except ValueError:
+                        continue  # "out_time=N/A" etc.
+            proc.wait()
+        except BaseException:
+            # a cancel raised from the reporter (or Ctrl+C) must not
+            # leave ffmpeg writing the output in the background: the
+            # orphan kept running to completion and a restarted run
+            # then wrote the same .tmp file under it
+            proc.kill()
+            proc.wait()
+            raise
         if proc.returncode:
             errf.seek(0)
             tail = errf.read()[-2000:].decode("utf-8", errors="replace")
@@ -556,6 +588,9 @@ _AUDIO_CODEC_FOR = {
     ".ogg": ["-c:a", "libvorbis", "-q:a", "6"],
     ".flac": ["-c:a", "flac"],
     ".wav": ["-c:a", "pcm_s16le"],
+    # the mp3 muxer takes exactly one MP3 stream — AAC made every .mp3
+    # input fail at the mute stage («Invalid audio stream», code -22)
+    ".mp3": ["-c:a", "libmp3lame", "-q:a", "2"],
 }
 _AUDIO_CODEC_DEFAULT = ["-c:a", "aac", "-b:a", "192k"]
 
@@ -695,8 +730,15 @@ def _run_passes(inp: Path, out: Path, wordlist, args, plan) -> None:
             break
 
         tmp = out.parent / (out.stem + ".tmp" + out.suffix)
-        mute(current, intervals, tmp, beep_hz=getattr(args, "beep_hz", None))
-        os.replace(tmp, out)
+        try:
+            mute(current, intervals, tmp,
+                 beep_hz=getattr(args, "beep_hz", None))
+            os.replace(tmp, out)
+        except BaseException:
+            # cancel or ffmpeg failure: never leave a half-written
+            # «name.clean.tmp.mp4» next to the video
+            tmp.unlink(missing_ok=True)
+            raise
         # any cached transcript (from either engine) for the previous
         # version of the output is now stale
         drop_output_caches(out)

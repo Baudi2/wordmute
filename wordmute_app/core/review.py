@@ -10,8 +10,10 @@ source with the still-muted intervals — no re-transcription ever."""
 import json
 import os
 import shutil
+import threading
 from pathlib import Path
 
+from . import config
 from ..engine import wordmute as engine
 
 REVIEW_SUFFIX = ".wordmute.json"
@@ -34,8 +36,8 @@ def save_review(source, output, pad_ms: int, intervals: list,
         "beep_hz": beep_hz,
         "intervals": intervals,
     }
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=1),
-                    encoding="utf-8")
+    config.write_text_atomic(path, json.dumps(data, ensure_ascii=False,
+                                              indent=1))
     return path
 
 
@@ -81,12 +83,21 @@ def apply_review(data: dict) -> None:
 
     muted = [(iv["s"], iv["e"], iv["text"])
              for iv in data["intervals"] if iv.get("muted", True)]
-    tmp = output.parent / (output.stem + ".tmp" + output.suffix)
-    if muted:
-        engine.mute(source, muted, tmp, beep_hz=data.get("beep_hz") or None)
-    else:
-        shutil.copyfile(source, tmp)
-    os.replace(tmp, output)
+    # a per-process/thread name: two review dialogs for the same file
+    # (double-click + the Review button) could re-render into one .tmp
+    tmp = output.parent / (
+        f"{output.stem}.tmp-{os.getpid()}-{threading.get_ident()}"
+        f"{output.suffix}")
+    try:
+        if muted:
+            engine.mute(source, muted, tmp,
+                        beep_hz=data.get("beep_hz") or None)
+        else:
+            shutil.copyfile(source, tmp)
+        os.replace(tmp, output)
+    except BaseException:
+        tmp.unlink(missing_ok=True)   # no half-written .tmp left behind
+        raise
     engine.drop_output_caches(output)   # they describe the old output
     save_review(source, output, data.get("pad_ms", 100), data["intervals"],
                 beep_hz=data.get("beep_hz"))

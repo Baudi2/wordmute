@@ -20,7 +20,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from .proc import creationflags
+from .proc import creationflags, track_child, untrack_child
 
 PYTHON_VERSION = "3.12.10"
 PYTHON_EMBED_URL = (f"https://www.python.org/ftp/python/{PYTHON_VERSION}/"
@@ -88,7 +88,16 @@ def ffmpeg_dir() -> Path:
 
 
 def package_installed(module_name: str) -> bool:
-    return (site_packages() / module_name).is_dir()
+    """A package directory alone is not an install: pip unpacks a wheel
+    file by file, so a cancelled/killed pip (or a crash mid-install)
+    left a half-written package that passed the first-run gate — no
+    wizard came back and every run failed with an ImportError. Require
+    the dist-info RECORD, which pip writes last."""
+    site = site_packages()
+    if not (site / module_name).is_dir():
+        return False
+    return any((d / "RECORD").is_file()
+               for d in site.glob(f"{module_name}-*.dist-info"))
 
 
 def status() -> dict:
@@ -171,6 +180,11 @@ def _download(url: str, dest: Path, progress=None, cancelled=None,
                 done += len(chunk)
                 if progress:
                     progress(done, total)
+    # a connection dropped by a middlebox ends the stream cleanly: the
+    # short file then failed later as «File is not a zip file» instead
+    # of being retried here
+    if total and done != total:
+        raise OSError(f"truncated download: {done} of {total} bytes")
 
 
 def _patch_pth(py_dir: Path) -> None:
@@ -306,14 +320,24 @@ def _run_streaming(cmd, log=None, cancelled=None) -> None:
                             stderr=subprocess.STDOUT, text=True,
                             encoding="utf-8", errors="replace",
                             creationflags=creationflags())
-    for line in proc.stdout:
-        if cancelled and cancelled():
-            proc.kill()
-            raise SetupCancelled()
-        line = line.rstrip()
-        if line and log:
-            log(line)
-    proc.wait()
+    track_child(proc)   # the GUI thread can kill it on cancel/close
+    try:
+        for line in proc.stdout:
+            if cancelled and cancelled():
+                proc.kill()
+                raise SetupCancelled()
+            line = line.rstrip()
+            if line and log:
+                log(line)
+        proc.wait()
+    except BaseException:
+        proc.kill()
+        proc.wait()
+        raise
+    finally:
+        untrack_child(proc)
+    if cancelled and cancelled():   # killed from outside mid-download
+        raise SetupCancelled()
     if proc.returncode:
         raise RuntimeError(f"command failed (code {proc.returncode}): "
                            f"{' '.join(cmd[:3])}…")
@@ -345,10 +369,21 @@ def write_report(dest) -> None:
             imports[module] = True
         except Exception as exc:
             imports[module] = f"{type(exc).__name__}: {exc}"[:200]
+    # Qt's own catalogs: the RU labels of the native dialogs come from
+    # here, and a frozen build only has them if the spec shipped them
+    qt_translations = {}
+    try:
+        from ..main import qt_translation_dirs
+        for directory in qt_translation_dirs():
+            qt_translations[str(directory)] = (
+                directory / "qtbase_ru.qm").exists()
+    except Exception as exc:                              # noqa: BLE001
+        qt_translations["error"] = f"{type(exc).__name__}: {exc}"[:200]
     Path(dest).write_text(
         json.dumps({"runtime_dir": str(runtime_dir()),
                     "status": status(),
                     "imports": imports,
+                    "qt_translations": qt_translations,
                     "frozen": bool(getattr(sys, "frozen", False))},
                    indent=1),
         encoding="utf-8")
