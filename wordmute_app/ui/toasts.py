@@ -24,6 +24,10 @@ def show_toast(parent, title: str, text: str = "",
     """Fire-and-forget; Toast instances are single-show by design."""
     from PySide6.QtGui import QColor, QFont
 
+    # nothing to float over: pyqttoast deletes a toast whose parent is
+    # not shown, and the next call into it raises «already deleted»
+    if parent is not None and not parent.isVisible():
+        return
     palette = (_DARK if config.load_settings().get("theme", "dark")
                == "dark" else _LIGHT)
     Toast.setPosition(ToastPosition.BOTTOM_RIGHT)

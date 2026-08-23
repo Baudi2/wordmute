@@ -44,23 +44,40 @@ class JobOptions:
     beep_hz: int | None = None  # None/0 = mute with silence
 
 
-def _is_media(p: Path) -> bool:
+def is_clean_output(p: Path) -> bool:
+    """«name.clean.mp4» — a result of an earlier run, never an input."""
     return (p.suffix.lower() in MEDIA_EXTS
-            and ".clean" not in p.suffixes
-            and not p.stem.endswith(".clean"))
+            and (".clean" in p.suffixes or p.stem.endswith(".clean")))
 
 
-def expand_inputs(paths) -> list:
+def _is_media(p: Path) -> bool:
+    return p.suffix.lower() in MEDIA_EXTS and not is_clean_output(p)
+
+
+def expand_inputs(paths, skipped: dict = None) -> list:
     """GUI-friendly variant of the engine's collect_inputs: expand files
     and directories into a list of media files (sorted within each dir,
-    .clean outputs skipped), silently ignoring anything else."""
+    .clean outputs skipped). `skipped`, when given, collects what was
+    left out — {"clean": [...], "not_media": [...]} — so the UI can say
+    so: a dropped .clean file used to vanish without a word and the
+    user concluded the app «does not see» the video. A folder's other
+    files are normal and are not reported; its .clean outputs are."""
     files = []
     for p in map(Path, paths):
         if p.is_dir():
-            files.extend(f for f in sorted(p.iterdir())
-                         if f.is_file() and _is_media(f))
-        elif p.is_file() and _is_media(p):
-            files.append(p)
+            for f in sorted(p.iterdir()):
+                if not f.is_file():
+                    continue
+                if _is_media(f):
+                    files.append(f)
+                elif skipped is not None and is_clean_output(f):
+                    skipped["clean"].append(f)
+        elif p.is_file():
+            if _is_media(p):
+                files.append(p)
+            elif skipped is not None:
+                key = "clean" if is_clean_output(p) else "not_media"
+                skipped[key].append(p)
     return files
 
 

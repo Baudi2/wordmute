@@ -73,6 +73,32 @@ PLURALS = {
         "ru": ("· ещё в {} списке", "· ещё в {} списках",
                "· ещё в {} списках"),
     },
+    # queue: what a drop / file dialog left out
+    "{} already-processed files (.clean) skipped": {
+        "en": ("{} already-processed file (.clean) skipped — add the "
+               "original video instead",
+               "{} already-processed files (.clean) skipped — add the "
+               "original videos instead"),
+        "ru": ("{} уже обработанный файл (.clean) пропущен — добавьте "
+               "исходное видео",
+               "{} уже обработанных файла (.clean) пропущены — добавьте "
+               "исходные видео",
+               "{} уже обработанных файлов (.clean) пропущены — добавьте "
+               "исходные видео"),
+    },
+    "{} files are not media": {
+        "en": ("{} file is not a media file — skipped",
+               "{} files are not media files — skipped"),
+        "ru": ("{} файл — не медиафайл, пропущен",
+               "{} файла — не медиафайлы, пропущены",
+               "{} файлов — не медиафайлы, пропущены"),
+    },
+    "{} files already in the queue": {
+        "en": ("{} file is already in the queue",
+               "{} files are already in the queue"),
+        "ru": ("{} файл уже в очереди", "{} файла уже в очереди",
+               "{} файлов уже в очереди"),
+    },
 }
 
 
@@ -334,6 +360,9 @@ RU = {
         "Выход прервёт это; можно будет запустить снова позже.",
     "Quit anyway": "Всё равно выйти",
     "Already in the queue: {}": "Уже в очереди: {}",
+    "Nothing added": "Ничего не добавлено",
+    "Some files were skipped": "Часть файлов пропущена",
+    "next to the source": "рядом с исходником",
     # tier 3: captions and statuses that bypassed tr()
     "Watch folder": "Папка для отслеживания",
     "Add media files": "Добавить медиафайлы",

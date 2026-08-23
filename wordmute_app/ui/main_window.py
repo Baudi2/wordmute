@@ -541,6 +541,7 @@ class MainWindow(QMainWindow):
                          nav_icon("history"))
         self.settings_tab = SettingsTab(self._settings)
         self.settings_tab.changed.connect(self._refresh_warnings)
+        self.settings_tab.changed.connect(self._update_setup_summary)
         self.tabs.addTab(self.settings_tab, tr("Settings"),
                          nav_icon("settings"))
         self.tabs.currentChanged.connect(self._on_tab_changed)
@@ -566,8 +567,14 @@ class MainWindow(QMainWindow):
             name = "GigaAM" if engine == "gigaam" else "Whisper"
             parts.append(name if count == 1 else f"{name} ×{count}")
         plan_text = " → ".join(parts) or tr("empty")
+        # where the result lands — «why is the clean file in my
+        # Downloads?» is answered here, not in the Settings tab
+        out_dir = (self._settings.get("output_dir") or "").strip()
+        where = (out_dir if self._settings.get("output_mode") == "folder"
+                 and out_dir else tr("next to the source"))
         text = (f"{tr('Word lists')}: {', '.join(lists) or tr('none')} · "
-                f"{tr('Pass plan')}: {plan_text}")
+                f"{tr('Pass plan')}: {plan_text} · "
+                f"{tr('Output')}: {where}")
         self.setup_summary.setText(text)
         self.setup_summary.setToolTip(text)
 
@@ -759,11 +766,16 @@ class MainWindow(QMainWindow):
 
     def _add_files(self, paths):
         existing = {it.path for it in self._items() if it.kind == "file"}
+        skipped = {"clean": [], "not_media": []}
         new_paths = []
-        for p in expand_inputs(paths):
-            if p not in existing:
-                existing.add(p)
-                new_paths.append(p)
+        duplicates = 0
+        for p in expand_inputs(paths, skipped):
+            if p in existing:
+                duplicates += 1
+                continue
+            existing.add(p)
+            new_paths.append(p)
+        self._report_skipped(skipped, duplicates, added=len(new_paths))
         # single adds probe inline (fast); bulk adds defer the ffprobe
         # and thumbnail work to a background worker per file
         bulk = len(new_paths) > 1
@@ -776,6 +788,31 @@ class MainWindow(QMainWindow):
                 if card:
                     card.set_loading(True)
                 self._probe_in_background(item)
+
+    def _report_skipped(self, skipped: dict, duplicates: int, added: int):
+        """Say what a drop or a file dialog left out. Dropping a .clean
+        result used to do nothing at all — the user concluded the app
+        «does not see» the video."""
+        notes = []
+        if skipped["clean"]:
+            notes.append(tr_plural(
+                "{} already-processed files (.clean) skipped",
+                len(skipped["clean"])))
+        if skipped["not_media"]:
+            notes.append(tr_plural("{} files are not media",
+                                   len(skipped["not_media"])))
+        if duplicates:
+            notes.append(tr_plural("{} files already in the queue",
+                                   duplicates))
+        if not notes:
+            return
+        text = "; ".join(notes)
+        self._append_log(text)
+        self.status_label.setText(text)
+        from .toasts import show_toast
+        show_toast(self, tr("Nothing added") if not added
+                   else tr("Some files were skipped"), text,
+                   duration_ms=7000)
 
     def _probe_in_background(self, item: QueueItem):
         if os.environ.get("WORDMUTE_SYNC_PROBE"):  # tests: no threads
