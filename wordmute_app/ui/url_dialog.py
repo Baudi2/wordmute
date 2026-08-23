@@ -31,7 +31,7 @@ from ..core.jobs import QueueItem
 from .flow_layout import FlowLayout, make_chip
 from .hover_table import HoverRowTable
 from .i18n import tr, tr_plural
-from .threads import start_thread
+from .threads import detach_thread, start_thread
 
 # keep fetch threads alive if their dialog closes early; Qt drops the
 # signal connections with the dialog, so late emits are harmless
@@ -124,7 +124,9 @@ class AddUrlDialog(QDialog):
         self._info = None
         self._use_best = False
         self._cookies = cookies
+        self._auto_fetch = auto_fetch
         self._fetch_generation = 0
+        self._fetchers = []           # format fetches still running
         self._multi_urls = []
 
         self._reformatting = False   # guard: setPlainText re-enters
@@ -551,7 +553,10 @@ class AddUrlDialog(QDialog):
                                "loads automatically."))
 
     def _fetch(self):
-        if self._multi_urls:
+        # auto_fetch=False (tests): the debounce still arms, but no
+        # yt-dlp call ever leaves — a fetch left running against a fake
+        # URL aborted the test session at exit
+        if self._multi_urls or not self._auto_fetch:
             return
         url = self._url()
         if not self._looks_like_url(url):
@@ -578,7 +583,23 @@ class AddUrlDialog(QDialog):
             lambda message, g=generation:
             self._on_fetch_error(message)
             if g == self._fetch_generation else None)
+        self._fetchers.append(worker)
+        worker.finished.connect(
+            lambda w=worker: self._fetchers.remove(w)
+            if w in self._fetchers else None)
         start_thread(self, worker)
+
+    def done(self, result: int):
+        """accept(), reject() (Esc / Cancel) and the close box all end
+        here. A format fetch still running (yt-dlp has no cancel) must
+        not die with the dialog — Qt aborts the process when a running
+        QThread is destroyed; it finishes detached, its result is
+        stale by generation."""
+        self._fetch_generation += 1
+        for worker in list(self._fetchers):
+            detach_thread(worker)
+        self._fetchers.clear()
+        super().done(result)
 
     def _on_formats_ready(self, info: dict):
         self._info = info

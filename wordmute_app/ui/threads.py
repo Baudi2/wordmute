@@ -16,10 +16,22 @@ start_thread() hands ownership to a Qt parent, so Python references
 become plain references, and finished→deleteLater frees the object
 once the thread has really stopped (QThread's destructor waits out the
 finishing phase — the one documented-safe moment to delete it).
+
+The same abort has a second door: a close-time wait that times out.
+Model loading, a stalled download or an ffmpeg pass can outlive any
+reasonable wait; if the owner window is then destroyed with the thread
+still running, Qt aborts again. detach_thread() unparents such a
+straggler and keeps it alive; main() gives the stragglers one more
+chance at exit and hard-exits rather than let Qt tear them down.
+
 Qt-only imports on purpose: the setup wizard uses this before the
 engine packages exist."""
 
+import time
+
 from PySide6.QtCore import QObject, QThread
+
+_DETACHED = []   # stragglers handed over by close paths (see above)
 
 
 def start_thread(owner: QObject, thread: QThread) -> QThread:
@@ -30,15 +42,43 @@ def start_thread(owner: QObject, thread: QThread) -> QThread:
     return thread
 
 
-def wait_thread(thread, msecs: int = None) -> None:
+def wait_thread(thread, msecs: int = None) -> bool:
     """wait() on a worker started with start_thread — tolerating None
-    and one Qt has already deleted (finished → deleteLater)."""
+    and one Qt has already deleted (finished → deleteLater). Returns
+    True when the thread is stopped (or was never there)."""
+    if thread is None:
+        return True
+    try:
+        if msecs is None:
+            return bool(thread.wait())
+        return bool(thread.wait(msecs))
+    except RuntimeError:   # "Internal C++ object already deleted"
+        return True
+
+
+def detach_thread(thread) -> None:
+    """A worker that ignored its cancel within the close-time budget must
+    not die with its owner. Unparent it and keep it referenced until it
+    really stops; shutdown_detached() collects it at exit."""
     if thread is None:
         return
     try:
-        if msecs is None:
-            thread.wait()
-        else:
-            thread.wait(msecs)
-    except RuntimeError:   # "Internal C++ object already deleted"
-        pass
+        if not thread.isRunning():
+            return
+        thread.setParent(None)
+    except RuntimeError:
+        return
+    _DETACHED.append(thread)
+
+
+def shutdown_detached(msecs: int) -> bool:
+    """Last call before the interpreter goes: wait up to `msecs` for
+    every detached worker. False means something is still running and
+    the caller should exit without Qt's teardown (os._exit)."""
+    deadline = time.monotonic() + msecs / 1000
+    stopped = True
+    for thread in list(_DETACHED):
+        remaining = max(0, int((deadline - time.monotonic()) * 1000))
+        if not wait_thread(thread, remaining):
+            stopped = False
+    return stopped

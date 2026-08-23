@@ -13,7 +13,11 @@ Nothing here is a QTableWidget any more: rows are small frames, so the
 sheet can style states (busy / err / new) per row.
 """
 
+import os
+import shutil
 import subprocess
+import sys
+import threading
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QThread, Signal
@@ -29,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config, gpu, models, runtime_env, updates
-from ..core.proc import creationflags
+from ..core.proc import creationflags, kill_child_of
 from .. import __version__
 from .dialogs import confirm, inform, mark_danger, repolish, themed_menu
 from .elided_label import ElidedLabel
@@ -101,11 +105,15 @@ class GigaamDownloadWorker(QThread):
         super().__init__(parent)
         self._model_name = model_name
         self._cancelled = False
+        self._ident = None
 
     def cancel(self):
         self._cancelled = True
+        if self._ident is not None:     # the download child, at once
+            kill_child_of(self._ident)
 
     def run(self):
+        self._ident = threading.get_ident()
         try:
             runtime_env.install_gigaam_model(
                 self._model_name, cancelled=lambda: self._cancelled)
@@ -155,13 +163,24 @@ class UpgradeWorker(QThread):
         super().__init__(parent)
         self._packages = list(package_names)
         self._models = list(model_names)
+        self._cancelled = False
+        self._ident = None
+
+    def cancel(self):
+        """Close-time only: stops between stages, kills the pip child."""
+        self._cancelled = True
+        if self._ident is not None:
+            kill_child_of(self._ident)
 
     def run(self):
+        self._ident = threading.get_ident()
         messages = []
         ok = True
         total = len(self._packages) + len(self._models)
         index = 0
         for name in self._packages:
+            if self._cancelled:
+                break
             index += 1
             self.stage.emit(name, index, total)
             pip_ok, tail = updates.pip_upgrade(
@@ -171,6 +190,8 @@ class UpgradeWorker(QThread):
             if not pip_ok:
                 messages.append(f"{name}: {tail[-300:]}")
         for model in self._models:
+            if self._cancelled:
+                break
             index += 1
             self.stage.emit(model, index, total)
             try:  # snapshot_download fetches the new revision
@@ -320,10 +341,13 @@ class UpdateRow(QFrame):
 
 # ================================================================ the tab
 class ModelsTab(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, settings: dict = None, parent=None):
         super().__init__(parent)
         self.setObjectName("models_tab")
-        self._settings = config.load_settings()
+        # the main window's live dict: three private copies of
+        # settings.json used to overwrite each other wholesale
+        self._settings = (settings if settings is not None
+                          else config.load_settings())
         self._worker = None            # the one running model download
         self._downloading = None
         self._failed = {}              # model key -> last error line
@@ -923,13 +947,36 @@ class ModelsTab(QWidget):
     # ----------------------------------------------- wizard / repair
     def _open_components(self):
         from .setup_dialog import SetupDialog
-        SetupDialog(self, first_run=False).exec()
+        SetupDialog(self, first_run=False, settings=self._settings).exec()
+        window = self.window()
+        if hasattr(window, "settings_tab"):   # its widgets must follow
+            window.settings_tab.reload()
         self.refresh()
         self._refresh_disk()
+
+    # engine packages whose DLLs stay mapped into this process once a
+    # transcription ran — Windows refuses to delete them, and a repair
+    # that tries leaves a half-deleted runtime that reports «installed»
+    _ENGINE_MODULES = ("faster_whisper", "ctranslate2", "onnx_asr",
+                       "onnxruntime", "torch", "gigaam")
+
+    def _engine_in_use(self) -> bool:
+        window = self.window()
+        if getattr(window, "_worker", None) is not None:
+            return True
+        if self._worker is not None or self._upgrade_worker is not None:
+            return True
+        return any(name in sys.modules for name in self._ENGINE_MODULES)
 
     def _repair_components(self):
         """The standard clean retry from INSTALL_GUIDE, as one click:
         delete the managed runtime, then run the component setup."""
+        if self._engine_in_use():
+            inform(self, title=tr("Restart WordMute first"),
+                   body=tr("The components are in use by this session. "
+                           "Restart the app and run the repair before "
+                           "processing anything."))
+            return
         if not confirm(self,
                        title=tr("Delete the runtime and set it up again?"),
                        body=tr("Word lists, settings, history and the "
@@ -938,13 +985,43 @@ class ModelsTab(QWidget):
                                "processing."),
                        ok_text=tr("Delete and set up")):
             return
-        import shutil
-        shutil.rmtree(runtime_env.runtime_dir(), ignore_errors=True)
+        runtime = runtime_env.runtime_dir()
+        old = runtime.with_name(runtime.name + ".old")
+        try:
+            # rename first: it is atomic and FAILS when anything inside
+            # is still open (ffmpeg, a DLL) instead of half-deleting
+            if old.exists():
+                shutil.rmtree(old)
+            if runtime.exists():
+                os.rename(runtime, old)
+        except OSError as exc:
+            inform(self, title=tr("Could not remove the runtime"),
+                   body=tr("Something in it is still in use: {}\n"
+                           "Restart the app and try again.").format(exc))
+            return
+        shutil.rmtree(old, ignore_errors=True)
         self._open_components()
         inform(self, title=tr("Restart the app to use the reinstalled "
                               "components."))
 
-    def shutdown(self):
-        for worker in (self._worker, self._updates_worker,
-                       self._upgrade_worker, self._disk_worker):
-            wait_thread(worker, 30000)
+    def busy_description(self):
+        """What the window's close confirm should name, or None."""
+        if self._upgrade_worker is not None:
+            return tr("An update is installing.")
+        if self._worker is not None:
+            return tr("A model is downloading.")
+        return None
+
+    def shutdown(self) -> list:
+        """Close-time: stop what can be stopped, wait briefly, and hand
+        back whatever is still running — the window must never destroy
+        a live thread (Qt aborts the process)."""
+        for worker in (self._worker, self._upgrade_worker):
+            if worker is not None:
+                worker.cancel()
+        stragglers = []
+        for worker in (self._worker, self._upgrade_worker,
+                       self._updates_worker, self._disk_worker):
+            if worker is not None and not wait_thread(worker, 5000):
+                stragglers.append(worker)
+        return stragglers

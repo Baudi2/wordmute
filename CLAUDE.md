@@ -71,7 +71,12 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   Qt still counts it running → qFatal "QThread: Destroyed while thread
   is still running" → the app vanishes with exit 0xC0000409, no
   traceback. Reproduced on «Проверить обновления»; tests/test_threads.py
-  guards it.
+  guards it. Second door, same abort: a close-time wait that times out
+  and then destroys the owner — close paths cancel first, wait briefly,
+  and hand stragglers to detach_thread(); main() collects them after
+  app.exec() and os._exit()s if any is still running. QDialog.reject()
+  (Esc) skips closeEvent — dialogs that own threads override reject()
+  to call close(); a dialog run with exec() releases threads in done().
 
 ## Commands
 - Tests: `python -m pytest tests` (150+, all offscreen/stubbed, no

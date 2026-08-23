@@ -315,6 +315,24 @@ RU = {
     "Show all": "Показать все",
     "will be muted": "заглушится",
     "will not be muted — no matches": "не заглушится — совпадений нет",
+    # pre-0.7.0 audit fixes
+    "Re-render in progress — wait for it to finish.":
+        "Идёт пересборка — дождитесь её окончания.",
+    "Output folder is not available: {}": "Папка результата недоступна: {}",
+    "Restart WordMute first": "Сначала перезапустите WordMute",
+    "The components are in use by this session. Restart the app and run "
+    "the repair before processing anything.":
+        "Компоненты заняты этим сеансом. Перезапустите приложение и "
+        "запустите починку до любой обработки.",
+    "Could not remove the runtime": "Не удалось удалить компоненты",
+    "Something in it is still in use: {}\nRestart the app and try again.":
+        "Что-то из них ещё используется: {}\nПерезапустите приложение и "
+        "попробуйте снова.",
+    "An update is installing.": "Устанавливается обновление.",
+    "A model is downloading.": "Скачивается модель.",
+    "Quitting interrupts it; you can run it again later.":
+        "Выход прервёт это; можно будет запустить снова позже.",
+    "Quit anyway": "Всё равно выйти",
     # history
     "Copy error": "Копировать ошибку",
     "Processed files will appear here.":

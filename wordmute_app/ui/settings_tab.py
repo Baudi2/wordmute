@@ -234,6 +234,26 @@ class SettingsTab(QWidget):
         ):
             signal.connect(self._apply)
 
+    def reload(self):
+        """Re-read the fields another writer shares with us (the
+        component wizard picks model/device/language into the same
+        dict): the widgets must follow, or the next keystroke here
+        writes their stale values back over the wizard's choice."""
+        self._loading = True
+        try:
+            s = self._settings
+            if s.get("model") in WHISPER_MODELS:
+                self.model_combo.setCurrentText(s["model"])
+            if s.get("gigaam_model") in GIGAAM_MODELS:
+                self.gigaam_combo.setCurrentText(s["gigaam_model"])
+            if s.get("device") in ("cuda", "cpu"):
+                self.device_combo.setCurrentText(s["device"])
+            index = self.ui_language_combo.findData(s.get("ui_language"))
+            if index >= 0:
+                self.ui_language_combo.setCurrentIndex(index)
+        finally:
+            self._loading = False
+
     def retranslate_ui(self):
         """Unit suffixes belong here, never in the constructor: set once
         at build time they survive a language switch as «100 ms» in a

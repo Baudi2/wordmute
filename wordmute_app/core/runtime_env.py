@@ -20,7 +20,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from .proc import creationflags
+from .proc import creationflags, track_child, untrack_child
 
 PYTHON_VERSION = "3.12.10"
 PYTHON_EMBED_URL = (f"https://www.python.org/ftp/python/{PYTHON_VERSION}/"
@@ -306,14 +306,24 @@ def _run_streaming(cmd, log=None, cancelled=None) -> None:
                             stderr=subprocess.STDOUT, text=True,
                             encoding="utf-8", errors="replace",
                             creationflags=creationflags())
-    for line in proc.stdout:
-        if cancelled and cancelled():
-            proc.kill()
-            raise SetupCancelled()
-        line = line.rstrip()
-        if line and log:
-            log(line)
-    proc.wait()
+    track_child(proc)   # the GUI thread can kill it on cancel/close
+    try:
+        for line in proc.stdout:
+            if cancelled and cancelled():
+                proc.kill()
+                raise SetupCancelled()
+            line = line.rstrip()
+            if line and log:
+                log(line)
+        proc.wait()
+    except BaseException:
+        proc.kill()
+        proc.wait()
+        raise
+    finally:
+        untrack_child(proc)
+    if cancelled and cancelled():   # killed from outside mid-download
+        raise SetupCancelled()
     if proc.returncode:
         raise RuntimeError(f"command failed (code {proc.returncode}): "
                            f"{' '.join(cmd[:3])}…")

@@ -8,8 +8,10 @@ processing. Only one worker runs at a time (the engine's reporter is
 module-global)."""
 
 import dataclasses
+import sys
 import threading
 import time
+import traceback
 
 from PySide6.QtCore import QThread, Signal
 
@@ -214,24 +216,51 @@ class ProcessWorker(QThread):
         except OSError:
             pass  # history must never break processing
 
+    def _finish(self, index: int, ok: bool, message: str):
+        self._finished.add(index)
+        self.file_finished.emit(index, ok, message)
+
+    def _output_path(self, path, total: int, used: set):
+        out = engine.output_for(path, self._output_dir, multi=total > 1)
+        if self._output_dir is not None:
+            # folder mode keys the output by file name alone: two
+            # «01.mp4» from different folders (Season 1 / Season 2)
+            # silently overwrote each other's result and review sidecar
+            base, n = out, 2
+            while out in used:
+                out = base.with_name(f"{path.stem} ({n}).clean{path.suffix}")
+                n += 1
+        used.add(out)
+        return out
+
     def run(self):
         engine.set_reporter(self._report)
         done = 0
         total = len(self._items)
-        url_jobs = [(i, item) for i, item in enumerate(self._items)
-                    if item.kind == "url"]
-        pump = _DownloadPump(self, url_jobs) if url_jobs else None
-        if pump is not None:
-            pump.start()
-
-        # output_for treats an out path as a file unless it's an existing
-        # directory, so a configured output folder must exist up front
-        if self._output_dir is not None:
-            self._output_dir.mkdir(parents=True, exist_ok=True)
+        self._finished = set()
+        used_outputs = set()
+        pump = None
         try:
+            # output_for treats an out path as a file unless it's an
+            # existing directory, so a configured output folder must
+            # exist up front — and an unreachable one (unplugged drive,
+            # a typo) must fail visibly: an exception escaping run()
+            # left the window stuck in «running» with no reason shown
+            if self._output_dir is not None:
+                try:
+                    self._output_dir.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    raise RuntimeError(
+                        tr("Output folder is not available: {}")
+                        .format(exc)) from exc
+            url_jobs = [(i, item) for i, item in enumerate(self._items)
+                        if item.kind == "url"]
+            pump = _DownloadPump(self, url_jobs) if url_jobs else None
+            if pump is not None:
+                pump.start()
             for i, item in enumerate(self._items):
                 if self._cancelled:
-                    self.file_finished.emit(i, False, "cancelled")
+                    self._finish(i, False, "cancelled")
                     continue
                 self.file_started.emit(i, item.display_name)
                 self._records = []
@@ -260,36 +289,49 @@ class ProcessWorker(QThread):
                             dl_bytes = path.stat().st_size
                         except OSError:
                             dl_bytes = 0
-                    out = engine.output_for(path, self._output_dir,
-                                            multi=total > 1)
+                    out = self._output_path(path, total, used_outputs)
                     engine.process_file(path, out, wordlist,
                                         options, plan)
                 except (JobCancelled, downloader.DownloadCancelled):
                     self._log_history(item, "cancelled", "", source=path,
                                       dl_bytes=dl_bytes,
                                       stages=self._finish_timing(i, item_t0))
-                    self.file_finished.emit(i, False, "cancelled")
+                    self._finish(i, False, "cancelled")
                 except Exception as exc:
                     message = humanize_download_error(str(exc))
                     self._log_history(item, "error", message, source=path,
                                       dl_bytes=dl_bytes,
                                       stages=self._finish_timing(i, item_t0))
-                    self.file_finished.emit(i, False, message)
+                    self._finish(i, False, message)
                 else:
                     done += 1
                     if out.exists():  # nothing muted -> no output file
                         self.engine_event.emit("item_output",
                                                {"path": str(out)})
                     if self._records:  # something was muted -> reviewable
-                        rp = review.save_review(path, out, self._options.pad,
-                                                self._records,
-                                                beep_hz=self._options.beep_hz)
-                        self.engine_event.emit("review_saved",
-                                               {"path": str(rp)})
+                        try:
+                            rp = review.save_review(
+                                path, out, self._options.pad, self._records,
+                                beep_hz=self._options.beep_hz)
+                        except OSError as exc:   # the item itself is fine
+                            print(f"review sidecar not written: {exc}",
+                                  file=sys.stderr)
+                        else:
+                            self.engine_event.emit("review_saved",
+                                                   {"path": str(rp)})
                     self._log_history(item, "ok", "", output=out,
                                       source=path, dl_bytes=dl_bytes,
                                       stages=self._finish_timing(i, item_t0))
-                    self.file_finished.emit(i, True, "")
+                    self._finish(i, True, "")
+        except Exception as exc:
+            # a run-level failure ends every item that has no verdict yet
+            # instead of escaping run() — that killed the thread before
+            # the finally, with all_finished never emitted
+            print(traceback.format_exc(), file=sys.stderr)
+            message = humanize_download_error(str(exc))
+            for i in range(total):
+                if i not in self._finished:
+                    self._finish(i, False, message)
         finally:
             if pump is not None:  # cancel mid-run: let it wind down
                 pump.join()

@@ -143,9 +143,34 @@ def test_repair_deletes_runtime_and_reopens_setup(models_tab, monkeypatch,
     opened = []
     monkeypatch.setattr(models_tab, "_open_components",
                         lambda: opened.append(True))
+    # the test process may have engine modules imported by other tests
+    monkeypatch.setattr(type(models_tab), "_ENGINE_MODULES", ())
     models_tab._repair_components()
     assert not runtime_env.runtime_dir().exists()
+    assert not runtime_env.runtime_dir().with_name("runtime.old").exists()
     assert opened == [True]
+
+
+def test_repair_refuses_while_engine_loaded(models_tab, monkeypatch,
+                                            tmp_path, confirm_yes):
+    """Audit fix: deleting the runtime under DLLs this process has
+    mapped half-deleted it (Windows keeps them, ignore_errors hid it)
+    and the reinstall then failed. With an engine module loaded the
+    repair asks for a restart instead."""
+    import sys
+    import types
+    from wordmute_app.core import runtime_env
+
+    marker = runtime_env.runtime_dir() / "python" / "python.exe"
+    marker.parent.mkdir(parents=True)
+    marker.touch()
+    monkeypatch.setitem(sys.modules, "ctranslate2", types.ModuleType("x"))
+    opened = []
+    monkeypatch.setattr(models_tab, "_open_components",
+                        lambda: opened.append(True))
+    models_tab._repair_components()
+    assert marker.exists()
+    assert opened == []
 
 
 def test_repair_declined_keeps_runtime(models_tab, monkeypatch):

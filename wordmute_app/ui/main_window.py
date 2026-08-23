@@ -46,7 +46,7 @@ from .sidebar import SidebarNav
 from .transcript_tab import TranscriptTab
 from .url_dialog import AddUrlDialog
 from .wordlists_tab import WordListsTab
-from .threads import start_thread, wait_thread
+from .threads import detach_thread, start_thread, wait_thread
 from .worker import ProcessWorker
 
 # data roles on each queue QListWidgetItem. Cards are rebuilt from
@@ -129,12 +129,17 @@ class MediaProbeWorker(QThread):
         self._jobs.put(item)
 
     def stop(self):
+        # the sentinel used to queue BEHIND every pending job, so a
+        # bulk add of 50 files meant 50 more probes before the thread
+        # could stop — and the window's wait timed out
+        self._stopping = True
         self._jobs.put(None)
 
     def run(self):
+        self._stopping = False
         while True:
             item = self._jobs.get()
-            if item is None:
+            if item is None or self._stopping:
                 return
             duration = media_duration(item.path)
             thumb = thumbs.thumbnail_path(item.path)
@@ -159,13 +164,15 @@ class UrlProbeWorker(QThread):
         self._jobs.put(item)
 
     def stop(self):
+        self._stopping = True          # see MediaProbeWorker.stop
         self._jobs.put(None)
 
     def run(self):
         from ..core import downloader, thumbs
+        self._stopping = False
         while True:
             item = self._jobs.get()
-            if item is None:
+            if item is None or self._stopping:
                 return
             try:
                 info = downloader.probe_url(item.url,
@@ -523,7 +530,7 @@ class MainWindow(QMainWindow):
         self.transcript_tab = TranscriptTab()
         self.tabs.addTab(self.transcript_tab, tr("Transcript"),
                          nav_icon("transcript"))
-        self.models_tab = ModelsTab()
+        self.models_tab = ModelsTab(self._settings)
         self.tabs.addTab(self.models_tab, tr("Models"), nav_icon("models"))
         self.history_tab = HistoryTab()
         self.tabs.addTab(self.history_tab, tr("History"),
@@ -1626,6 +1633,7 @@ class MainWindow(QMainWindow):
 
     # ---------------------------------------------------------- lifecycle
     def closeEvent(self, event):
+        # questions first, all of them, before anything is cancelled
         if self._worker is not None:
             if not confirm(self,
                            title=tr("Processing is still running."),
@@ -1634,19 +1642,40 @@ class MainWindow(QMainWindow):
                            ok_text=tr("Cancel and quit")):
                 event.ignore()
                 return
-            self._worker.cancel()
-            wait_thread(self._worker, 15000)
+        busy = self.models_tab.busy_description()
+        if busy and not confirm(self, title=busy,
+                                body=tr("Quitting interrupts it; you can "
+                                        "run it again later."),
+                                ok_text=tr("Quit anyway")):
+            event.ignore()
+            return
         if not self.wordlists_tab.maybe_save():
             event.ignore()
             return
-        self.models_tab.shutdown()
-        wait_thread(self._app_update_worker, 5000)
-        if self._probe_worker is not None:
-            self._probe_worker.stop()
-            self._probe_worker.wait(10000)
-        if self._url_probe_worker is not None:
-            self._url_probe_worker.stop()
-            self._url_probe_worker.wait(10000)
+        # a review dialog refuses to close during its re-render
+        for dialog in list(self._review_windows):
+            try:
+                if not dialog.close():
+                    event.ignore()
+                    return
+            except RuntimeError:
+                pass
+        # every dialog above ran a nested event loop in which the run
+        # may have finished and cleared self._worker — re-read it
+        stragglers = []
+        worker = self._worker
+        if worker is not None:
+            worker.cancel()
+            if not wait_thread(worker, 15000):
+                stragglers.append(worker)
+        stragglers += self.models_tab.shutdown()
+        if not wait_thread(self._app_update_worker, 3000):
+            stragglers.append(self._app_update_worker)
+        for probe in (self._probe_worker, self._url_probe_worker):
+            if probe is not None:
+                probe.stop()
+                if not wait_thread(probe, 5000):
+                    stragglers.append(probe)
         self._settings.update({
             "use_russian": self.russian_check.isChecked(),
             "use_english": self.english_check.isChecked(),
@@ -1654,4 +1683,9 @@ class MainWindow(QMainWindow):
             "force_passes": self.force_passes_check.isChecked(),
         })
         config.save_settings(self._settings)
+        # a worker that ignored its cancel (model load, stalled network)
+        # must not be destroyed with the window — Qt aborts the process;
+        # main() gives the stragglers one more moment at exit
+        for thread in stragglers:
+            detach_thread(thread)
         event.accept()

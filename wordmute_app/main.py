@@ -125,7 +125,22 @@ def main():
     if os.environ.get("WORDMUTE_SMOKE"):  # automated startup check
         from PySide6.QtCore import QTimer
         QTimer.singleShot(2000, app.quit)
-    return app.exec()
+    code = app.exec()
+    # workers that ignored their cancel within the close-time budget
+    # (a model load, a stalled download, an ffmpeg pass) were detached
+    # from the window so it could close; give them one more moment,
+    # then leave without Qt's teardown — destroying a running QThread
+    # aborts the process (0xC0000409). Settings and history are already
+    # written by then.
+    from .ui.threads import shutdown_detached
+    if not shutdown_detached(10000):
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except Exception:
+                pass
+        os._exit(code)
+    return code
 
 
 if __name__ == "__main__":

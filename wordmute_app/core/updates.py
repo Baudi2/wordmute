@@ -15,7 +15,7 @@ import urllib.request
 from importlib import metadata
 
 from . import models as models_mod
-from .proc import creationflags
+from .proc import creationflags, track_child, untrack_child
 
 # onnx-asr is what setup installs for GigaAM today; the legacy torch
 # "gigaam" package made every onnx-only install report "not installed"
@@ -147,6 +147,10 @@ def pip_upgrade(names, log=None) -> tuple:
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace",
             creationflags=creationflags())
+    except OSError as exc:
+        return False, str(exc)
+    track_child(proc)   # killable from the GUI thread at close time
+    try:
         for line in proc.stdout:
             line = line.rstrip()
             if not line:
@@ -156,5 +160,12 @@ def pip_upgrade(names, log=None) -> tuple:
                 log(line)
         code = proc.wait(timeout=900)
     except (OSError, subprocess.TimeoutExpired) as exc:
+        proc.kill()
         return False, str(exc)
+    except BaseException:
+        proc.kill()
+        proc.wait()
+        raise
+    finally:
+        untrack_child(proc)
     return code == 0, "\n".join(lines)[-800:]

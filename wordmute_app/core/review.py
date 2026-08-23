@@ -82,11 +82,16 @@ def apply_review(data: dict) -> None:
     muted = [(iv["s"], iv["e"], iv["text"])
              for iv in data["intervals"] if iv.get("muted", True)]
     tmp = output.parent / (output.stem + ".tmp" + output.suffix)
-    if muted:
-        engine.mute(source, muted, tmp, beep_hz=data.get("beep_hz") or None)
-    else:
-        shutil.copyfile(source, tmp)
-    os.replace(tmp, output)
+    try:
+        if muted:
+            engine.mute(source, muted, tmp,
+                        beep_hz=data.get("beep_hz") or None)
+        else:
+            shutil.copyfile(source, tmp)
+        os.replace(tmp, output)
+    except BaseException:
+        tmp.unlink(missing_ok=True)   # no half-written .tmp left behind
+        raise
     engine.drop_output_caches(output)   # they describe the old output
     save_review(source, output, data.get("pad_ms", 100), data["intervals"],
                 beep_hz=data.get("beep_hz"))

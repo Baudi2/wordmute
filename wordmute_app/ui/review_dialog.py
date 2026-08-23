@@ -26,7 +26,7 @@ from ..engine.wordmute import fmt_ts
 from .dialogs import confirm
 from .hover_table import HoverRowTable
 from .i18n import tr
-from .threads import start_thread, wait_thread
+from .threads import detach_thread, start_thread, wait_thread
 from .player import SnippetPlayer
 from .waveform import WaveformStrip, WaveformWorker
 
@@ -321,9 +321,23 @@ class ReviewDialog(QDialog):
             tr("Re-render failed: {}").format(message))
 
     # ---------------------------------------------------------- lifecycle
+    def reject(self):
+        """Esc goes through QDialog.reject(), which skips closeEvent —
+        the only place the worker threads are handled. With
+        WA_DeleteOnClose that destroyed the dialog under a running
+        re-render and Qt aborted the whole app. One path owns closing."""
+        self.close()
+
     def closeEvent(self, event):
-        wait_thread(self._worker)
-        wait_thread(self._wave_worker, 5000)
+        if self._worker is not None:
+            # no cancel exists for the ffmpeg pass and waiting here
+            # would freeze the whole app for its duration
+            self.status_label.setText(
+                tr("Re-render in progress — wait for it to finish."))
+            event.ignore()
+            return
+        if not wait_thread(self._wave_worker, 3000):
+            detach_thread(self._wave_worker)   # never dies with us
         if self._dirty:
             if not confirm(self, title=tr("Close without re-rendering?"),
                            body=tr("You changed the mute selection but "

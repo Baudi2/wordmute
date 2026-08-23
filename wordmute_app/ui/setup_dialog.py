@@ -34,11 +34,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import config, gpu, models, runtime_env
+from ..core import config, gpu, models, proc, runtime_env
 from .dialogs import confirm
 from .formats import fmt_bytes, fmt_rate
 from .i18n import current_language, set_language, tr
-from .threads import start_thread, wait_thread
+from .threads import detach_thread, start_thread, wait_thread
 
 STEP_KEYS = ("intro", "python", "whisper", "ytdlp", "ffmpeg", "gigaam",
              "review", "install")
@@ -84,11 +84,19 @@ class SetupWorker(QThread):
         super().__init__(parent)
         self._steps = steps  # [(stage_name, callable), ...]
         self._cancelled = False
+        self._ident = None
 
     def cancel(self):
         self._cancelled = True
+        # pip prints nothing while a wheel downloads, so the flag alone
+        # was not seen for minutes («Cancelling…» forever); kill the
+        # child, its read loop ends at once
+        if self._ident is not None:
+            proc.kill_child_of(self._ident)
 
     def run(self):
+        import threading
+        self._ident = threading.get_ident()
         try:
             for name, step in self._steps:
                 self.stage.emit(name)
@@ -160,7 +168,8 @@ class SelectCard(QFrame):
 
 
 class SetupDialog(QDialog):
-    def __init__(self, parent=None, first_run: bool = True):
+    def __init__(self, parent=None, first_run: bool = True,
+                 settings: dict = None):
         super().__init__(parent)
         self.setObjectName("setup_wizard")
         self.setWindowTitle(tr("WordMute components"))
@@ -170,7 +179,11 @@ class SetupDialog(QDialog):
         self._first_run = first_run
         self._worker = None
         self._done = False
-        self._settings = config.load_settings()
+        # the main window's live dict when opened from the Models tab:
+        # a private copy was written back wholesale by whoever saved
+        # last, reverting the model/device chosen here
+        self._settings = (settings if settings is not None
+                          else config.load_settings())
         self._status = runtime_env.status()
         self._gpus = gpu.detect_gpus()
         self._rows = {}          # component key -> install row widgets
@@ -1166,8 +1179,22 @@ class SetupDialog(QDialog):
             return
         (self.accept if self._done else self.reject)()
 
+    def reject(self):
+        """Esc goes through QDialog.reject(), which skips closeEvent:
+        the wizard vanished, pip kept installing headless and the
+        dialog was destroyed under its running thread (process abort).
+        One path owns closing."""
+        self.close()
+
     def closeEvent(self, event):
         if self._worker is not None:
+            if not confirm(self, title=tr("Stop the installation?"),
+                           body=tr("Downloaded parts are kept and setup "
+                                   "resumes next time."),
+                           ok_text=tr("Stop installing")):
+                event.ignore()
+                return
             self._worker.cancel()
-            wait_thread(self._worker, 30000)
+            if not wait_thread(self._worker, 10000):
+                detach_thread(self._worker)   # never dies with the dialog
         event.accept()
