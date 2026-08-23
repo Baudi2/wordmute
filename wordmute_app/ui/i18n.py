@@ -361,6 +361,10 @@ RU = {
     "Quit anyway": "Всё равно выйти",
     "Already in the queue: {}": "Уже в очереди: {}",
     "Nothing added": "Ничего не добавлено",
+    "the connection dropped mid-download. Retry resumes from where it "
+    "stopped; if it keeps happening, pick a lower quality.":
+        "соединение оборвалось посреди загрузки. «Повторить» продолжит с "
+        "места обрыва; если повторяется — выберите качество ниже.",
     "Some files were skipped": "Часть файлов пропущена",
     "next to the source": "рядом с исходником",
     # tier 3: captions and statuses that bypassed tr()

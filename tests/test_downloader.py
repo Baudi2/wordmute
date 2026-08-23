@@ -106,6 +106,10 @@ def test_download_reports_progress_and_returns_path(fake_ydl, tmp_path):
     assert (tmp_path / "dl").is_dir()  # created
     assert FakeYDL.captured_opts["format"] == downloader.BEST_SPEC
     assert FakeYDL.captured_opts["windowsfilenames"] is True
+    # embedded yt-dlp retries nothing unless told: a dropped connection
+    # mid-file used to fail the item on the spot
+    assert FakeYDL.captured_opts["retries"] >= 5
+    assert FakeYDL.captured_opts["fragment_retries"] >= 5
     assert [d["status"] for d in seen] == ["downloading", "finished"]
 
 

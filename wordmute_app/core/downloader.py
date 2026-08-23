@@ -210,6 +210,14 @@ def download(url: str, format_spec: str, dest_dir,
         "windowsfilenames": True,
         "overwrites": True,
         "progress_hooks": [hook],
+        # the CLI's retry defaults (10) live in its option parser, NOT
+        # in the library: embedded like this, yt-dlp retried NOTHING —
+        # one dropped connection mid-file («9977792 bytes read, 191073
+        # more expected») failed the whole item on the spot
+        "retries": 10,
+        "fragment_retries": 10,
+        "file_access_retries": 3,
+        "extractor_retries": 3,
         # HLS/DASH (rutube/VK/Boosty): per-fragment latency serializes
         # the download, worse behind VPNs — 4 parallel fragments is a
         # 2-4x win; do NOT raise it (high values can skip the m3u8

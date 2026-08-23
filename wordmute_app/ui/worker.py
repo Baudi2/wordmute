@@ -8,6 +8,7 @@ processing. Only one worker runs at a time (the engine's reporter is
 module-global)."""
 
 import dataclasses
+import re
 import sys
 import threading
 import time
@@ -29,11 +30,22 @@ def humanize_download_error(text: str) -> str:
     """Attach a fix to the errors users can actually act on. A bare
     «HTTP Error 403: Forbidden» made a real user conclude YouTube
     downloads were dead — the actual cure was updating yt-dlp."""
+    # yt-dlp's own prefixes add nothing on a card: «ERROR: \r[download]
+    # Got error: …»
+    text = re.sub(r"^(ERROR:\s*)+", "", text.strip())
+    text = re.sub(r"^\s*\[download\]\s*Got error:\s*", "", text).strip()
     if "403" in text and "forbidden" in text.lower():
         return (text + " — " +
                 tr("this usually means yt-dlp needs updating: Models "
                    "tab → Check for updates → Update all, then restart "
                    "the app. Retrying once also sometimes helps."))
+    lowered = text.lower()
+    if ("more expected" in lowered or "incompleteread" in lowered
+            or "connection reset" in lowered or "timed out" in lowered):
+        return (text + " — " +
+                tr("the connection dropped mid-download. Retry resumes "
+                   "from where it stopped; if it keeps happening, pick a "
+                   "lower quality."))
     return text
 
 class _DownloadPump(threading.Thread):

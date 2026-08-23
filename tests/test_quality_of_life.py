@@ -1174,10 +1174,16 @@ def test_403_error_gets_the_yt_dlp_hint():
 
     raw = "ERROR: unable to download video data: HTTP Error 403: Forbidden"
     hinted = humanize_download_error(raw)
-    assert raw in hinted
+    assert hinted.startswith("unable to download")   # «ERROR:» stripped
     assert "yt-dlp" in hinted
     # anything else passes through untouched
     assert humanize_download_error("boom") == "boom"
+    # a dropped connection: yt-dlp's prefixes go, a resume hint comes
+    dropped = humanize_download_error(
+        "ERROR: \r[download] Got error: 9977792 bytes read, "
+        "191073 more expected")
+    assert dropped.startswith("9977792 bytes read")
+    assert "Retry resumes" in dropped
 
 
 def test_pip_upgrade_streams_lines(monkeypatch, tmp_path):
