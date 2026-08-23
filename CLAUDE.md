@@ -179,12 +179,28 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   set (docs/design + SCREENS.md) and the leftover-JSON fix
   (drop_output_caches). Installer 160 MB, frozen report all green,
   smoke ok.
-- Weak points queued for the design round (docs/design/SCREENS.md):
-  unthemed QMenu/QMessageBox with English Yes/No in a RU UI (needs
-  qtbase_ru bundled), install page overflows with the log open,
-  batch Add-URL is mostly empty space, History dates use the C
-  locale, «100 ms»/«1000 Hz» suffixes untranslated, Word Lists tab
-  dense, empty states have no anchor.
+- v0.7.0 SHIPPED 2026-08-23 (branch design/0.6.1-ui merged, PR #1).
+  Design rounds 1–4 (docs/design/SCREENS.md documents each): themed
+  menus/confirms + qtbase_ru, install page fits its log, compact
+  batch Add-URL, locale dates/units, Word Lists one-row header +
+  Ctrl+F find bar with filter mode + the tester row, Models tab
+  regroup, native title bar as the header, empty states as drop
+  targets. Then a full multi-agent code audit (86 reports → 45
+  distinct issues) fixed in three commits «Audit tier 1/2/3» —
+  commit messages list every item; tests/test_audit_tier*.py pin
+  them. Deferred, documented: frozen huggingface_hub shadowing the
+  runtime's copy after a future «Обновить все» (packaging change),
+  nvidia cudnn/cublas in «Обновить все», dev runs preferring the
+  user runtime's site-packages. The test session has a rare (~1 in
+  5) access violation in the reorder/animation teardown of test
+  windows — never seen in the app; the crash log would catch it.
+  Installer 160.1 MB, frozen report all green, smoke ok. Learned:
+  build.ps1 must not use `2>$null` on native commands (Stop
+  preference makes stderr fatal) and Inno reads any line that BEGINS
+  with `[` as a section tag, even inside [Code]; iscc's exit code is
+  now checked.
+- User-facing release notes live in CHANGELOG.md (top entry must match
+  __version__ — tests/test_version.py).
 - Other open items: LICENSE file decision (repo is public with no
   license = all-rights-reserved; user undecided), GigaAM frozen-build
   end-to-end still untested (install channel now fixed; torch is

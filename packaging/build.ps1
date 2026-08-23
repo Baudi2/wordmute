@@ -11,8 +11,12 @@ Set-Location $root
 #    nags every user to «update» to what they just installed.
 $version = python -c "import wordmute_app; print(wordmute_app.__version__)"
 if ($LASTEXITCODE -ne 0) { throw "could not read app version" }
-$tag = git describe --tags --exact-match HEAD 2>$null
-if ($LASTEXITCODE -eq 0 -and $tag -and ($tag.TrimStart("v") -ne $version)) {
+# (git tag --points-at: empty and silent when HEAD is untagged — a
+#  `git describe 2>$null` under ErrorActionPreference=Stop turned git's
+#  stderr line into a terminating error and failed the build)
+$tag = git tag --points-at HEAD | Where-Object { $_ -match '^v?\d' } |
+    Select-Object -First 1
+if ($tag -and ($tag.TrimStart("v") -ne $version)) {
     throw "HEAD is tagged $tag but wordmute_app.__version__ is $version"
 }
 $pyver = python -c "import sys; print('%d.%d' % sys.version_info[:2])"
@@ -44,6 +48,11 @@ if (-not $iscc) {
 }
 if ($iscc) {
     & $iscc "/DMyAppVersion=$version" packaging\installer.iss
+    # a failed compile used to scroll past and the build said «Done»
+    if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed ($LASTEXITCODE)" }
+    $setup = "packaging\Output\WordMute-Setup-$version.exe"
+    if (-not (Test-Path $setup)) { throw "installer not produced: $setup" }
+    Write-Host ("Installer: {0} ({1:N1} MB)" -f $setup, ((Get-Item $setup).Length / 1MB))
 } else {
     Write-Host "Inno Setup (iscc) not found - skipped installer compile."
     Write-Host "Install it (winget install JRSoftware.InnoSetup), then:"

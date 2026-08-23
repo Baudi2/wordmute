@@ -72,9 +72,10 @@ begin
     Runtime := ExpandConstant('{localappdata}\WordMute');
     Data := ExpandConstant('{userappdata}\WordMute');
     Models := ExpandConstant('{%USERPROFILE}\.cache\huggingface');
+    // (the array stays on the call line: a line that BEGINS with '['
+    //  is read as a section tag by the Inno parser, even inside [Code])
     if DirExists(Runtime) or DirExists(Data) then
-      if MsgBox(FmtMessage(CustomMessage('RemoveDataQuestion'),
-                           [Runtime, Data, Models]),
+      if MsgBox(FmtMessage(CustomMessage('RemoveDataQuestion'), [Runtime, Data, Models]),
                 mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
       begin
         DelTree(Runtime, True, True, True);
