@@ -75,12 +75,21 @@ def fmt_size(n: int) -> str:
     return f"{n / (1024 ** 2):.0f} MB"
 
 
+def model_cache_complete(d: Path) -> bool:
+    """A cache directory with a blob still *.incomplete (a cancelled or
+    killed download) read as «downloaded ✓» and the wizard never
+    offered the model again."""
+    if not d.is_dir() or not (d / "snapshots").is_dir():
+        return False
+    return not any((d / "blobs").glob("*.incomplete"))
+
+
 def whisper_model_status() -> list:
     """[{model, repo, downloaded, size_bytes}] for every known model."""
     out = []
     for model, repo in WHISPER_REPOS.items():
         d = repo_cache_dir(repo)
-        downloaded = d.is_dir()
+        downloaded = model_cache_complete(d)
         out.append({"model": model, "repo": repo, "downloaded": downloaded,
                     "size_bytes": dir_size(d) if downloaded else 0})
     return out

@@ -11,6 +11,7 @@ Three kinds of things can be outdated, each handled differently:
 import json
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 from importlib import metadata
 
@@ -68,7 +69,12 @@ def check_app_update(timeout: int = 15) -> dict:
         if latest:
             result["latest"] = latest
             result["update"] = is_newer(latest, __version__)
-            result["url"] = release.get("html_url") or result["url"]
+            # the URL is opened with the shell: trust only a GitHub
+            # https link from the response, never whatever it says
+            url = str(release.get("html_url") or "")
+            parts = urllib.parse.urlparse(url)
+            if parts.scheme == "https" and parts.netloc == "github.com":
+                result["url"] = url
     except Exception:
         pass
     return result

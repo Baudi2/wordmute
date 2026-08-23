@@ -368,12 +368,31 @@ def configure_fast_mode(on: bool) -> None:
     FAST_MODE = bool(on)
 
 
+def _load_cache(cache: Path, media: Path):
+    """None = treat the cache as a miss. Unreadable: a kill mid-write
+    left a truncated file, and every retry then failed with a JSON
+    error nothing explained. Older than the media: the file was
+    re-exported / re-recorded under the same name, and the old word
+    timings muted the wrong moments."""
+    try:
+        if media.stat().st_mtime > cache.stat().st_mtime + 1:
+            _emit("cache_stale", cache=cache.name)
+            return None
+        words = json.loads(cache.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        _emit("cache_invalid", cache=cache.name)
+        return None
+    return words if isinstance(words, list) else None
+
+
 def transcribe(media: Path, engine: str, model_name: str, device: str, language: str,
                force: bool = False, vad: bool = True):
     cache = _cache_path(media, engine)
     if cache.exists() and not force:
-        _emit("cache_hit", engine=engine, cache=cache.name)
-        return json.loads(cache.read_text(encoding="utf-8"))
+        cached = _load_cache(cache, media)
+        if cached is not None:
+            _emit("cache_hit", engine=engine, cache=cache.name)
+            return cached
 
     _emit("asr_start", file=media.name, engine=engine)
 
@@ -412,7 +431,11 @@ def transcribe(media: Path, engine: str, model_name: str, device: str, language:
     # closes the pass for the stage-timing report (all engines)
     _emit("asr_progress_end")
 
-    cache.write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
+    # temp file + replace: a crash mid-write never leaves a truncated
+    # cache that reads as valid on the next run
+    tmp = cache.with_name(cache.name + ".tmp")
+    tmp.write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, cache)
     _emit("cache_saved", cache=cache.name)
     return words
 

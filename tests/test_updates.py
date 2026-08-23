@@ -47,6 +47,7 @@ def test_check_whisper_models_only_downloaded(tmp_path, monkeypatch):
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
     d = tmp_path / "models--Systran--faster-whisper-small"
     (d / "blobs").mkdir(parents=True)
+    (d / "snapshots").mkdir()            # a complete hub cache layout
     (d / "blobs" / "w.bin").write_bytes(b"x")
     (d / "refs").mkdir()
     (d / "refs" / "main").write_text("oldsha", encoding="utf-8")

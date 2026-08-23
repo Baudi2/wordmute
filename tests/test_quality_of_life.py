@@ -240,7 +240,8 @@ def test_history_footer_shows_month_traffic(qapp, tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------- self-update
-def _fake_release(monkeypatch, tag, url="https://x/rel"):
+def _fake_release(monkeypatch, tag,
+                  url="https://github.com/Baudi2/wordmute/releases/tag/v9"):
     import io
     import urllib.request
     import json as json_mod
@@ -267,7 +268,7 @@ def test_app_update_detected(monkeypatch):
     info = updates.check_app_update()
     assert info["update"] is True
     assert info["latest"] == "9.9.9"
-    assert info["url"] == "https://x/rel"
+    assert info["url"] == "https://github.com/Baudi2/wordmute/releases/tag/v9"
 
 
 def test_app_update_current_and_offline(monkeypatch):

@@ -33,6 +33,7 @@ def test_whisper_model_status_and_delete(tmp_path, monkeypatch):
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
     d = tmp_path / "models--Systran--faster-whisper-small" / "blobs"
     d.mkdir(parents=True)
+    (d.parent / "snapshots").mkdir()     # a complete hub cache layout
     (d / "weights.bin").write_bytes(b"x" * 1000)
 
     status = {s["model"]: s for s in models.whisper_model_status()}

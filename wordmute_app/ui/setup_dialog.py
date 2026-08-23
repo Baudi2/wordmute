@@ -375,7 +375,7 @@ class SetupDialog(QDialog):
             ("whisper", "Whisper", device, self._whisper_mb(),
              self.whisper_check.isChecked()),
             ("whisper_model", tr("Recognition model"), model, model_mb,
-             self.whisper_check.isChecked() or not st["faster_whisper"]),
+             self._needs_model(model, st)),
             ("ytdlp", "yt-dlp", tr("downloads by link"), YTDLP_MB,
              self.ytdlp_check.isChecked()),
             ("ffmpeg", "ffmpeg", tr("audio and video"), FFMPEG_MB,
@@ -1024,6 +1024,16 @@ class SetupDialog(QDialog):
         self.set_step(self._step)
 
     # ---------------------------------------------------------- install
+    def _needs_model(self, model: str, st: dict) -> bool:
+        """Also when the chosen model's cache is incomplete: a download
+        stopped half-way read as «downloaded» and the wizard never
+        offered it again (snapshot_download resumes what is there)."""
+        if self.whisper_check.isChecked() or not st["faster_whisper"]:
+            return True
+        repo = models.WHISPER_REPOS.get(model)
+        return bool(repo) and not models.model_cache_complete(
+            models.repo_cache_dir(repo))
+
     def _build_steps(self):
         """[(stage key, callable)] for the worker, in download order."""
         st = runtime_env.status()
@@ -1047,7 +1057,7 @@ class SetupDialog(QDialog):
         if packages:
             steps.append(("whisper", _packages_step(packages)))
         # model weights download HERE, not on the first video
-        if self.whisper_check.isChecked() or not st["faster_whisper"]:
+        if self._needs_model(model, st):
             steps.append(("whisper_model",
                           _wrap(runtime_env.install_whisper_model,
                                 model_name=model)))

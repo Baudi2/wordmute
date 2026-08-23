@@ -19,9 +19,11 @@ def _worker(files, monkeypatch, output_dir=None):
 
     monkeypatch.setattr(engine, "transcribe",
                         lambda *a, **k: [{"w": "бог", "s": 1.0, "e": 1.5}])
-    monkeypatch.setattr(engine, "mute",
-                        lambda media, iv, out, beep_hz=None:
-                        Path(out).write_bytes(b"muted"))
+    def fake_mute(media, iv, out, beep_hz=None):
+        Path(out).write_bytes(b"muted")
+        engine._emit("mute_done", out=str(out))   # as the real one does
+
+    monkeypatch.setattr(engine, "mute", fake_mute)
     items = [QueueItem(kind="file", path=f) for f in files]
     worker = ProcessWorker(items, ({"бог"}, [], [], []),
                            [("whisper", "small")], JobOptions(device="cpu"),

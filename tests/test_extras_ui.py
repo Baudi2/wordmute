@@ -137,6 +137,7 @@ def test_models_tab_lists_status(qapp, tmp_path, monkeypatch):
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
     d1 = tmp_path / "models--Systran--faster-whisper-base" / "blobs"
     d1.mkdir(parents=True)
+    (d1.parent / "snapshots").mkdir()    # a complete hub cache layout
     (d1 / "w.bin").write_bytes(b"x" * 100)
     from wordmute_app.core import models
     # the dev box has a real GigaAM cache under ~/.cache — hide it

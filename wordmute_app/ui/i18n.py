@@ -333,6 +333,15 @@ RU = {
     "Quitting interrupts it; you can run it again later.":
         "Выход прервёт это; можно будет запустить снова позже.",
     "Quit anyway": "Всё равно выйти",
+    "Already in the queue: {}": "Уже в очереди: {}",
+    "Cached transcript ignored ({}): {}":
+        "Сохранённый транскрипт не использован ({}): {}",
+    "older than the media": "старше файла",
+    "unreadable": "не читается",
+    "WordMute is already running.": "WordMute уже запущен.",
+    "Use the open window — a second copy would overwrite its settings.":
+        "Используйте открытое окно — вторая копия перезаписала бы его "
+        "настройки.",
     # history
     "Copy error": "Копировать ошибку",
     "Processed files will appear here.":

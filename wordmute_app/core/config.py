@@ -8,6 +8,7 @@ so reinstalls/updates never clobber user customizations.
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from shutil import copyfile
 
@@ -133,20 +134,42 @@ def detect_ui_language() -> str:
         return "en"
 
 
+def write_text_atomic(path, text: str) -> None:
+    """Write via a temp file + os.replace: a crash, a kill or a full
+    disk mid-write never leaves a truncated file behind (settings.json
+    or a word list cut to 0 bytes silently reset everything)."""
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def load_settings() -> dict:
     settings = dict(DEFAULT_SETTINGS)
+    path = _settings_path()
     try:
-        stored = json.loads(_settings_path().read_text(encoding="utf-8"))
+        stored = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(stored, dict):
             settings.update(stored)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError:
         # first run: follow the OS language instead of defaulting to
         # English (the component-setup window is the very first thing
         # a new user sees)
         settings["ui_language"] = detect_ui_language()
+    except (ValueError, OSError) as exc:
+        # unreadable: keep the evidence instead of silently adopting
+        # defaults forever (the next save would have overwritten it)
+        settings["ui_language"] = detect_ui_language()
+        try:
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            path.replace(path.with_name(f"settings.broken-{stamp}.json"))
+        except OSError:
+            pass
+        print(f"settings.json unreadable ({exc}); defaults in use",
+              file=sys.stderr)
     return settings
 
 
 def save_settings(settings: dict) -> None:
-    _settings_path().write_text(
-        json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_text_atomic(_settings_path(),
+                      json.dumps(settings, ensure_ascii=False, indent=2))

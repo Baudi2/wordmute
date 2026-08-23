@@ -42,8 +42,19 @@ class DownloadCancelled(Exception):
     pass
 
 
+PLAYLIST_MESSAGE = "Playlists are not supported — paste a single video URL."
+
+
 def _base_opts() -> dict:
-    return {"quiet": True, "no_warnings": True, "noprogress": True}
+    # noplaylist: a watch URL copied while a playlist was open carries
+    # &list=… — without it yt-dlp downloaded the WHOLE playlist (hours,
+    # gigabytes) and then the item failed with a bogus error
+    return {"quiet": True, "no_warnings": True, "noprogress": True,
+            "noplaylist": True}
+
+
+def _is_playlist(info) -> bool:
+    return (info or {}).get("_type") in ("playlist", "multi_video")
 
 
 def _has_video(f) -> bool:
@@ -72,9 +83,21 @@ def sort_formats(formats) -> list:
 
 def _with_cookies(opts: dict, cookies) -> dict:
     """cookies: path to a Netscape-format cookie file (as exported by
-    yt-dlp or browser extensions) for sites that need a login."""
+    yt-dlp or browser extensions) for sites that need a login.
+
+    The file is loaded into a jar rather than handed over as
+    `cookiefile`: yt-dlp rewrites a cookiefile on every session close,
+    and the probe, the format fetch and the download pump run
+    concurrently — one session's save truncated the jar another had
+    just loaded, and the user's export got corrupted."""
     if cookies:
-        opts["cookiefile"] = str(cookies)
+        try:
+            from yt_dlp.cookies import YoutubeDLCookieJar
+            jar = YoutubeDLCookieJar(str(cookies))
+            jar.load()
+            opts["cookiejar"] = jar
+        except Exception:
+            opts["cookiefile"] = str(cookies)   # let yt-dlp report it
     return opts
 
 
@@ -82,9 +105,8 @@ def list_formats(url: str, cookies=None) -> dict:
     import yt_dlp
     with yt_dlp.YoutubeDL(_with_cookies(_base_opts(), cookies)) as ydl:
         info = ydl.extract_info(url, download=False)
-    if info.get("_type") == "playlist":
-        raise ValueError(
-            "Playlists are not supported — paste a single video URL.")
+    if _is_playlist(info):
+        raise ValueError(PLAYLIST_MESSAGE)
     formats = [f for f in info.get("formats") or [] if _is_media(f)]
     return {"title": info.get("title") or url,
             "duration": info.get("duration"),
@@ -99,9 +121,11 @@ def probe_url(url: str, cookies=None) -> dict:
     import yt_dlp
     with yt_dlp.YoutubeDL(_with_cookies(_base_opts(), cookies)) as ydl:
         info = ydl.extract_info(url, download=False)
-    if info.get("_type") == "playlist":
-        entries = info.get("entries") or [{}]
-        info = entries[0] or {}
+    if _is_playlist(info):
+        # the card must not masquerade as the first video: the download
+        # will refuse the playlist, so say so where the title goes
+        return {"title": "[playlist] " + (info.get("title") or url),
+                "duration": None, "thumbnail_url": "", "playlist": True}
     return {"title": info.get("title") or "",
             "duration": info.get("duration"),
             "thumbnail_url": info.get("thumbnail") or ""}
@@ -194,7 +218,12 @@ def download(url: str, format_spec: str, dest_dir,
     }, cookies)
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            # extract first, process (= download) second: a bare
+            # playlist/channel URL is refused before a byte is fetched
+            probe = ydl.extract_info(url, download=False, process=False)
+            if _is_playlist(probe):
+                raise ValueError(PLAYLIST_MESSAGE)
+            info = ydl.process_ie_result(probe, download=True)
     except yt_dlp.utils.DownloadCancelled:
         raise DownloadCancelled() from None
 

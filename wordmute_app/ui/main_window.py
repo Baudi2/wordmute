@@ -808,7 +808,31 @@ class MainWindow(QMainWindow):
             if thumb:
                 card.set_thumb(thumb)
 
+    @staticmethod
+    def _url_key(url: str) -> str:
+        """The same video under two spellings (youtu.be/ID vs
+        watch?v=ID, trailing whitespace) must count as one queue
+        item: two items downloaded into ONE file while the first was
+        being processed."""
+        from urllib.parse import parse_qs, urlparse
+        url = (url or "").strip()
+        parts = urlparse(url)
+        host = parts.netloc.lower().removeprefix("www.")
+        if host == "youtu.be" and parts.path.strip("/"):
+            return "yt:" + parts.path.strip("/").split("/")[0]
+        if host in ("youtube.com", "m.youtube.com") and parts.path == "/watch":
+            video = parse_qs(parts.query).get("v", [""])[0]
+            if video:
+                return "yt:" + video
+        return parts._replace(fragment="").geturl()
+
     def _add_url_row(self, item: QueueItem):
+        key = self._url_key(item.url)
+        for existing in self._items():
+            if existing.kind == "url" and self._url_key(existing.url) == key:
+                self._append_log(tr("Already in the queue: {}")
+                                 .format(item.url))
+                return
         self._insert_row(item,
                          status=f"{tr('queued')} ({item.format_label})")
         # pulse the thumbnail while the title/poster probe runs — with
@@ -1110,8 +1134,19 @@ class MainWindow(QMainWindow):
                     self._apply_status(row, tr("files deleted"))
 
     def _open_review(self, path):
+        # one dialog per file: a second one (double-click + the Review
+        # button) could re-render the same output concurrently
+        for open_dialog in list(self._review_windows):
+            try:
+                if open_dialog._review_path == str(path):
+                    open_dialog.raise_()
+                    open_dialog.activateWindow()
+                    return
+            except RuntimeError:
+                continue
         # non-modal: the queue stays visible/alive while reviewing
         dialog = ReviewDialog(path, self)
+        dialog._review_path = str(path)
         dialog.setWindowModality(Qt.NonModal)
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         self._review_windows.append(dialog)
@@ -1229,6 +1264,10 @@ class MainWindow(QMainWindow):
         # must finish before rows are cleared/captured, or the worker's
         # row mapping desyncs from the queue
         self._queue_reorder.abort()
+        # the run reads the lists from disk; unsaved edits the tester
+        # just said «will be muted» for would silently not count
+        if not auto and not self.wordlists_tab.maybe_save():
+            return
         if auto:
             # watch-folder runs: keep only still-queued rows so earlier
             # results are never reprocessed
@@ -1422,6 +1461,10 @@ class MainWindow(QMainWindow):
         elif event == "asr_progress":
             self._on_asr_progress(data["minutes"])
             return
+        elif event in ("cache_stale", "cache_invalid"):
+            self._append_log(tr("Cached transcript ignored ({}): {}").format(
+                tr("older than the media") if event == "cache_stale"
+                else tr("unreadable"), data.get("cache", "")))
         elif event == "cache_hit":
             self._pass_pct = 0.9
             self._update_overall_progress()
@@ -1479,7 +1522,12 @@ class MainWindow(QMainWindow):
             card.set_meta(meta)
             if thumb:
                 card.set_thumb(thumb)
-        if row != self._current_row:  # prefetched: waiting for its turn
+        if (row != self._current_row          # prefetched: waiting its turn
+                and self.status_text(row).startswith(
+                    (tr("queued"), tr("downloading")))):
+            # never overwrite a terminal status: a download finishing
+            # right after Cancel turned «cancelled» into «downloaded ·
+            # waiting», which Start then skipped forever
             self._apply_status(row, tr("downloaded · waiting"))
 
     def _on_mute_progress(self, seconds: float):

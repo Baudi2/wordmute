@@ -117,6 +117,8 @@ class ProcessWorker(QThread):
             self._cur_engine = data["engine"]
         elif event == "match_found":
             self._record_intervals(data["intervals"])
+        elif event == "mute_done":
+            self._wrote_output = True
         self._time_stage(event, data)
         self.engine_event.emit(event, data)
 
@@ -234,7 +236,22 @@ class ProcessWorker(QThread):
         return out
 
     def run(self):
-        engine.set_reporter(self._report)
+        # the engine reporter is process-global. Route by thread: our
+        # own events come here, anything another thread raises (a
+        # review re-render that was already running when Start was
+        # pressed) keeps flowing to whatever was installed before —
+        # replacing it outright sent the re-render's progress onto the
+        # active card and Cancel killed the re-render
+        prev = engine._reporter
+        ident = threading.get_ident()
+
+        def reporter(event, data):
+            if threading.get_ident() == ident:
+                self._report(event, data)
+            elif prev is not None:
+                prev(event, data)
+
+        engine.set_reporter(reporter)
         done = 0
         total = len(self._items)
         self._finished = set()
@@ -264,6 +281,7 @@ class ProcessWorker(QThread):
                     continue
                 self.file_started.emit(i, item.display_name)
                 self._records = []
+                self._wrote_output = False
                 self._cur_pass = 1
                 dl_bytes = 0
                 item_t0 = time.monotonic()
@@ -305,7 +323,11 @@ class ProcessWorker(QThread):
                     self._finish(i, False, message)
                 else:
                     done += 1
-                    if out.exists():  # nothing muted -> no output file
+                    # only what THIS run wrote counts: a .clean file
+                    # left by an earlier run (older word list) used to
+                    # be presented as this run's result when nothing
+                    # matched now
+                    if self._wrote_output:
                         self.engine_event.emit("item_output",
                                                {"path": str(out)})
                     if self._records:  # something was muted -> reviewable
@@ -319,7 +341,9 @@ class ProcessWorker(QThread):
                         else:
                             self.engine_event.emit("review_saved",
                                                    {"path": str(rp)})
-                    self._log_history(item, "ok", "", output=out,
+                    self._log_history(item, "ok", "",
+                                      output=out if self._wrote_output
+                                      else None,
                                       source=path, dl_bytes=dl_bytes,
                                       stages=self._finish_timing(i, item_t0))
                     self._finish(i, True, "")
@@ -335,5 +359,6 @@ class ProcessWorker(QThread):
         finally:
             if pump is not None:  # cancel mid-run: let it wind down
                 pump.join()
-            engine.set_reporter(None)
+            if engine._reporter is reporter:   # still ours: hand back
+                engine.set_reporter(prev)
             self.all_finished.emit(done, total)

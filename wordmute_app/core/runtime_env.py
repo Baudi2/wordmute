@@ -88,7 +88,16 @@ def ffmpeg_dir() -> Path:
 
 
 def package_installed(module_name: str) -> bool:
-    return (site_packages() / module_name).is_dir()
+    """A package directory alone is not an install: pip unpacks a wheel
+    file by file, so a cancelled/killed pip (or a crash mid-install)
+    left a half-written package that passed the first-run gate — no
+    wizard came back and every run failed with an ImportError. Require
+    the dist-info RECORD, which pip writes last."""
+    site = site_packages()
+    if not (site / module_name).is_dir():
+        return False
+    return any((d / "RECORD").is_file()
+               for d in site.glob(f"{module_name}-*.dist-info"))
 
 
 def status() -> dict:
@@ -171,6 +180,11 @@ def _download(url: str, dest: Path, progress=None, cancelled=None,
                 done += len(chunk)
                 if progress:
                     progress(done, total)
+    # a connection dropped by a middlebox ends the stream cleanly: the
+    # short file then failed later as «File is not a zip file» instead
+    # of being retried here
+    if total and done != total:
+        raise OSError(f"truncated download: {done} of {total} bytes")
 
 
 def _patch_pth(py_dir: Path) -> None:

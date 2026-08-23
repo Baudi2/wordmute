@@ -79,6 +79,10 @@ def main():
         sys.stderr = open(os.devnull, "w", encoding="utf-8")
     _set_app_identity()
     _use_bundled_ffmpeg()
+    # Xet lock-file paths contain characters illegal on Windows
+    # (WinError 123); the engine sets this for itself, the setup and
+    # Models-tab download subprocesses inherit it from here
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
     # slim installer: engine packages + ffmpeg live in an app-managed
     # runtime downloaded on first run
@@ -98,7 +102,7 @@ def main():
     from PySide6.QtWidgets import QApplication
 
     from .core import config
-    from .ui.i18n import set_language
+    from .ui.i18n import set_language, tr
     from .ui.theme import app_icon, apply_theme
 
     settings = config.load_settings()
@@ -109,6 +113,19 @@ def main():
     install_qt_translations(app, settings.get("ui_language", "en"))
     apply_theme(app, settings.get("theme", "dark"))
     app.setWindowIcon(app_icon())
+
+    # one instance: a second window wrote ITS copy of settings.json
+    # over this one's on close, and two first-run wizards raced on the
+    # same runtime folder. The lock lives as long as main() does.
+    from PySide6.QtCore import QLockFile
+    lock = QLockFile(str(config.data_dir() / "wordmute.lock"))
+    if not lock.tryLock(200):
+        if not os.environ.get("WORDMUTE_SMOKE"):
+            from .ui.dialogs import inform
+            inform(None, title=tr("WordMute is already running."),
+                   body=tr("Use the open window — a second copy would "
+                           "overwrite its settings."))
+        return 0
 
     if (getattr(sys, "frozen", False) and runtime_env.missing_required()
             and not os.environ.get("WORDMUTE_SMOKE")):

@@ -364,7 +364,7 @@ class WordListsTab(QWidget):
         lines = self.editor.toPlainText().splitlines()
         before = len([line for line in lines if line.strip()])
         result = tidy_lines(lines)
-        self._path().write_text("\n".join(result) + "\n", encoding="utf-8")
+        config.write_text_atomic(self._path(), "\n".join(result) + "\n")
         removed = before - len(result)
         self._load()
         self._set_status(
