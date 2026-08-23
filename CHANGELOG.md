@@ -6,7 +6,7 @@ the in-app check («Модели → Проверить обновления») 
 The first heading below must match `wordmute_app.__version__`
 (tests/test_version.py enforces it).
 
-## 0.7.0 (unreleased)
+## 0.7.0 — 2026-08-23
 
 Design rounds 1–4 applied: themed menus and confirmations, the
 install page that fits its log, compact batch Add-URL with host chips,
