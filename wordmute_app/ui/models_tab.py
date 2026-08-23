@@ -357,6 +357,7 @@ class ModelsTab(QWidget):
         self._gigaam_bytes = 0
         self._updates_worker = None
         self._upgrade_worker = None
+        self._restart_required = False   # an upgrade landed this session
         self._outdated_packages = []
         self._outdated_models = []
         self._last_result = None
@@ -825,7 +826,10 @@ class ModelsTab(QWidget):
         self._outdated_models = []
         self.upd_placeholder.setVisible(False)
         self.upd_footnote.setVisible(True)
-        self.service_hint.setText(tr("updates and repair of the install"))
+        self.service_hint.setText(
+            tr("restart the app to use the installed updates")
+            if self._restart_required
+            else tr("updates and repair of the install"))
         self.upd_checked_at.setText(
             "· " + tr("checked {}").format(human_datetime(checked_at))
             if checked_at else "")
@@ -929,6 +933,9 @@ class ModelsTab(QWidget):
         self._upgrade_worker = None
         self.btn_check.setEnabled(True)
         if ok:
+            # the running process keeps the old modules: the toast is
+            # gone in seconds, the hint below stays until the restart
+            self._restart_required = True
             window = self.window()
             if window is not None and hasattr(window, "tabs"):
                 from .toasts import show_toast

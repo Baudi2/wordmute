@@ -200,6 +200,17 @@ class SettingsTab(QWidget):
         ui_lang_row.addWidget(restart_note)
         ui_lang_row.addStretch()
         files_form.addRow(tr("Interface language:"), ui_lang_row)
+
+        # the crash log (main._install_crash_log) is what to send when
+        # «the window just disappeared» — make it reachable
+        log_row = QHBoxLayout()
+        log_button = QPushButton(tr("Open log folder"))
+        log_button.setToolTip(tr("wordmute.log — attach it when "
+                                 "reporting a problem."))
+        log_button.clicked.connect(self._open_log_folder)
+        log_row.addWidget(log_button)
+        log_row.addStretch()
+        files_form.addRow(tr("Diagnostics:"), log_row)
         outer.addWidget(files_box)
 
         self.saved_label = QLabel("")
@@ -265,21 +276,28 @@ class SettingsTab(QWidget):
         self.beep_spin.setGroupSeparatorShown(False)
 
     # ---------------------------------------------------------- browsing
+    def _open_log_folder(self):
+        import os
+        try:
+            os.startfile(str(config.data_dir()))
+        except OSError:
+            pass
+
     def _browse_download_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Downloads folder",
+        d = QFileDialog.getExistingDirectory(self, tr("Downloads folder"),
                                              self.download_dir_edit.text())
         if d:
             self.download_dir_edit.setText(d)
 
     def _browse_cookies(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Cookies file", self.cookies_edit.text(),
-            "Cookie files (*.txt);;All files (*)")
+            self, tr("Cookies file"), self.cookies_edit.text(),
+            tr("Cookie files (*.txt)") + ";;" + tr("All files (*)"))
         if path:
             self.cookies_edit.setText(path)
 
     def _browse_output_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Output folder",
+        d = QFileDialog.getExistingDirectory(self, tr("Output folder"),
                                              self.output_dir_edit.text())
         if d:
             self.output_dir_edit.setText(d)

@@ -94,7 +94,10 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   shadows the runtime fallback — yt-dlp broke on html.parser without
   this) and excludes all engine packages. Frozen diagnostics:
   `$env:WORDMUTE_RUNTIME_REPORT="r.json"; WordMute.exe` writes status
-  + import probes; `WORDMUTE_SMOKE=1` = start-and-exit smoke test.
+  + import probes; `WORDMUTE_SMOKE=1` = start-and-exit smoke test. Crash log (0.7.0+):
+  %APPDATA%\WordMute\wordmute.log — Qt messages, Python tracebacks from
+  every thread, faulthandler dumps; Настройки → «Открыть папку
+  журнала». Ask for it first when «the window just disappeared».
   docs/INSTALL_GUIDE.md ships in the installer — bilingual: RU user
   steps + EN "For the AI assistant" support brief (hosts, pitfalls,
   clean-retry = delete runtime dir). Keep it in sync with

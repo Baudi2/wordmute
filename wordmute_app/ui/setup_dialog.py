@@ -174,8 +174,16 @@ class SetupDialog(QDialog):
         self.setObjectName("setup_wizard")
         self.setWindowTitle(tr("WordMute components"))
         self.setModal(True)
-        self.resize(920, 620)
-        self.setMinimumSize(820, 560)
+        # clamped to the screen: on a 1366×768 laptop at 125 % the
+        # 620-px dialog hid its only «Next» button behind the taskbar
+        from PySide6.QtGui import QGuiApplication
+        screen = QGuiApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen else None
+        width = min(920, avail.width() - 24) if avail else 920
+        height = min(620, avail.height() - 48) if avail else 620
+        self.resize(max(width, 640), max(height, 480))
+        self.setMinimumSize(min(820, max(width, 640)),
+                            min(560, max(height, 480)))
         self._first_run = first_run
         self._worker = None
         self._done = False
@@ -336,7 +344,14 @@ class SetupDialog(QDialog):
         self.cpu_radio = QRadioButton(tr("CPU only"))
         for radio in (self.gpu_radio, self.cpu_radio):
             self.device_group.addButton(radio)
-        (self.gpu_radio if self._gpus else self.cpu_radio).setChecked(True)
+        # the saved choice first — re-entering the wizard on a laptop
+        # that had chosen «CPU only» used to flip the device back to
+        # cuda from GPU detection alone; detection only decides when
+        # nothing was chosen yet
+        saved = s.get("device") if st["faster_whisper"] else None
+        use_gpu = (saved == "cuda") if saved in ("cuda", "cpu") \
+            else bool(self._gpus)
+        (self.gpu_radio if use_gpu else self.cpu_radio).setChecked(True)
 
         self.model_group = QButtonGroup(self)
         self.model_radios = {}
@@ -1078,6 +1093,10 @@ class SetupDialog(QDialog):
             return
         self._save_choices()
         self.total_progress.setRange(0, 0)
+        # switching the language rebuilds every page, including the
+        # live install page — its progress slots would then target
+        # deleted widgets
+        self.lang_button.setEnabled(False)
         self._worker = SetupWorker(steps)
         self._worker.log_line.connect(self.log.appendPlainText)
         self._worker.stage.connect(self._on_stage)
@@ -1136,6 +1155,7 @@ class SetupDialog(QDialog):
 
     def _on_finished(self, ok: bool, message: str):
         self._worker = None
+        self.lang_button.setEnabled(True)
         if ok:
             runtime_env.activate()
             self._done = True

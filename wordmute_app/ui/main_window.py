@@ -249,7 +249,11 @@ class MainWindow(QMainWindow):
             self._tray = QSystemTrayIcon(self.windowIcon(), self)
             self._tray.setToolTip("WordMute")
             self._tray.activated.connect(self._on_tray_activated)
+            # messageClicked is not per-balloon: one slot dispatches
+            # the action of the LAST balloon shown (see _show_balloon)
+            self._tray.messageClicked.connect(self._on_balloon_clicked)
             self._tray.show()
+        self._balloon_action = None
         # quiet self-update check, a few seconds after startup
         self._app_update_worker = None
         self._update_url = None
@@ -595,7 +599,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText(tr("Ready."))
             return
         d = QFileDialog.getExistingDirectory(
-            self, "Watch folder", self._settings.get("watch_dir", ""))
+            self, tr("Watch folder"), self._settings.get("watch_dir", ""))
         if not d:
             return
         self._watch_dir = Path(d)
@@ -682,7 +686,7 @@ class MainWindow(QMainWindow):
         card.set_actions(
             review=done and bool(review and Path(review).exists()),
             open_=done and bool(out and Path(out).exists()),
-            retry=status.startswith("error"))
+            retry=list_item.data(STATE_ROLE) == "err")
         card.review_clicked.connect(
             lambda c=card: self._card_review(self._row_of_card(c)))
         card.open_clicked.connect(
@@ -913,11 +917,12 @@ class MainWindow(QMainWindow):
         from ..engine.wordmute import MEDIA_EXTS
         exts = " ".join(f"*{e}" for e in sorted(MEDIA_EXTS))
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Add media files", "", f"Media files ({exts});;All files (*)")
+            self, tr("Add media files"), "",
+            tr("Media files ({})").format(exts) + ";;" + tr("All files (*)"))
         self._add_files(files)
 
     def _pick_folder(self):
-        d = QFileDialog.getExistingDirectory(self, "Add folder")
+        d = QFileDialog.getExistingDirectory(self, tr("Add folder"))
         if d:
             self._add_files([d])
 
@@ -1166,8 +1171,9 @@ class MainWindow(QMainWindow):
 
     def _pick_review(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open review file", "",
-            "WordMute review (*.wordmute.json);;All files (*)")
+            self, tr("Open review file"), "",
+            tr("WordMute review (*.wordmute.json)") + ";;"
+            + tr("All files (*)"))
         if path:
             try:
                 self._open_review(path)
@@ -1200,9 +1206,12 @@ class MainWindow(QMainWindow):
 
     def _refresh_warnings(self):
         warnings = self._current_warnings()
-        self.warnings_label.setText("\n".join(f"⚠ {w}" for w in warnings))
-        self.warnings_label.setVisible(bool(warnings))
+        # severity is decided on the SOURCE (English) text; the label
+        # shows the translation — gpu.py's warnings never reached tr()
         severe = any("will fail" in w for w in warnings)
+        self.warnings_label.setText(
+            "\n".join(f"⚠ {tr(w)}" for w in warnings))
+        self.warnings_label.setVisible(bool(warnings))
         if self.warnings_label.property("severity") != \
                 ("error" if severe else None):
             self.warnings_label.setProperty(
@@ -1420,7 +1429,7 @@ class MainWindow(QMainWindow):
 
     def _pass_prefix(self) -> str:
         if self._pass_total > 1:
-            return f"pass {self._pass_n}/{self._pass_total} · "
+            return tr("pass {}/{} · ").format(self._pass_n, self._pass_total)
         return ""
 
     # ---------------------------------------------------------- worker events
@@ -1457,7 +1466,8 @@ class MainWindow(QMainWindow):
             self._asr_wall_start = time.monotonic()
             engine_name = data["engine"]
             self._set_row_status(
-                f"{self._pass_prefix()}transcribing ({engine_name})…")
+                self._pass_prefix()
+                + tr("transcribing ({})…").format(engine_name))
         elif event == "asr_progress":
             self._on_asr_progress(data["minutes"])
             return
@@ -1470,7 +1480,7 @@ class MainWindow(QMainWindow):
             self._update_overall_progress()
         elif event == "words_count":
             self._pass_pct = max(self._pass_pct, 0.9)
-            self._set_row_status(f"{self._pass_prefix()}matching…")
+            self._set_row_status(self._pass_prefix() + tr("matching…"))
             self._update_overall_progress()
         elif event == "mute_start":
             self._set_row_status(f"{self._pass_prefix()}{tr('muting…')}")
@@ -1596,7 +1606,7 @@ class MainWindow(QMainWindow):
             state = "ok"
         else:
             text = (tr("cancelled") if error == "cancelled"
-                    else f"error: {error}")
+                    else tr("error: {}").format(error))
             state = None if error == "cancelled" else "err"
         self._apply_status(row, text, state=state)
         if card:
@@ -1624,9 +1634,28 @@ class MainWindow(QMainWindow):
     def _on_tray_activated(self, reason):
         from PySide6.QtWidgets import QSystemTrayIcon
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
-            self.showNormal()
-            self.raise_()
-            self.activateWindow()
+            self._raise_window()
+
+    def _raise_window(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _show_balloon(self, body: str, action, msecs: int):
+        """A click on the «Finished» balloon used to open the GitHub
+        releases page when an update balloon had been shown earlier:
+        QSystemTrayIcon.messageClicked fires for ANY balloon and the
+        update handler stayed connected. Each balloon brings its own
+        action; a click runs the latest one."""
+        from PySide6.QtWidgets import QSystemTrayIcon
+        self._balloon_action = action
+        self._tray.showMessage("WordMute", body,
+                               QSystemTrayIcon.Information, msecs)
+
+    def _on_balloon_clicked(self):
+        action, self._balloon_action = self._balloon_action, None
+        if action is not None:
+            action()
 
     def _notify_finished(self, summary: str):
         """Active window gets an in-app toast; a backgrounded one gets
@@ -1635,11 +1664,10 @@ class MainWindow(QMainWindow):
             from .toasts import show_toast
             show_toast(self, summary, duration_ms=7000)
             return
-        from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+        from PySide6.QtWidgets import QApplication
         QApplication.alert(self)
         if self._tray is not None:
-            self._tray.showMessage("WordMute", summary,
-                                   QSystemTrayIcon.Information, 8000)
+            self._show_balloon(summary, self._raise_window, 8000)
 
     # ------------------------------------------------------ app updates
     def _start_update_check(self):
@@ -1662,16 +1690,9 @@ class MainWindow(QMainWindow):
             .format(info["latest"], info["current"])
         self._append_log(line + f" — {info['url']}")
         if self._tray is not None:
-            from PySide6.QtWidgets import QSystemTrayIcon
-            try:
-                self._tray.messageClicked.disconnect(self._open_update_page)
-            except (TypeError, RuntimeError):
-                pass
-            self._tray.messageClicked.connect(self._open_update_page)
-            self._tray.showMessage(
-                "WordMute", line + "\n"
-                + tr("Click to open the download page."),
-                QSystemTrayIcon.Information, 10000)
+            self._show_balloon(
+                line + "\n" + tr("Click to open the download page."),
+                self._open_update_page, 10000)
 
     def _open_update_page(self):
         if getattr(self, "_update_url", None):

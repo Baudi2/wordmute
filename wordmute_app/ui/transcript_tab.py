@@ -133,7 +133,8 @@ class TranscriptTab(QWidget):
     def _pick_media(self):
         exts = " ".join(f"*{e}" for e in sorted(MEDIA_EXTS))
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open media file", "", f"Media files ({exts})")
+            self, tr("Open media file"), "",
+            tr("Media files ({})").format(exts))
         if path:
             self.load_media(path)
 

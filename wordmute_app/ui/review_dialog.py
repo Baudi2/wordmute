@@ -79,6 +79,17 @@ class ReviewDialog(QDialog):
     def __init__(self, review_path, parent=None):
         super().__init__(parent)
         self._data = review.load_review(review_path)
+        # the sidecar's own location wins over the absolute output path
+        # recorded at processing time: a clean file renamed/moved along
+        # with its .wordmute.json was left untouched while the dialog
+        # said «Output updated» (a second file appeared under the old name)
+        sidecar = Path(review_path)
+        suffix = review.REVIEW_SUFFIX
+        if (review.review_path_for(self._data["output"]) != sidecar
+                and sidecar.name.endswith(suffix)):
+            moved = sidecar.with_name(sidecar.name[:-len(suffix)])
+            if moved.exists():
+                self._data["output"] = str(moved)
         self._player = SnippetPlayer()
         self._worker = None
         self._dirty = False

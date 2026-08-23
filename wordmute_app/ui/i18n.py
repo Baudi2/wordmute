@@ -334,6 +334,38 @@ RU = {
         "Выход прервёт это; можно будет запустить снова позже.",
     "Quit anyway": "Всё равно выйти",
     "Already in the queue: {}": "Уже в очереди: {}",
+    # tier 3: captions and statuses that bypassed tr()
+    "Watch folder": "Папка для отслеживания",
+    "Add media files": "Добавить медиафайлы",
+    "Add folder": "Добавить папку",
+    "Open review file": "Открыть файл проверки",
+    "Open media file": "Открыть медиафайл",
+    "Media files ({})": "Медиафайлы ({})",
+    "All files (*)": "Все файлы (*)",
+    "WordMute review (*.wordmute.json)": "Файл проверки WordMute (*.wordmute.json)",
+    "Downloads folder": "Папка загрузок",
+    "Cookies file": "Файл cookies",
+    "Cookie files (*.txt)": "Файлы cookies (*.txt)",
+    "Output folder": "Папка результата",
+    "pass {}/{} · ": "проход {}/{} · ",
+    "transcribing ({})…": "транскрибация ({})…",
+    "matching…": "сопоставление…",
+    "error: {}": "ошибка: {}",
+    "No NVIDIA GPU detected, but the device is set to CUDA — processing "
+    "will fail. Switch the device to CPU in Settings (slower, but works).":
+        "Видеокарта NVIDIA не найдена, а устройство — CUDA: обработка не "
+        "сработает. Переключите устройство на CPU в Настройках (медленнее, "
+        "но работает).",
+    "CPU mode: transcription runs roughly 2-4x slower than on a GPU, but "
+    "works everywhere.":
+        "Режим CPU: распознавание примерно в 2–4 раза медленнее, чем на "
+        "видеокарте, но работает везде.",
+    "Open log folder": "Открыть папку журнала",
+    "wordmute.log — attach it when reporting a problem.":
+        "wordmute.log — приложите его, когда сообщаете о проблеме.",
+    "Diagnostics:": "Диагностика:",
+    "restart the app to use the installed updates":
+        "перезапустите приложение, чтобы использовать обновления",
     "Cached transcript ignored ({}): {}":
         "Сохранённый транскрипт не использован ({}): {}",
     "older than the media": "старше файла",

@@ -52,6 +52,72 @@ def install_qt_translations(app, language: str):
     return None
 
 
+LOG_NAME = "wordmute.log"
+_log_handle = None
+
+
+def _install_crash_log():
+    """Every silent failure so far had nowhere to leave a trace: the
+    windowed build sends stderr to devnull, so a Python exception in a
+    slot, a worker that died, or Qt's own fatal message («QThread:
+    Destroyed while thread is still running») vanished with the window.
+    %APPDATA%\\WordMute\\wordmute.log collects: Python tracebacks from
+    any thread (sys.excepthook + threading.excepthook), faulthandler
+    dumps on a hard crash, Qt messages (see _install_qt_log) and
+    whatever libraries print to stderr when there is no console."""
+    global _log_handle
+    import faulthandler
+    import threading
+    import traceback
+    from datetime import datetime
+
+    from . import __version__
+    from .core import config
+    try:
+        path = config.data_dir() / LOG_NAME
+        if path.exists() and path.stat().st_size > 2_000_000:
+            path.replace(path.with_name(LOG_NAME + ".1"))   # one generation
+        handle = open(path, "a", encoding="utf-8", buffering=1)
+    except OSError:
+        return None
+    _log_handle = handle
+    handle.write(f"\n=== WordMute {__version__} · "
+                 f"{datetime.now():%Y-%m-%d %H:%M:%S} ===\n")
+    if sys.stderr is None:           # pythonw / frozen: no console
+        sys.stderr = handle
+    faulthandler.enable(file=handle, all_threads=True)
+
+    def log_exception(exc_type, exc, tb):
+        handle.write("".join(traceback.format_exception(exc_type, exc, tb)))
+        handle.flush()
+
+    def excepthook(exc_type, exc, tb):
+        log_exception(exc_type, exc, tb)
+        if sys.stderr is not handle:             # a console too
+            sys.__excepthook__(exc_type, exc, tb)
+
+    sys.excepthook = excepthook
+    threading.excepthook = lambda args: log_exception(
+        args.exc_type, args.exc_value, args.exc_traceback)
+    return handle
+
+
+def _install_qt_log():
+    """Qt's warnings and fatals go to the same file (a fatal is the
+    last line before the process dies — exactly the trace we lacked)."""
+    if _log_handle is None:
+        return
+    from PySide6.QtCore import qInstallMessageHandler
+
+    def handler(mode, context, message):
+        _log_handle.write(f"[qt] {message}\n")
+        _log_handle.flush()
+        if sys.stderr is not _log_handle:
+            print(message, file=sys.stderr)
+
+    qInstallMessageHandler(handler)
+
+
 APP_USER_MODEL_ID = "Baudi2.WordMute"
 
 
@@ -75,7 +141,8 @@ def main():
     # code (engine default reporter, libraries) a safe sink
     if sys.stdout is None:
         sys.stdout = open(os.devnull, "w", encoding="utf-8")
-    if sys.stderr is None:
+    _install_crash_log()             # takes over a missing stderr
+    if sys.stderr is None:           # log unavailable: still need a sink
         sys.stderr = open(os.devnull, "w", encoding="utf-8")
     _set_app_identity()
     _use_bundled_ffmpeg()
@@ -108,6 +175,7 @@ def main():
     settings = config.load_settings()
     set_language(settings.get("ui_language", "en"))
 
+    _install_qt_log()
     app = QApplication(sys.argv)
     app.setApplicationName("WordMute")
     install_qt_translations(app, settings.get("ui_language", "en"))
