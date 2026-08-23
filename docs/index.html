@@ -228,7 +228,8 @@
   }
   .guide strong { color: var(--text); }
 
-  .shots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  /* windows pair in row one, dialogs in row two (scripts/site_screenshots.py) */
+  .shots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; align-items: start; }
   .shots figure { margin: 0; }
   .shots a { display: block; border-radius: var(--radius); }
   .shots img {
@@ -484,6 +485,12 @@
           <figcaption>Очередь обработки: файлы, ссылки, прогресс</figcaption>
         </figure>
         <figure>
+          <a href="screenshots/wordlists.png" target="_blank" rel="noopener">
+            <img src="screenshots/wordlists.png" alt="Редактор списков слов с поиском по Ctrl+F и проверкой «заглушится ли слово»" loading="lazy">
+          </a>
+          <figcaption>Списки слов: поиск по Ctrl+F и проверка «заглушится ли слово»</figcaption>
+        </figure>
+        <figure>
           <a href="screenshots/review.png" target="_blank" rel="noopener">
             <img src="screenshots/review.png" alt="Экран проверки со списком заглушенных слов и таймкодами" loading="lazy">
           </a>
@@ -494,12 +501,6 @@
             <img src="screenshots/add-url.png" alt="Диалог добавления видео по ссылке с таблицей форматов и качества" loading="lazy">
           </a>
           <figcaption>Загрузка по ссылке с выбором качества</figcaption>
-        </figure>
-        <figure>
-          <a href="screenshots/wordlists.png" target="_blank" rel="noopener">
-            <img src="screenshots/wordlists.png" alt="Редактор списков слов с проверкой «Почему это заглушится?»" loading="lazy">
-          </a>
-          <figcaption>Редактор списков слов</figcaption>
         </figure>
       </div>
     </div>
