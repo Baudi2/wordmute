@@ -71,6 +71,42 @@ def _is_media(f) -> bool:
     return _has_video(f) or _has_audio(f)
 
 
+# 16:9 quality classes matched by the LONG side: a 2.39:1 film at
+# 1920×800 is the «1080p» stream of that title, and a vertical
+# 1080×1920 short is 1080p too — labelling by raw height made both
+# read as something worse («800p»). The raw WxH stays in the note.
+_CLASS_BY_LONG_SIDE = ((3840, 2160), (2560, 1440), (1920, 1080),
+                       (1280, 720), (854, 480), (640, 360), (426, 240))
+
+
+def quality_class(width, height) -> str:
+    if not height:
+        return ""
+    if width:
+        long_side = max(width, height)
+        for std_width, std_height in _CLASS_BY_LONG_SIDE:
+            if abs(long_side - std_width) <= std_width * 0.06:
+                return f"{std_height}p"
+    return f"{height}p"
+
+
+def _dedupe_formats(formats) -> list:
+    """rutube (and other HLS sites) serve one rendition from several
+    mirrors — four identical «800p · 3.81 GB» rows are one choice."""
+    seen = set()
+    out = []
+    for f in formats:
+        key = (f.get("width"), f.get("height"), f.get("ext"),
+               f.get("fps"), format_kind(f),
+               int((f.get("tbr") or 0) / 50),
+               f.get("filesize") or f.get("filesize_approx"))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(f)
+    return out
+
+
 def sort_formats(formats) -> list:
     """Video formats first (best resolution on top), audio-only after."""
     def key(f):
@@ -107,7 +143,8 @@ def list_formats(url: str, cookies=None) -> dict:
         info = ydl.extract_info(url, download=False)
     if _is_playlist(info):
         raise ValueError(PLAYLIST_MESSAGE)
-    formats = [f for f in info.get("formats") or [] if _is_media(f)]
+    formats = _dedupe_formats(
+        f for f in info.get("formats") or [] if _is_media(f))
     return {"title": info.get("title") or url,
             "duration": info.get("duration"),
             "url": info.get("webpage_url") or url,
@@ -158,7 +195,7 @@ def describe_format(f, duration=None) -> dict:
     height = f.get("height")
     width = f.get("width")
     # quality reads as "2160p"; the raw WxH moves to the note column
-    resolution = f"{height}p" if height else ""
+    resolution = quality_class(width, height)
     raw = f.get("resolution") or (f"{width}x{height}"
                                   if width and height else "")
     size_bytes = f.get("filesize") or f.get("filesize_approx")

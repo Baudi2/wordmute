@@ -70,6 +70,36 @@ def test_list_formats_rejects_playlists(fake_ydl):
         downloader.list_formats("https://example.com/list")
 
 
+def test_quality_class_uses_the_long_side():
+    """A 2.39:1 film at 1920×800 is that title's 1080p stream —
+    labelling by raw height read as «800p»; verticals likewise."""
+    assert downloader.quality_class(1920, 800) == "1080p"
+    assert downloader.quality_class(1280, 528) == "720p"
+    assert downloader.quality_class(856, 352) == "480p"
+    assert downloader.quality_class(1080, 1920) == "1080p"
+    assert downloader.quality_class(1920, 1080) == "1080p"
+    assert downloader.quality_class(1440, 608) == "608p"  # no class: raw
+    assert downloader.quality_class(None, 720) == "720p"
+    assert downloader.quality_class(None, None) == ""
+
+
+def test_mirror_duplicates_collapse_to_one_row(fake_ydl):
+    """rutube serves one rendition from several mirrors: four identical
+    «800p · 3.81 GB» rows are one choice."""
+    mirror = {"format_id": "m1", "ext": "mp4", "vcodec": "avc1",
+              "acodec": "mp4a", "width": 1920, "height": 800, "fps": 24,
+              "tbr": 4460}
+    FakeYDL.info = dict(FakeYDL.info)
+    FakeYDL.info["formats"] = [
+        mirror,
+        {**mirror, "format_id": "m2"},
+        {**mirror, "format_id": "m3", "tbr": 4463},   # same within 50
+        {**mirror, "format_id": "hd", "width": 1280, "height": 528},
+    ]
+    info = downloader.list_formats("https://example.com/v")
+    assert [f["format_id"] for f in info["formats"]] == ["m1", "hd"]
+
+
 def test_spec_for_format():
     video_only = FORMATS[2]
     progressive = FORMATS[3]
