@@ -7,7 +7,7 @@
 
 ## Кратко для пользователя
 
-1. Запустите `WordMute-Setup-0.7.0.exe`. Windows покажет предупреждение
+1. Запустите `WordMute-Setup-0.7.1.exe`. Windows покажет предупреждение
    SmartScreen («Система Windows защитила ваш компьютер») — нажмите
    **«Подробнее» → «Выполнить в любом случае»**. Это нормально:
    установщик просто не подписан платным сертификатом.
@@ -56,7 +56,7 @@ screen. Answer in the user's language.
 
 ### Architecture facts
 
-- The installer (`WordMute-Setup-0.7.0.exe`, Inno Setup, ~160 MB)
+- The installer (`WordMute-Setup-0.7.1.exe`, Inno Setup, ~160 MB)
   installs ONLY the application, per-user (no admin rights), default
   location `%LOCALAPPDATA%\Programs\WordMute`. It creates a Start-menu
   entry, an optional desktop icon, and an uninstaller in Windows

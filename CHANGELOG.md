@@ -6,6 +6,23 @@ the in-app check («Модели → Проверить обновления») 
 The first heading below must match `wordmute_app.__version__`
 (tests/test_version.py enforces it).
 
+## 0.7.1 — 2026-08-23
+
+Follow-ups from the first day of 0.7.0:
+
+- downloads retry dropped connections — embedded yt-dlp retried
+  NOTHING (its «10 retries» default lives in the CLI option parser),
+  so one network blip («9977792 bytes read, 191073 more expected»)
+  failed the item on the spot; the card's error now also explains
+  that «Повторить» resumes from where the download stopped;
+- the format table labels quality by the frame's long side — a 2.39:1
+  film at 1920×800 is «1080p», not «800p» — and shows one row per
+  rendition instead of four identical CDN mirrors;
+- adding files is never silent: a dropped «.clean» result, a
+  non-media file or a duplicate says so (status line, log, toast),
+  and the queue's setup line shows where results land («Результат:
+  рядом с исходником» or the chosen folder).
+
 ## 0.7.0 — 2026-08-23
 
 Design rounds 1–4 applied: themed menus and confirmations, the
