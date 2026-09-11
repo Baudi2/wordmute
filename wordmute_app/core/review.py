@@ -18,6 +18,94 @@ from ..engine import wordmute as engine
 
 REVIEW_SUFFIX = ".wordmute.json"
 
+# Passes 2+ transcribe the ALREADY-MUTED output. Word timestamps are a
+# little off, so a sliver of the word survives the first mute (or the
+# model fills the silence from context) and the next pass catches the
+# same word again — tens of ms apart, never identical: 08:21.393,
+# 08:21.433, 08:21.240. Each pass muted its own interval on top of the
+# previous output, so the file carries their UNION. The review lists
+# that union once; a separate row per catch doubled the list, and
+# unchecking one copy un-muted nothing while the others stayed checked.
+SAME_WORD_GAP_S = 0.3   # same word, different pass, not quite touching
+
+
+def _norm_text(text: str) -> str:
+    return " ".join(w for w in (engine.norm(t) for t in text.split()) if w)
+
+
+def _passes(iv) -> list:
+    return list(iv.get("passes") or [iv.get("pass", 1)])
+
+
+def _engines(iv) -> list:
+    return [e for e in (iv.get("engines") or [iv.get("engine", "")]) if e]
+
+
+def _variants(members) -> set:
+    return {_norm_text(v) for m in members for v in m["text"].split(" / ")}
+
+
+def _same_spot(members, iv) -> bool:
+    end = max(m["e"] for m in members)
+    if iv["s"] <= end:
+        return True                     # overlapping = the same audio
+    # a small gap only for the same word caught by ANOTHER pass: two
+    # «боже» said 0.2 s apart in one pass stay two rows
+    passes = {p for m in members for p in _passes(m)}
+    return (iv["s"] - end <= SAME_WORD_GAP_S
+            and passes.isdisjoint(_passes(iv))
+            and not _variants(members).isdisjoint(_variants([iv])))
+
+
+def _combine(members) -> dict:
+    if len(members) == 1:
+        return dict(members[0])
+    # the earliest pass names the row: «повезло», not whisper's
+    # «повезло.»; a word another engine heard differently is kept
+    ordered = sorted(members, key=lambda m: (min(_passes(m)), m["s"]))
+    texts, seen = [], set()
+    for m in ordered:
+        for variant in m["text"].split(" / "):
+            key = _norm_text(variant)
+            if key not in seen:
+                seen.add(key)
+                texts.append(variant)
+    passes = sorted({p for m in members for p in _passes(m)})
+    engines = []
+    for m in ordered:
+        for name in _engines(m):
+            if name not in engines:
+                engines.append(name)
+    record = dict(ordered[0])
+    record.update({
+        "s": min(m["s"] for m in members),
+        "e": max(m["e"] for m in members),
+        "text": " / ".join(texts),
+        "pass": passes[0],
+        "engine": engines[0] if engines else record.get("engine", ""),
+        # muted if ANY copy still mutes — that is what the output holds;
+        # a family filter errs on the muted side
+        "muted": any(m.get("muted", True) for m in members),
+    })
+    record.pop("passes", None)
+    record.pop("engines", None)
+    if len(passes) > 1:
+        record["passes"] = passes
+    if len(engines) > 1:
+        record["engines"] = engines
+    return record
+
+
+def merge_intervals(intervals) -> list:
+    """One record per muted spot, in time order (see SAME_WORD_GAP_S)."""
+    clusters = []
+    for iv in sorted(intervals, key=lambda r: (r["s"], r["e"])):
+        if clusters and _same_spot(clusters[-1], iv):
+            clusters[-1].append(iv)
+        else:
+            clusters.append([iv])
+    return [_combine(c) for c in clusters]
+
 
 def review_path_for(output) -> Path:
     output = Path(output)
@@ -46,6 +134,9 @@ def load_review(path) -> dict:
     if not isinstance(data, dict) or not all(
             k in data for k in ("source", "output", "intervals")):
         raise ValueError("not a WordMute review file")
+    # sidecars written before 0.7.2 carry one row per catch; merged in
+    # memory only — the file changes on the next re-render
+    data["intervals"] = merge_intervals(data["intervals"])
     return data
 
 

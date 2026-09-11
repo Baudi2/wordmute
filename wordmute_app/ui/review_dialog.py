@@ -193,10 +193,13 @@ class ReviewDialog(QDialog):
             self.table.setItem(row, COL_START,
                                QTableWidgetItem(fmt_ts(iv["s"])))
             self.table.setItem(row, COL_END, QTableWidgetItem(fmt_ts(iv["e"])))
-            self.table.setItem(row, COL_PASS,
-                               QTableWidgetItem(str(iv.get("pass", 1))))
-            self.table.setItem(row, COL_ENGINE,
-                               QTableWidgetItem(iv.get("engine", "")))
+            # one row per muted spot: every pass/engine that caught it
+            passes = iv.get("passes") or [iv.get("pass", 1)]
+            engines = iv.get("engines") or [iv.get("engine", "")]
+            self.table.setItem(row, COL_PASS, QTableWidgetItem(
+                ", ".join(str(p) for p in passes)))
+            self.table.setItem(row, COL_ENGINE, QTableWidgetItem(
+                ", ".join(e for e in engines if e)))
             self.table.setItem(row, COL_TEXT, QTableWidgetItem(iv["text"]))
         self._filling = False
 

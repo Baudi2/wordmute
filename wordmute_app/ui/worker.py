@@ -163,17 +163,16 @@ class ProcessWorker(QThread):
         return timing
 
     def _record_intervals(self, intervals):
-        # a later forced pass can re-find an already-recorded interval
-        # in the fresh transcript; keep one entry per (s, e)
+        # later passes re-catch words already muted a few ms off; one
+        # record per muted spot keeps the review list and the history
+        # «muted» count honest (review.merge_intervals)
         for s, e, text in intervals:
-            if any(abs(r["s"] - s) < 0.002 and abs(r["e"] - e) < 0.002
-                   for r in self._records):
-                continue
             self._records.append({
                 "s": s, "e": e, "text": text,
                 "pass": self._cur_pass, "engine": self._cur_engine,
                 "muted": True,
             })
+        self._records = review.merge_intervals(self._records)
 
     def _download(self, item, index: int):
         # "row" = worker item index; the UI maps it to the queue row, so
