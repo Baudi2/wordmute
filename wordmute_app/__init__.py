@@ -4,4 +4,4 @@ __version__ is the single source of truth: the build script injects it
 into the installer, and the self-update check compares it against the
 latest GitHub release tag."""
 
-__version__ = "0.7.1"
+__version__ = "0.7.2"

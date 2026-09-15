@@ -6,6 +6,28 @@ the in-app check («Модели → Проверить обновления») 
 The first heading below must match `wordmute_app.__version__`
 (tests/test_version.py enforces it).
 
+## 0.7.2 — 2026-09-15
+
+Mutes land on the word again:
+
+- on files whose audio track starts after the video (rutube downloads:
+  0.556 s) every mute came just BEFORE the word — speech recognition
+  counted time from the first sound, muting from the start of the
+  file. Both now use the file's clock, also across gaps in the audio
+  and in .ts files. Transcripts made by older versions are not reused
+  (the file is transcribed once more). While the original file is
+  still there, the Review window corrects the timings of older
+  results and says so; «Пересобрать результат» then rebuilds the
+  muted file from it;
+- on a fresh install muting failed outright: the setup downloads
+  FFmpeg 9, which removed an option the app relied on
+  («Unrecognized option 'filter_script:a'»);
+- beep mode: the beep came late by the same offset, and an episode
+  with more than 99 muted spots could not be rendered with beeps;
+- the Review window lists each muted spot once — several passes that
+  caught the same word no longer add 2–3 rows, and unchecking a word
+  really un-mutes it (a copy from another pass used to keep it muted).
+
 ## 0.7.1 — 2026-08-23
 
 Follow-ups from the first day of 0.7.0:

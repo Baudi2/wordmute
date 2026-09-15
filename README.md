@@ -74,7 +74,7 @@ pip install PySide6 faster-whisper yt-dlp
 python -m wordmute_app
 ```
 
-Нужен ffmpeg в PATH. Тесты: `python -m pytest tests`. Подробности
+Нужен ffmpeg 7.0 или новее в PATH. Тесты: `python -m pytest tests`. Подробности
 архитектуры — в [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ---

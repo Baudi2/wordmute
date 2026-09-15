@@ -7,7 +7,7 @@
 
 ## Кратко для пользователя
 
-1. Запустите `WordMute-Setup-0.7.1.exe`. Windows покажет предупреждение
+1. Запустите `WordMute-Setup-0.7.2.exe`. Windows покажет предупреждение
    SmartScreen («Система Windows защитила ваш компьютер») — нажмите
    **«Подробнее» → «Выполнить в любом случае»**. Это нормально:
    установщик просто не подписан платным сертификатом.
@@ -56,7 +56,7 @@ screen. Answer in the user's language.
 
 ### Architecture facts
 
-- The installer (`WordMute-Setup-0.7.1.exe`, Inno Setup, ~160 MB)
+- The installer (`WordMute-Setup-0.7.2.exe`, Inno Setup, ~160 MB)
   installs ONLY the application, per-user (no admin rights), default
   location `%LOCALAPPDATA%\Programs\WordMute`. It creates a Start-menu
   entry, an optional desktop icon, and an uninstaller in Windows
@@ -116,6 +116,8 @@ updates or extra model downloads.
 | App starts but transcription fails with CUDA/DLL errors | GPU flavor installed without an NVIDIA GPU or with a very old driver | Re-open Модели → «Компоненты…», install the CPU flavor (it overwrites), or update the NVIDIA driver. |
 | Setup sits on «Модель распознавания» for a long time | That step downloads the whole ~3 GB Whisper model (and ~850 MB for GigaAM) from huggingface.co — slow or throttled links make it look stuck | Wait, or enable VPN and press «Установить» again; the per-component progress and the «Журнал установки» show what is happening. |
 | ffmpeg step fails with a timeout | gyan.dev is unreachable | Nothing to do: the app retries and falls back to a GitHub mirror on its own; if both fail, enable VPN and re-run the setup. |
+| Processing fails at muting with «Unrecognized option 'filter_script:a'» (beep mode: «…'filter_complex_script'») | Version 0.7.1 or older with the current FFmpeg 9 (it removed that option) | Install the latest WordMute over the old one; components, models and settings are kept. |
+| The silence comes a moment BEFORE the word (the word is still heard) | Version 0.7.1 or older on a file whose audio starts after the video | Install the latest WordMute, process the file again — or open its review file (Очередь → «⋯ Ещё» → «Открыть файл проверки…»), which corrects the timings, and press «Пересобрать результат». |
 | Video download fails for a specific site | yt-dlp needs updating (sites change constantly) | Модели tab → «Проверить обновления» → «Обновить все», then restart the app. |
 | Boosty/member-only videos fail | Cookies needed | Настройки → «Файл cookies»: export cookies from the browser (a "cookies.txt" extension) and select that file. |
 | GigaAM errors about Hugging Face token / pyannote | Only possible on an OLD install that still uses the legacy torch backend | Current versions run GigaAM via onnx-asr: no account, no token, and the setup wizard has no token step at all. Fix: Модели → «Починить компоненты» to reinstall the current component set. |
