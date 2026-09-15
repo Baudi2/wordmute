@@ -113,8 +113,8 @@ def test_transcript_tab_search_and_load(qapp, tmp_path):
     words = [{"w": "привет", "s": 0.0, "e": 0.4},
              {"w": "мир", "s": 0.5, "e": 0.9},
              {"w": "финал", "s": 5.0, "e": 5.4}]
-    (tmp_path / "v.mp4.words.json").write_text(json.dumps(words),
-                                               encoding="utf-8")
+    (tmp_path / "v.mp4.whisper.v2.words.json").write_text(
+        json.dumps(words), encoding="utf-8")
     tab = TranscriptTab()
     assert not tab.export_button.isEnabled()
     tab.load_media(media)

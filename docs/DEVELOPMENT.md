@@ -29,8 +29,32 @@ docs/           landing page (GitHub Pages serves this folder),
 
 ## Engine changes vs. the original CLI
 
-Three portability changes only — behavior is otherwise identical and
-covered by parity tests (`tests/test_parity_with_cli.py`):
+Matching behaves identically and is covered by parity tests
+(`tests/test_parity_with_cli.py`).
+
+Shared with the CLI — both copies change together, pinned by
+`test_clock_plumbing_parity`:
+
+- Every timestamp is on the FILE clock (ffmpeg's filter `t`, input
+  `-ss`). ASR audio always comes from `extract_asr_wav()`
+  (`aresample=async=1:first_pts=0` plus a `-map 0` null side output);
+  no ASR library ever gets the media path — they count from the first
+  decoded sample, which put every mute 0.556 s early on rutube
+  downloads whose audio starts after the video.
+- Transcript caches are `<media>.whisper.v2.words.json` /
+  `<media>.gigaam.v2.words.json`; the legacy names held sample-clock
+  times and are never read (only cleaned up).
+- Filter scripts are passed as `-/filter:a FILE` /
+  `-/filter_complex FILE` (FFmpeg 7.0+; FFmpeg 9.0 removed
+  `-filter_script`).
+
+App only: the beep tone is generated from the audio branch
+(`asplit` + `aeval`) with a balanced `between()` gate (a flat sum fails
+past 99 terms), and beep-mode `mute()` carries the same null side
+output. Review sidecars are version 2 (file clock); version 1 is
+shifted once in the Review window (`review.migrate_clock`).
+
+Portability changes of the vendored copy:
 
 1. FFmpeg shared-build DLL directory is discovered dynamically
    (winget locations, then PATH) instead of a hardcoded path;

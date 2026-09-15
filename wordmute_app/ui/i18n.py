@@ -366,6 +366,15 @@ RU = {
         "соединение оборвалось посреди загрузки. «Повторить» продолжит с "
         "места обрыва; если повторяется — выберите качество ниже.",
     "Some files were skipped": "Часть файлов пропущена",
+    "Timings saved by an older version sat {} ms before the sound; they "
+    "are corrected. Re-render to fix the muted file.":
+        "Время из старой версии стояло на {} мс раньше звука — оно "
+        "исправлено. Нажмите «Пересобрать результат», чтобы исправить "
+        "заглушённый файл.",
+    "This transcript was made by an older version and its timings run "
+    "early — process the file again to rebuild it.":
+        "Этот транскрипт сделан старой версией, и его время идёт раньше "
+        "звука — обработайте файл заново, чтобы пересоздать его.",
     "next to the source": "рядом с исходником",
     # tier 3: captions and statuses that bypassed tr()
     "Watch folder": "Папка для отслеживания",

@@ -128,7 +128,7 @@ def test_process_file_leaves_no_cache_next_to_output(tmp_path, monkeypatch):
     wm.process_file(inp, out, ({"бог"}, [], [], []), args,
                     [("whisper", "small"), ("gigaam", "v3_rnnt")])
 
-    assert (tmp_path / "v.mp4.words.json").exists()   # source cache: keep
+    assert wm._cache_path(inp, "whisper").exists()   # source cache: keep
     assert [p.name for p in tmp_path.glob("v.clean.mp4*.json")] == []
 
 

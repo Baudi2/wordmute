@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from ..core.proc import creationflags
+from ..engine.wordmute import FILE_CLOCK_FILTER
 
 CONTEXT_SEC = 0.7
 
@@ -29,7 +30,10 @@ class SnippetPlayer:
         cmd = [
             "ffmpeg", "-y", "-v", "error",
             "-ss", f"{begin:.3f}", "-i", str(media),
-            "-t", f"{duration:.3f}", "-vn", "-ac", "2", "-ar", "44100",
+            # a window at -ss 0 would start at the first audio sample, not
+            # at the file clock the row times use
+            "-t", f"{duration:.3f}", "-vn", "-af", FILE_CLOCK_FILTER,
+            "-ac", "2", "-ar", "44100",
             str(wav),
         ]
         r = subprocess.run(cmd, capture_output=True,

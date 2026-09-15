@@ -26,6 +26,20 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   timeline); never re-transcribe for an un-mute edit.
 - Audio codec must follow the output container (webm→opus etc.,
   `_AUDIO_CODEC_FOR` in the engine) — AAC into webm fails.
+- Every timestamp is on the FILE clock (what ffmpeg's filter `t` and
+  input `-ss` use). ASR audio always comes from
+  `engine.extract_asr_wav` — never hand a media path to an ASR library:
+  they count from the first decoded sample, which put every mute
+  0.556 s early on rutube files whose audio starts after the video.
+  Caches are `<media>.<engine>.v2.words.json`; legacy names are never
+  read. Review sidecars version 2 = file clock; v1 is shifted once in
+  the Review window (`review.migrate_clock`).
+- ffmpeg filter scripts go through `-/filter:a FILE` /
+  `-/filter_complex FILE` (FFmpeg 7.0+; 9.0 removed -filter_script).
+  Beep tone comes from the audio branch (asplit+aeval) with a balanced
+  between() gate (a flat sum fails past 99 terms). Keep app and CLI in
+  step: tests/test_parity_with_cli.py::test_clock_plumbing_parity.
+  Real-ffmpeg tests run on every build via the `ffmpeg_builds` fixture.
 
 ## Working agreements (from the user)
 - Work milestone-by-milestone; commit each step with a real message

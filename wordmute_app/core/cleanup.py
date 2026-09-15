@@ -8,9 +8,12 @@ import sys
 from pathlib import Path
 
 from . import review
+from ..engine import wordmute as engine
 
-# transcript caches the engine writes next to a media file
-CACHE_SUFFIXES = (".words.json", ".gigaam.words.json")
+# transcript caches the engine writes next to a media file — the current
+# names and the legacy ones nothing reads any more (still cleaned up)
+CACHE_SUFFIXES = (*engine.CACHE_SUFFIX.values(),
+                  *engine.LEGACY_CACHE_SUFFIXES)
 
 
 def resolve_source(output=None, fallback=None):

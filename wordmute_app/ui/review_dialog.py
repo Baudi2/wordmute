@@ -90,12 +90,18 @@ class ReviewDialog(QDialog):
             moved = sidecar.with_name(sidecar.name[:-len(suffix)])
             if moved.exists():
                 self._data["output"] = str(moved)
+        self._source_ok = Path(self._data["source"]).exists()
+        # a sidecar saved before the file-clock fix sits early by where
+        # the source's audio starts (0.556 s on rutube downloads); it is
+        # corrected before the table and the snapshot are built, so a
+        # re-render fixes the muted file and saves version 2
+        self._clock_shift = (review.migrate_clock(self._data)
+                             if self._source_ok else None)
         self._player = SnippetPlayer()
         self._worker = None
         self._dirty = False
         self._saved_muted = self._muted_snapshot()
         self._filling = False
-        self._source_ok = Path(self._data["source"]).exists()
 
         output_name = Path(self._data["output"]).name
         self.setWindowTitle(f"{tr('Review')} — {output_name}")
@@ -114,6 +120,16 @@ class ReviewDialog(QDialog):
                              "playback and re-rendering are unavailable."))
             warn.setWordWrap(True)
             layout.addWidget(warn)
+        if self._clock_shift and abs(self._clock_shift) >= 0.001:
+            self.clock_note = QLabel(tr(
+                "Timings saved by an older version sat {} ms before the "
+                "sound; they are corrected. Re-render to fix the muted "
+                "file.").format(round(self._clock_shift * 1000)))
+            self.clock_note.setObjectName("review_clock_note")
+            self.clock_note.setWordWrap(True)
+            layout.addWidget(self.clock_note)
+        else:
+            self.clock_note = None
 
         self.table = HoverRowTable(0, 6)
         self.table.setHorizontalHeaderLabels(

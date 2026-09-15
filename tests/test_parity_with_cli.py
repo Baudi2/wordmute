@@ -50,3 +50,45 @@ def test_find_hits_parity_on_real_lists(original, tmp_path):
         assert wl_v == wl_o
         assert (vendored.find_hits(words, *wl_v, pad_ms=100)
                 == original.find_hits(words, *wl_o, pad_ms=100))
+
+
+def test_clock_plumbing_parity(original, tmp_path, monkeypatch):
+    """The file-clock ASR extraction, the cache names and the silence
+    mute command stay identical in both copies — the CLI had the same
+    early mutes and the same FFmpeg 9 break."""
+    for name in ("FILE_CLOCK_FILTER", "INPUT_FLAGS", "CLOCK_SIDE_OUTPUT",
+                 "ASR_RATE", "CACHE_SUFFIX", "LEGACY_CACHE_SUFFIXES"):
+        assert getattr(vendored, name) == getattr(original, name), name
+    media, wav = Path("v.mp4"), "a.wav"
+    assert (vendored._asr_extract_cmd(media, wav)
+            == original._asr_extract_cmd(media, wav))
+
+    seen = {}
+
+    class FakePopen:
+        def __init__(self, cmd, **kwargs):
+            seen["vendored"] = list(cmd)
+            self.stdout = iter([])
+            self.returncode = 0
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(vendored.subprocess, "Popen", FakePopen)
+    vendored.set_reporter(lambda e, d: None)
+    try:
+        vendored.mute(tmp_path / "v.mp4", [(1.0, 1.5, "x")],
+                      tmp_path / "o.mp4")
+    finally:
+        vendored.set_reporter(None)
+    monkeypatch.setattr(original.subprocess, "run",
+                        lambda cmd, **k: seen.__setitem__("original",
+                                                          list(cmd)))
+    original.mute(tmp_path / "v.mp4", [(1.0, 1.5, "x")], tmp_path / "o.mp4")
+
+    def from_input_flags(cmd):     # the script's temp name differs
+        start = cmd.index("-err_detect")
+        return ["SCRIPT" if a.endswith(".txt") else a for a in cmd[start:]]
+
+    assert (from_input_flags(seen["vendored"])
+            == from_input_flags(seen["original"]))

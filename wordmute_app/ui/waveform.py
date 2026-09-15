@@ -13,6 +13,8 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget
 
+from ..engine.wordmute import FILE_CLOCK_FILTER
+
 ACCENT = QColor("#9184d9")            # speech bars (both themes)
 MUTED = QColor("#e5484d")             # the interval being muted
 CONTEXT_S = 2.0                       # context either side of the word
@@ -36,7 +38,8 @@ class WaveformWorker(QThread):
         span = (self._end + CONTEXT_S) - win_start
         cmd = ["ffmpeg", "-v", "error",
                "-ss", f"{win_start:.3f}", "-t", f"{span:.3f}",
-               "-i", self._source, "-vn", "-ac", "1", "-ar", str(RATE),
+               "-i", self._source, "-vn", "-af", FILE_CLOCK_FILTER,
+               "-ac", "1", "-ar", str(RATE),
                "-f", "s16le", "-"]
         try:
             raw = subprocess.run(cmd, capture_output=True,

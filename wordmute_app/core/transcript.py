@@ -1,23 +1,38 @@
 """Cached-transcript access and SRT export.
 
-Works entirely from the .words.json caches the engine writes next to
-each media file — never triggers transcription."""
+Works entirely from the transcript caches the engine writes next to
+each media file (<media>.whisper.v2.words.json /
+<media>.gigaam.v2.words.json) — never triggers transcription."""
 
 import json
 from pathlib import Path
+
+from ..engine import wordmute as engine
+
+
+class LegacyTranscriptError(FileNotFoundError):
+    """Only a transcript cached by an older version exists: its times
+    count from the first audio sample and run early on files whose audio
+    starts after the video, so it is not shown."""
 
 
 def load_transcript(media) -> tuple:
     """Return (words, engine_name) from the media file's cached
     transcript, preferring whisper's cache. Raises FileNotFoundError
-    with a helpful message when no cache exists."""
+    with a helpful message when no cache exists, LegacyTranscriptError
+    when only an old-format one does."""
     media = Path(media)
-    for suffix, engine_name in ((".words.json", "whisper"),
-                                (".gigaam.words.json", "gigaam")):
-        cache = media.with_suffix(media.suffix + suffix)
+    for engine_name in ("whisper", "gigaam"):
+        cache = media.with_suffix(
+            media.suffix + engine.CACHE_SUFFIX[engine_name])
         if cache.exists():
             return (json.loads(cache.read_text(encoding="utf-8")),
                     engine_name)
+    if any(media.with_suffix(media.suffix + suffix).exists()
+           for suffix in engine.LEGACY_CACHE_SUFFIXES):
+        raise LegacyTranscriptError(
+            f"the transcript next to {media.name} was made by an older "
+            "version — process the file again to rebuild it")
     raise FileNotFoundError(
         f"no cached transcript next to {media.name} — process the file "
         "first (the cache appears after transcription)")

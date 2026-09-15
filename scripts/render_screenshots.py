@@ -249,7 +249,7 @@ for name, tab in (("wordlists", win.wordlists_tab),
             words.append({"w": word, "s": round(position, 2),
                           "e": round(position + 0.4, 2)})
             position += 0.55
-        (WORK / "Лекция_01.mp4.words.json").write_text(
+        (WORK / "Лекция_01.mp4.whisper.v2.words.json").write_text(
             json.dumps(words, ensure_ascii=False), encoding="utf-8")
         tab.load_media(media)
     if name == "models":
@@ -393,7 +393,7 @@ episode = ("Во все тяжкие (2008-2013) — 4 сезон 9 серия �
 confirm_box = ConfirmDialog(
     win, title=tr("Move {} file(s) to the Recycle Bin?").format(3),
     body=tr("They can be restored from the Recycle Bin."),
-    files=[episode + ".mp4", episode + ".mp4.words.json",
+    files=[episode + ".mp4", episode + ".mp4.whisper.v2.words.json",
            episode + ".clean.mp4.wordmute.json"],
     ok_text=tr("To Recycle Bin"))
 shot(confirm_box, "dialog_delete_files")

@@ -22,11 +22,13 @@ can receive structured progress events; the default reporter prints the
 same lines the CLI always has.
 
 First run per video is slow (transcription); results are cached in
-<video>.words.json / <video>.gigaam.words.json, so re-runs with an edited
-word list take seconds.
+<video>.whisper.v2.words.json / <video>.gigaam.v2.words.json, so re-runs
+with an edited word list take seconds. All times are on the file clock
+(see extract_asr_wav).
 """
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -327,34 +329,73 @@ def _chars_to_words(tokens, times, offset: float):
     return words
 
 
-def _transcribe_gigaam_onnx(media: Path, model_name: str):
-    pipe = _gigaam_onnx_pipeline(model_name)
-    # onnx-asr reads WAV/numpy only — extract 16 kHz mono via ffmpeg
-    fd, tmp = tempfile.mkstemp(suffix=".wav")
+# ---------------------------------------------------------------- clock
+# Every timestamp here lives on the FILE clock: the clock ffmpeg's filter
+# `t` (the mute) and input `-ss` (review player, waveform) use. ASR
+# libraries count from the first decoded sample instead, and on downloads
+# whose audio starts after the video (rutube: 0.556 s) every mute landed
+# that much before the word. So no ASR library ever gets the media path:
+# extract_asr_wav() decodes onto the file clock — aresample pads the
+# head, and every timestamp gap of 0.1 s or more, with silence — and
+# every engine transcribes that WAV. The null side output repeats
+# mute()'s stream selection: MPEG-TS rebases audio to 0 when video is not
+# selected, which would put the WAV on another clock than the mute.
+FILE_CLOCK_FILTER = "aresample=async=1:first_pts=0"
+INPUT_FLAGS = ["-err_detect", "ignore_err",
+               "-fflags", "+genpts+igndts+discardcorrupt"]
+CLOCK_SIDE_OUTPUT = ["-map", "0", "-c", "copy", "-f", "null", "-"]
+ASR_RATE = 16000
+
+
+def _asr_extract_cmd(media, wav) -> list:
+    return ["ffmpeg", "-y", "-v", "error", *INPUT_FLAGS, "-i", str(media),
+            "-map", "0:a:0", "-af", FILE_CLOCK_FILTER,
+            "-ac", "1", "-ar", str(ASR_RATE), str(wav),
+            *CLOCK_SIDE_OUTPUT]
+
+
+def extract_asr_wav(media, wav) -> None:
+    r = subprocess.run(_asr_extract_cmd(media, wav), capture_output=True,
+                       text=True, encoding="utf-8", errors="replace",
+                       creationflags=_creationflags())
+    if r.returncode:
+        raise RuntimeError("ffmpeg audio extraction failed: "
+                           + (r.stderr or "")[-300:])
+
+
+@contextlib.contextmanager
+def _asr_audio(media):
+    """A file-clock WAV of the media's first audio track, deleted after."""
+    fd, wav = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     try:
-        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(media),
-                            "-vn", "-ac", "1", "-ar", "16000", tmp],
-                           capture_output=True, text=True)
-        if r.returncode:
-            raise RuntimeError("ffmpeg audio extraction failed: "
-                               + (r.stderr or "")[-300:])
-        words = []
-        for seg in pipe.recognize(tmp):
-            words.extend(_chars_to_words(seg.tokens, seg.timestamps,
-                                         seg.start))
-            _emit("asr_progress", minutes=seg.end / 60)
-        return words
+        extract_asr_wav(media, wav)
+        yield wav
     finally:
-        os.unlink(tmp)
+        with contextlib.suppress(OSError):
+            os.unlink(wav)
+
+
+def _transcribe_gigaam_onnx(wav, model_name: str):
+    """wav: a file-clock WAV from _asr_audio (onnx-asr reads WAV/numpy)."""
+    pipe = _gigaam_onnx_pipeline(model_name)
+    words = []
+    for seg in pipe.recognize(wav):
+        words.extend(_chars_to_words(seg.tokens, seg.timestamps, seg.start))
+        _emit("asr_progress", minutes=seg.end / 60)
+    return words
+
+
+# v2 caches hold file-clock times. The legacy names held times counted
+# from the first audio sample — early on offset files — and are never
+# read again, only cleaned up.
+CACHE_SUFFIX = {"whisper": ".whisper.v2.words.json",
+                "gigaam": ".gigaam.v2.words.json"}
+LEGACY_CACHE_SUFFIXES = (".words.json", ".gigaam.words.json")
 
 
 def _cache_path(media: Path, engine: str) -> Path:
-    # whisper keeps the original untagged cache name for backward
-    # compatibility with transcripts cached before GigaAM support existed.
-    if engine == "whisper":
-        return media.with_suffix(media.suffix + ".words.json")
-    return media.with_suffix(media.suffix + f".{engine}.words.json")
+    return media.with_suffix(media.suffix + CACHE_SUFFIX[engine])
 
 
 FAST_MODE = False
@@ -387,6 +428,8 @@ def _load_cache(cache: Path, media: Path):
 
 def transcribe(media: Path, engine: str, model_name: str, device: str, language: str,
                force: bool = False, vad: bool = True):
+    if engine not in CACHE_SUFFIX:
+        raise ValueError(f"unknown engine: {engine!r} (use 'whisper' or 'gigaam')")
     cache = _cache_path(media, engine)
     if cache.exists() and not force:
         cached = _load_cache(cache, media)
@@ -396,37 +439,35 @@ def transcribe(media: Path, engine: str, model_name: str, device: str, language:
 
     _emit("asr_start", file=media.name, engine=engine)
 
-    if engine == "whisper":
-        model = get_whisper_model(model_name, device)
-        if FAST_MODE and vad:
-            from faster_whisper import BatchedInferencePipeline
-            segments, info = BatchedInferencePipeline(model=model).transcribe(
-                str(media), language=language, word_timestamps=True,
-                vad_filter=True, batch_size=8 if device == "cuda" else 4,
-            )
-        else:
-            segments, info = model.transcribe(
-                str(media), language=language, word_timestamps=True,
-                vad_filter=vad,
-            )
-        words = []
-        for seg in segments:
-            for w in seg.words or []:
-                words.append({"w": w.word.strip(), "s": round(w.start, 3),
-                              "e": round(w.end, 3)})
-            _emit("asr_progress", minutes=seg.end / 60)
-
-    elif engine == "gigaam":
-        if GIGAAM_BACKEND == "onnx":
-            words = _transcribe_gigaam_onnx(media, model_name)
+    # every engine hears the file-clock WAV, never the media path
+    with _asr_audio(media) as wav:
+        if engine == "whisper":
+            model = get_whisper_model(model_name, device)
+            if FAST_MODE and vad:
+                from faster_whisper import BatchedInferencePipeline
+                segments, info = BatchedInferencePipeline(model=model).transcribe(
+                    wav, language=language, word_timestamps=True,
+                    vad_filter=True, batch_size=8 if device == "cuda" else 4,
+                )
+            else:
+                segments, info = model.transcribe(
+                    wav, language=language, word_timestamps=True,
+                    vad_filter=vad,
+                )
+            words = []
+            # segments are a generator: consume them while the WAV exists
+            for seg in segments:
+                for w in seg.words or []:
+                    words.append({"w": w.word.strip(), "s": round(w.start, 3),
+                                  "e": round(w.end, 3)})
+                _emit("asr_progress", minutes=seg.end / 60)
+        elif GIGAAM_BACKEND == "onnx":
+            words = _transcribe_gigaam_onnx(wav, model_name)
         else:
             model = get_gigaam_model(model_name, device)
-            result = model.transcribe_longform(str(media), word_timestamps=True)
+            result = model.transcribe_longform(wav, word_timestamps=True)
             words = [{"w": w.text.strip(), "s": round(w.start, 3),
                       "e": round(w.end, 3)} for w in result.words]
-
-    else:
-        raise ValueError(f"unknown engine: {engine!r} (use 'whisper' or 'gigaam')")
 
     # closes the pass for the stage-timing report (all engines)
     _emit("asr_progress_end")
@@ -568,14 +609,39 @@ def _silence_filters(intervals) -> str:
     )
 
 
+BEEP_AMPLITUDE = 0.03125   # the old sine's level: default 1/8 x 0.25
+
+
+def _gate(intervals) -> str:
+    """between() terms joined as a BALANCED sum. ffmpeg's expression
+    parser fails on a flat a+b+... beyond 99 terms («Cannot allocate
+    memory»), so beep mode could not render an episode with 100+ muted
+    spots; nested pairs work to thousands of terms."""
+    terms = [f"between(t,{s:.3f},{e:.3f})" for s, e, _ in intervals]
+    if not terms:
+        return "0"
+    while len(terms) > 1:
+        paired = [f"({terms[i]}+{terms[i + 1]})"
+                  for i in range(0, len(terms) - 1, 2)]
+        if len(terms) % 2:
+            paired.append(terms[-1])
+        terms = paired
+    return terms[0]
+
+
 def _beep_filtergraph(intervals, beep_hz: int) -> str:
     """Replace matched intervals with a beep tone: the original audio is
-    silenced there while a sine tone (silenced everywhere else) is mixed
-    in. amix halves levels, the trailing volume=2 restores them."""
-    gate = "+".join(f"between(t,{s:.3f},{e:.3f})" for s, e, _ in intervals)
-    return (f"[0:a]{_silence_filters(intervals)}[muted];"
-            f"sine=frequency={beep_hz}[tone];"
-            f"[tone]volume=enable='not({gate})':volume=0,volume=0.25[beep];"
+    silenced there while a tone (silenced everywhere else) is mixed in.
+    The tone is generated FROM the audio branch (asplit + aeval), so it
+    carries the source's own timestamps — amix pairs samples by order,
+    and the old free-running sine counted t from 0, so the beep came
+    late by the audio's start offset. amix halves levels, the trailing
+    volume=2 restores them."""
+    return (f"[0:a]asplit=2[src][tone];"
+            f"[src]{_silence_filters(intervals)}[muted];"
+            f"[tone]asetnsamples=n=256,"
+            f"aeval=exprs='{BEEP_AMPLITUDE}*sin(2*PI*{beep_hz}*t)':c=same,"
+            f"volume=enable='not({_gate(intervals)})':volume=0[beep];"
             f"[muted][beep]amix=inputs=2:duration=first:"
             f"dropout_transition=0,volume=2[aout]")
 
@@ -602,7 +668,9 @@ def _audio_codec_args(out: Path) -> list:
 def mute(media: Path, intervals, out: Path, beep_hz=None):
     filters = (_beep_filtergraph(intervals, beep_hz) if beep_hz
                else _silence_filters(intervals))
-    # filter list can be huge -> pass via script file (avoids cmd length limits)
+    # filter list can be huge -> pass via script file (avoids cmd length
+    # limits). "-/opt FILE" reads the option's value from the file:
+    # FFmpeg 7.0+; FFmpeg 9.0 removed -filter_script / -filter_complex_script
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
                                      encoding="utf-8") as f:
         f.write(filters)
@@ -610,28 +678,33 @@ def mute(media: Path, intervals, out: Path, beep_hz=None):
     audio_args = _audio_codec_args(out)
     if beep_hz:
         # a filter_complex graph needs explicit maps; secondary audio
-        # tracks are not carried over in beep mode
+        # tracks are not carried over in beep mode. The null side output
+        # keeps every stream selected, so the filter clock is the one the
+        # ASR WAV was extracted on (MPEG-TS takes its start time from the
+        # selected streams only)
         io_args = [
-            "-filter_complex_script", script,
+            "-/filter_complex", script,
             "-map", "0:v?", "-map", "[aout]", "-map", "0:s?",
             "-c:v", "copy", "-c:s", "copy",
             *audio_args,
         ]
+        side_output = CLOCK_SIDE_OUTPUT
     else:
         io_args = [
             "-map", "0",
             "-c", "copy",
             *audio_args,
-            "-filter_script:a", script,
+            "-/filter:a", script,
         ]
+        side_output = []
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-nostats",
         "-progress", "pipe:1",
-        "-err_detect", "ignore_err",
-        "-fflags", "+genpts+igndts+discardcorrupt",
+        *INPUT_FLAGS,
         "-i", str(media),
         *io_args,
         str(out),
+        *side_output,
     ]
     _emit("mute_start", count=len(intervals))
     try:
@@ -685,7 +758,7 @@ def drop_output_caches(out: Path) -> None:
     That cache describes an intermediate state nothing ever reads again,
     so it must not outlive the run — a final pass that finds nothing
     used to leave a stray <out>.words.json sitting next to the video."""
-    for suffix in (".words.json", ".gigaam.words.json"):
+    for suffix in (*CACHE_SUFFIX.values(), *LEGACY_CACHE_SUFFIXES):
         stale = out.with_suffix(out.suffix + suffix)
         if stale.exists():
             stale.unlink()

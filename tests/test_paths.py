@@ -7,12 +7,14 @@ import pytest
 from wordmute_app.engine import wordmute as wm
 
 
-def test_cache_path_whisper_untagged():
-    assert wm._cache_path(Path("v.mp4"), "whisper").name == "v.mp4.words.json"
-
-
-def test_cache_path_gigaam_tagged():
-    assert wm._cache_path(Path("v.mp4"), "gigaam").name == "v.mp4.gigaam.words.json"
+def test_cache_names_carry_the_clock_version():
+    """v2 caches hold file-clock times; the legacy names held times
+    counted from the first audio sample and are never read again."""
+    assert (wm._cache_path(Path("v.mp4"), "whisper").name
+            == "v.mp4.whisper.v2.words.json")
+    assert (wm._cache_path(Path("v.mp4"), "gigaam").name
+            == "v.mp4.gigaam.v2.words.json")
+    assert wm.LEGACY_CACHE_SUFFIXES == (".words.json", ".gigaam.words.json")
 
 
 def test_collect_inputs_skips_clean_and_nonmedia(tmp_path):

@@ -813,24 +813,37 @@ def test_subword_tokens_split_into_words():
     assert hits[0][1] - hits[0][0] < 1.0   # ~one word, not a sentence
 
 
+def _stub_asr_audio(monkeypatch, engine):
+    """transcribe() hands every ASR route a file-clock WAV extracted by
+    ffmpeg; stubbed routes get a stand-in name instead."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def fake(media):
+        yield "x.wav"
+
+    monkeypatch.setattr(engine, "_asr_audio", fake)
+
+
 def test_gigaam_backend_routing(tmp_path, monkeypatch):
     import types
     from wordmute_app.engine import wordmute as engine
 
     monkeypatch.setattr(engine, "GIGAAM_BACKEND", "torch")  # restore
+    _stub_asr_audio(monkeypatch, engine)
     onnx_calls = []
     monkeypatch.setattr(
         engine, "_transcribe_gigaam_onnx",
-        lambda media, name: onnx_calls.append(name)
+        lambda wav, name: onnx_calls.append((wav, name))
         or [{"w": "бог", "s": 1.0, "e": 1.5}])
 
     media = tmp_path / "v.mp4"
     media.write_bytes(b"x")
     engine.configure_gigaam_backend("onnx")
     words = engine.transcribe(media, "gigaam", "v3_rnnt", "cpu", "ru")
-    assert onnx_calls == ["v3_rnnt"]
+    assert onnx_calls == [("x.wav", "v3_rnnt")]   # the WAV, never the media
     assert words == [{"w": "бог", "s": 1.0, "e": 1.5}]
-    assert (tmp_path / "v.mp4.gigaam.words.json").exists()
+    assert (tmp_path / "v.mp4.gigaam.v2.words.json").exists()
 
     # torch backend still routes to the original gigaam package path
     class FakeWord:
@@ -838,6 +851,7 @@ def test_gigaam_backend_routing(tmp_path, monkeypatch):
 
     class FakeTorchModel:
         def transcribe_longform(self, path, word_timestamps):
+            assert path == "x.wav"
             assert word_timestamps is True
             return types.SimpleNamespace(words=[FakeWord()])
 
@@ -879,6 +893,7 @@ def test_fast_mode_uses_batched_pipeline(tmp_path, monkeypatch):
     monkeypatch.setattr(engine, "get_whisper_model",
                         lambda n, d: object())
     monkeypatch.setattr(engine, "FAST_MODE", False)  # restore on teardown
+    _stub_asr_audio(monkeypatch, engine)
 
     media = tmp_path / "v.mp4"
     media.write_bytes(b"x")

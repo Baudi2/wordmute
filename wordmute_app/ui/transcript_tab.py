@@ -141,6 +141,11 @@ class TranscriptTab(QWidget):
     def load_media(self, path):
         try:
             self._words, engine_name = transcript.load_transcript(path)
+        except transcript.LegacyTranscriptError:
+            self.status_label.setText(tr(
+                "This transcript was made by an older version and its "
+                "timings run early — process the file again to rebuild it."))
+            return
         except FileNotFoundError as exc:
             self.status_label.setText(str(exc))
             return

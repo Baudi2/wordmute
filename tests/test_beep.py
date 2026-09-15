@@ -27,10 +27,55 @@ def test_fade_never_starts_before_zero():
 
 def test_beep_filtergraph_structure():
     g = wm._beep_filtergraph(INTERVALS, 1000)
-    assert g.startswith("[0:a]asetnsamples=n=256,volume=enable=")
-    assert "sine=frequency=1000[tone]" in g
-    assert "not(between(t,1.000,1.500)+between(t,9.000,9.400))" in g
+    # the tone is made from the audio branch so it shares the source's
+    # clock: a free-running sine counted t from 0 and beeped late by the
+    # audio's start offset
+    assert g.startswith("[0:a]asplit=2[src][tone];"
+                        "[src]asetnsamples=n=256,volume=enable=")
+    assert "aeval=exprs='0.03125*sin(2*PI*1000*t)':c=same" in g
+    assert "sine=" not in g
+    assert "not((between(t,1.000,1.500)+between(t,9.000,9.400)))" in g
     assert g.endswith("[aout]")
+
+
+def _grouping(gate: str):
+    """(max nesting depth, most '+' at one level) of a gate, counting
+    only grouping parentheses — between(...) calls are opaque terms."""
+    import re
+    flat = re.sub(r"between\(t,[0-9.]+,[0-9.]+\)", "X", gate)
+    depth = max_depth = 0
+    plus = [0]
+    most = 0
+    for ch in flat:
+        if ch == "(":
+            depth += 1
+            max_depth = max(max_depth, depth)
+            plus.append(0)
+        elif ch == ")":
+            most = max(most, plus.pop())
+            depth -= 1
+        elif ch == "+":
+            plus[-1] += 1
+    assert depth == 0, "unbalanced parentheses"
+    return max_depth, max(most, plus[0])
+
+
+def test_gate_is_a_balanced_sum():
+    """A flat a+b+... fails past 99 terms in ffmpeg's expression parser
+    — beep mode could not render an episode with 100+ muted spots."""
+    assert wm._gate(INTERVALS) == \
+        "(between(t,1.000,1.500)+between(t,9.000,9.400))"
+    assert wm._gate([(1.0, 2.0, "x")]) == "between(t,1.000,2.000)"
+    assert wm._gate([]) == "0"
+    many = [(round(i * 0.06, 3), round(i * 0.06 + 0.02, 3), "x")
+            for i in range(300)]
+    gate = wm._gate(many)
+    assert gate.count("between(") == 300
+    for s, e, _ in many:
+        assert f"between(t,{s:.3f},{e:.3f})" in gate
+    depth, most = _grouping(gate)
+    assert depth == 9          # ceil(log2(300))
+    assert most == 1           # no level joins more than two terms
 
 
 class FakePopen:
@@ -61,18 +106,23 @@ def run_mute_capture(tmp_path, monkeypatch, beep_hz):
 def test_mute_silence_command(tmp_path, monkeypatch):
     captured = run_mute_capture(tmp_path, monkeypatch, beep_hz=None)
     cmd = captured["cmd"]
-    assert "-filter_script:a" in cmd
-    assert "-filter_complex_script" not in cmd
+    # FFmpeg 9.0 removed -filter_script; "-/opt FILE" works from 7.0 on
+    assert "-/filter:a" in cmd
+    assert "-filter_script:a" not in cmd and "-/filter_complex" not in cmd
     assert captured["script"].startswith("asetnsamples=n=256,volume=enable=")
+    assert cmd[-1] == str(tmp_path / "out.mp4")   # -map 0: no side output
 
 
 def test_mute_beep_command(tmp_path, monkeypatch):
     captured = run_mute_capture(tmp_path, monkeypatch, beep_hz=800)
     cmd = captured["cmd"]
-    assert "-filter_complex_script" in cmd
-    assert "-filter_script:a" not in cmd
+    assert "-/filter_complex" in cmd
+    assert "-filter_complex_script" not in cmd and "-/filter:a" not in cmd
     assert "[aout]" in cmd  # mapped
-    assert "sine=frequency=800" in captured["script"]
+    assert "aeval=exprs='0.03125*sin(2*PI*800*t)'" in captured["script"]
+    # every stream selected once more, so the filter clock matches the
+    # ASR extraction's (MPEG-TS rebases on the selected streams)
+    assert cmd[-len(wm.CLOCK_SIDE_OUTPUT):] == wm.CLOCK_SIDE_OUTPUT
 
 
 def test_ffmpeg_progress_events_emitted(monkeypatch):

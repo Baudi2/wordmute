@@ -16,9 +16,9 @@ WORDS = [
 
 def test_load_prefers_whisper_cache(tmp_path):
     media = tmp_path / "v.mp4"
-    (tmp_path / "v.mp4.words.json").write_text(
+    (tmp_path / "v.mp4.whisper.v2.words.json").write_text(
         json.dumps(WORDS), encoding="utf-8")
-    (tmp_path / "v.mp4.gigaam.words.json").write_text(
+    (tmp_path / "v.mp4.gigaam.v2.words.json").write_text(
         json.dumps([]), encoding="utf-8")
     words, engine_name = transcript.load_transcript(media)
     assert engine_name == "whisper"
@@ -27,7 +27,7 @@ def test_load_prefers_whisper_cache(tmp_path):
 
 def test_load_falls_back_to_gigaam(tmp_path):
     media = tmp_path / "v.mp4"
-    (tmp_path / "v.mp4.gigaam.words.json").write_text(
+    (tmp_path / "v.mp4.gigaam.v2.words.json").write_text(
         json.dumps(WORDS), encoding="utf-8")
     _, engine_name = transcript.load_transcript(media)
     assert engine_name == "gigaam"
@@ -36,6 +36,27 @@ def test_load_falls_back_to_gigaam(tmp_path):
 def test_load_missing_cache_raises(tmp_path):
     with pytest.raises(FileNotFoundError, match="cached transcript"):
         transcript.load_transcript(tmp_path / "v.mp4")
+
+
+@pytest.mark.parametrize("legacy", ["v.mp4.words.json",
+                                    "v.mp4.gigaam.words.json"])
+def test_legacy_cache_is_refused(tmp_path, legacy):
+    """Old caches count from the first audio sample and run early on
+    files whose audio starts after the video — never shown as if right."""
+    (tmp_path / legacy).write_text(json.dumps(WORDS), encoding="utf-8")
+    with pytest.raises(transcript.LegacyTranscriptError):
+        transcript.load_transcript(tmp_path / "v.mp4")
+
+
+def test_transcript_tab_explains_a_legacy_cache(qapp, tmp_path):
+    from wordmute_app.ui.transcript_tab import TranscriptTab
+
+    (tmp_path / "v.mp4.words.json").write_text(json.dumps(WORDS),
+                                               encoding="utf-8")
+    tab = TranscriptTab()
+    tab.load_media(tmp_path / "v.mp4")
+    assert "older version" in tab.status_label.text()
+    assert not tab.export_button.isEnabled()
 
 
 def test_group_words_breaks_on_gap():
@@ -63,7 +84,7 @@ def test_srt_ts():
 
 def test_export_srt(tmp_path):
     media = tmp_path / "v.mp4"
-    (tmp_path / "v.mp4.words.json").write_text(
+    (tmp_path / "v.mp4.whisper.v2.words.json").write_text(
         json.dumps(WORDS), encoding="utf-8")
     dest = transcript.export_srt(media)
     assert dest == tmp_path / "v.srt"

@@ -31,6 +31,10 @@ def test_play_extracts_with_context_and_plays(tmp_path, monkeypatch):
         assert cmd[0] == "ffmpeg"
         assert cmd[cmd.index("-ss") + 1] == "9.300"   # 0.7 s context before
         assert cmd[cmd.index("-t") + 1] == "1.900"    # word + context both sides
+        # the window is on the file clock the row times use (at -ss 0 a
+        # plain decode would start at the first audio sample instead)
+        i = cmd.index("-vn")
+        assert cmd[i + 1:i + 3] == ["-af", "aresample=async=1:first_pts=0"]
         assert played and played[-1][0].endswith(".wav")
     finally:
         p.dispose()

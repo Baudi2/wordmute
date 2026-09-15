@@ -5,7 +5,11 @@ A review sidecar (<output>.wordmute.json) is written after each
 successful job. Muting never alters the timeline (volume filter, no
 cutting), so intervals from every pass share the source file's
 timestamps; re-rendering is therefore ONE ffmpeg mute of the original
-source with the still-muted intervals — no re-transcription ever."""
+source with the still-muted intervals — no re-transcription ever.
+
+All times are on the FILE clock (engine.extract_asr_wav). Version 1
+sidecars counted from the first audio sample; migrate_clock() moves
+them over once, when the Review window opens them."""
 
 import json
 import os
@@ -13,10 +17,11 @@ import shutil
 import threading
 from pathlib import Path
 
-from . import config
+from . import config, probe
 from ..engine import wordmute as engine
 
 REVIEW_SUFFIX = ".wordmute.json"
+REVIEW_VERSION = 2   # 2 = file-clock times
 
 # Passes 2+ transcribe the ALREADY-MUTED output. Word timestamps are a
 # little off, so a sliver of the word survives the first mute (or the
@@ -113,11 +118,11 @@ def review_path_for(output) -> Path:
 
 
 def save_review(source, output, pad_ms: int, intervals: list,
-                beep_hz=None) -> Path:
+                beep_hz=None, version: int = REVIEW_VERSION) -> Path:
     """intervals: [{"s", "e", "text", "pass", "engine", "muted"}, ...]"""
     path = review_path_for(output)
     data = {
-        "version": 1,
+        "version": version,
         "source": str(source),
         "output": str(output),
         "pad_ms": pad_ms,
@@ -138,6 +143,37 @@ def load_review(path) -> dict:
     # memory only — the file changes on the next re-render
     data["intervals"] = merge_intervals(data["intervals"])
     return data
+
+
+def migrate_clock(data: dict):
+    """Version-1 sidecars were saved while the ASR counted time from the
+    first decoded audio sample: on files whose audio starts after the
+    video every row sits that much early, and a re-render muted before
+    the word. Shift the rows once onto the file clock by where mute()
+    sees the source's first audio sample. Returns the shift applied, or
+    None (already version 2, source missing, probe failed).
+
+    Kept out of load_review on purpose: cleanup.resolve_source reads
+    sidecars from the delete flows and must not spawn ffmpeg.
+    merge_intervals uses only order and differences, so shifting after
+    load_review's merge is exact. A row first caught by pass k was
+    transcribed from an output re-encoded k-1 times — each re-encode
+    starts ~23 ms earlier — so it lands up to (k-1) x 23 ms late,
+    inside the 100 ms pad."""
+    if data.get("version", 1) >= REVIEW_VERSION:
+        return None
+    source = Path(data["source"])
+    if not source.exists():
+        return None
+    offset = probe.audio_start_offset(source)
+    if offset is None:
+        return None
+    offset = round(offset, 6)
+    for iv in data["intervals"]:
+        iv["s"] = round(iv["s"] + offset, 3)
+        iv["e"] = round(iv["e"] + offset, 3)
+    data["version"] = REVIEW_VERSION
+    return offset
 
 
 def _srt_ts(t: float) -> str:
@@ -190,5 +226,8 @@ def apply_review(data: dict) -> None:
         tmp.unlink(missing_ok=True)   # no half-written .tmp left behind
         raise
     engine.drop_output_caches(output)   # they describe the old output
+    # a version-1 sidecar the Review window could not migrate stays
+    # version 1: it must never claim file-clock times it does not have
     save_review(source, output, data.get("pad_ms", 100), data["intervals"],
-                beep_hz=data.get("beep_hz"))
+                beep_hz=data.get("beep_hz"),
+                version=data.get("version", 1))
