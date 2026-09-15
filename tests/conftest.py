@@ -10,6 +10,18 @@ os.environ.setdefault("WORDMUTE_NO_UPDATE_CHECK", "1")
 os.environ.setdefault("WORDMUTE_SYNC_PROBE", "1")
 
 
+@pytest.fixture(autouse=True)
+def isolated_app_data(tmp_path_factory, monkeypatch):
+    """No test may read or write the user's real WordMute data: the
+    worker tests appended fake runs to %APPDATA%\\WordMute\\history.jsonl
+    and a Models-tab test saved its fixture into the real settings.json.
+    Every test gets its own APPDATA / LOCALAPPDATA; a test that sets its
+    own with monkeypatch.setenv still wins."""
+    root = tmp_path_factory.mktemp("appdata")
+    monkeypatch.setenv("APPDATA", str(root / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(root / "Local"))
+
+
 @pytest.fixture(scope="session")
 def qapp():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
