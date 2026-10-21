@@ -213,6 +213,31 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   preference makes stderr fatal) and Inno reads any line that BEGINS
   with `[` as a section tag, even inside [Code]; iscc's exit code is
   now checked.
+- v0.7.2 SHIPPED 2026-10-21 (release v0.7.2, installer 160.1 MB,
+  frozen report all green, smoke ok, a simulated 0.7.1 is offered
+  0.7.2). Contents:
+  - The file-clock fix: mutes landed 0.556 s early on rutube files.
+  - FFmpeg 9 `-/filter` syntax and the beep fixes.
+  - Review dedupe.
+  - Cookies reach yt-dlp again: since 0.7.0 a jar was passed as
+    opts["cookiejar"], which yt-dlp ignores, so no site got the
+    sign-in. Each session now gets a StringIO copy.
+  - core/site_login.py names an expired Boosty sign-in; Settings shows
+    its date.
+  - Parallel byte ranges for boosty/vk/ok. Their okcdn CDN caps each
+    connection at ~1.06 MB/s. A picked single-file format becomes an
+    HLS byte-range playlist (`hls_media_playlist_data`): same format,
+    same bytes. The user measured ~30 MB/s, up from 1.1.
+  Learned:
+  - Extractors leave `protocol` empty until processing, so use
+    determine_protocol().
+  - Tests of yt-dlp integration must use the REAL YoutubeDL. A FakeYDL
+    hid the ignored cookiejar for two releases.
+  Follow-ups:
+  - Boosty's `title` is the upload's file name («Video»); the post
+    title is `alt_title`.
+  - Task chips: the default audio track for ASR, and an absolute
+    ffmpeg path.
 - User-facing release notes live in CHANGELOG.md (top entry must match
   __version__ — tests/test_version.py).
 - Other open items: LICENSE file decision (repo is public with no
