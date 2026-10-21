@@ -29,6 +29,10 @@ Mutes land on the word again:
   the user's sign-in — Boosty answered «This post requires a
   subscription» to a paying user with a fresh export. Your cookies
   file is still never rewritten;
+- Boosty (and VK / OK, same CDN) downloads are no longer stuck at
+  ~1 MB/s: the CDN caps every connection, so a single file now comes
+  in 4 MB parts over 4 connections — 10–15 MB/s measured instead of
+  1.06, with the same format and the same bytes;
 - an expired sign-in in the cookies file is named as such: the token
   inside an exported Boosty file lasts about 30 days (the browser
   renews it, the file does not). The error now says when the sign-in

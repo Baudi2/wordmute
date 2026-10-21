@@ -4,7 +4,10 @@ Uses yt-dlp's Python API rather than shelling out, so format data and
 download progress arrive as callbacks. yt_dlp is imported lazily to
 keep app startup fast."""
 
+import copy
 import io
+import math
+import urllib.parse
 from pathlib import Path
 
 BEST_SPEC = "bv*+ba/b"
@@ -237,6 +240,92 @@ def format_label(f) -> str:
     return f"{base} {d['ext']}".strip()
 
 
+# CDNs that cap EVERY connection. Measured on a Boosty post (2026-10,
+# okcdn.ru, 300 Mbit/s line): one connection got 1.03-1.08 MB/s however
+# it was asked — the whole file, or 2/5/10 MB ranges in a row — while 4
+# parallel range requests got 10-15 MB/s, as did 4 parallel HLS
+# fragments. VK and OK serve their video from the same CDN.
+PARALLEL_SITES = ("boosty.to", "vk.com", "vk.ru", "vkvideo.ru", "ok.ru")
+RANGE_PART = 4 * 1024 * 1024
+
+
+def _parallel_site(url) -> bool:
+    host = (urllib.parse.urlsplit(str(url or "")).hostname or "").lower()
+    return any(host == site or host.endswith("." + site)
+               for site in PARALLEL_SITES)
+
+
+def _content_length(ydl, fmt):
+    """The file's size when its server answers range requests (206 +
+    Content-Range), else None. Costs one 1-byte request."""
+    from yt_dlp.networking import Request
+    headers = dict(fmt.get("http_headers") or {}, Range="bytes=0-0")
+    try:
+        with ydl.urlopen(Request(fmt["url"], headers=headers)) as response:
+            if response.status != 206:
+                return None
+            total = (response.headers.get("Content-Range") or ""
+                     ).rpartition("/")[2]
+            return int(total) if total.isdigit() else None
+    except Exception:
+        return None
+
+
+def _byte_range_playlist(url: str, size: int, duration) -> str:
+    """An HLS media playlist whose segments are consecutive byte ranges
+    of ONE file: yt-dlp's fragment downloader then fetches 4 of them at
+    a time and appends them in order — byte for byte the same file."""
+    starts = range(0, size, RANGE_PART)
+    step = (duration or len(starts)) / len(starts)
+    lines = ["#EXTM3U", "#EXT-X-VERSION:4",
+             f"#EXT-X-TARGETDURATION:{math.ceil(step)}",
+             "#EXT-X-MEDIA-SEQUENCE:0"]
+    for start in starts:
+        lines += [f"#EXTINF:{step:.3f},",
+                  f"#EXT-X-BYTERANGE:{min(RANGE_PART, size - start)}@{start}",
+                  url]
+    lines.append("#EXT-X-ENDLIST")
+    return "\n".join(lines) + "\n"
+
+
+def _split_into_ranges(ydl, probe):
+    """Pick formats exactly as yt-dlp would, then hand every picked
+    single-file format to its HLS fragment downloader as a byte-range
+    playlist (`hls_media_playlist_data`, a documented info field).
+    Quality and bytes stay the same; only the connections multiply.
+    Returns the exact format spec to download, or None to leave the
+    download as it was (no formats in the probe, nothing single-file,
+    or a server that ignores Range)."""
+    if probe.get("_type", "video") != "video" or not probe.get("formats"):
+        return None
+    try:
+        chosen = ydl.process_ie_result(copy.deepcopy(probe), download=False)
+    except Exception:
+        return None     # the real pass reports whatever went wrong
+    picked = chosen.get("requested_formats") or [chosen]
+    ids = [f.get("format_id") for f in picked]
+    by_id = {f.get("format_id"): f for f in probe["formats"]}
+    if not ids or not all(fid in by_id for fid in ids):
+        return None
+    from yt_dlp.utils import determine_protocol
+    split = False
+    for fid in ids:
+        fmt = by_id[fid]
+        # extractors usually leave `protocol` for processing to fill in
+        protocol = fmt.get("protocol") or determine_protocol(fmt)
+        if protocol not in ("http", "https") or fmt.get("fragments"):
+            continue
+        size = _content_length(ydl, fmt)
+        if not size or size <= RANGE_PART:
+            continue
+        fmt["protocol"] = "m3u8_native"
+        fmt["hls_media_playlist_data"] = _byte_range_playlist(
+            fmt["url"], size, probe.get("duration"))
+        fmt["filesize"] = fmt.get("filesize") or size   # real progress
+        split = True
+    return "+".join(ids) if split else None
+
+
 def download(url: str, format_spec: str, dest_dir,
              progress=None, cancelled=None, cookies=None) -> Path:
     """Download url at the given format spec into dest_dir. progress
@@ -280,6 +369,10 @@ def download(url: str, format_spec: str, dest_dir,
             probe = ydl.extract_info(url, download=False, process=False)
             if _is_playlist(probe):
                 raise ValueError(PLAYLIST_MESSAGE)
+            if _parallel_site(url):
+                exact = _split_into_ranges(ydl, probe)
+                if exact:   # the same choice, now downloaded in parts
+                    ydl.format_selector = ydl.build_format_selector(exact)
             info = ydl.process_ie_result(probe, download=True)
     except yt_dlp.utils.DownloadCancelled:
         raise DownloadCancelled() from None
