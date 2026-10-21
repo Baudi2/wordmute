@@ -4,6 +4,8 @@ advice. Settings never affect a run already in progress — options are
 captured at Start. Grouped per the design spec: Recognition | Muting
 side by side, Files & downloads beneath."""
 
+import os
+
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -21,7 +23,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import config
+from ..core import config, site_login
+from .dialogs import repolish
+from .formats import long_date
 from .i18n import tr
 from .theme import THEMES, apply_theme
 
@@ -161,7 +165,18 @@ class SettingsTab(QWidget):
             "from your browser."))
         cookies_hint.setProperty("muted", True)
         cookies_hint.setWordWrap(True)
-        files_form.addRow("", cookies_hint)
+        # an exported file stops working on its own date (Boosty: the
+        # token inside lasts ~30 days) — say when, before a download
+        # fails with «This post requires a subscription»
+        self.cookies_status = QLabel()
+        self.cookies_status.setObjectName("cookies_status")
+        self.cookies_status.setWordWrap(True)
+        cookies_notes = QVBoxLayout()
+        cookies_notes.addWidget(cookies_hint)
+        cookies_notes.addWidget(self.cookies_status)
+        files_form.addRow("", cookies_notes)
+        self.cookies_edit.textChanged.connect(self._refresh_cookies_status)
+        self._refresh_cookies_status()
 
         output_col = QVBoxLayout()
         self.beside_radio = QRadioButton(
@@ -288,6 +303,32 @@ class SettingsTab(QWidget):
                                              self.download_dir_edit.text())
         if d:
             self.download_dir_edit.setText(d)
+
+    def _refresh_cookies_status(self):
+        path = self.cookies_edit.text().strip()
+        lines, warn = [], False
+        if path and not os.path.isfile(path):
+            lines.append(tr("File not found."))
+            warn = True
+        elif path:
+            for login in site_login.logins(path):
+                if login.expired():
+                    warn = True
+                    lines.append(tr("The sign-in to {} in this file expired "
+                                    "on {} — export the cookies again.")
+                                 .format(login.site, long_date(login.expires)))
+                elif login.expires:
+                    lines.append(tr("The sign-in to {} in this file works "
+                                    "until {}.")
+                                 .format(login.site, long_date(login.expires)))
+        self.cookies_status.setText("\n".join(lines))
+        self.cookies_status.setVisible(bool(lines))
+        self.cookies_status.setProperty("state", "warn" if warn else "ok")
+        repolish(self.cookies_status)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._refresh_cookies_status()   # the date may have passed
 
     def _browse_cookies(self):
         path, _ = QFileDialog.getOpenFileName(

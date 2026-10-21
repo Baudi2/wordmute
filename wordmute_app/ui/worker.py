@@ -8,6 +8,7 @@ processing. Only one worker runs at a time (the engine's reporter is
 module-global)."""
 
 import dataclasses
+import os
 import re
 import sys
 import threading
@@ -16,7 +17,8 @@ import traceback
 
 from PySide6.QtCore import QThread, Signal
 
-from ..core import downloader, history, review
+from ..core import downloader, history, review, site_login
+from .formats import long_date
 from .i18n import tr
 from ..engine import wordmute as engine
 
@@ -26,14 +28,55 @@ class JobCancelled(Exception):
 
 
 
-def humanize_download_error(text: str) -> str:
+# yt-dlp's login advice is for its command line («Use
+# --cookies-from-browser or --cookies … See https://… for how to
+# manually pass cookies») — the app has its own way to say it
+_CLI_LOGIN_ADVICE = re.compile(
+    r"\s*Use --cookies.*?for how to manually pass cookies\.?", re.S)
+
+
+def _sign_in_hint(url, cookies) -> str:
+    """What to do when a site wants a sign-in. A paying Boosty user got
+    «This post requires a subscription» while the cookies file was set:
+    the token inside it had expired weeks ago."""
+    if not cookies:
+        return tr("this needs a sign-in: export cookies from the browser "
+                  "where you are signed in (a «cookies.txt» extension) "
+                  "and choose the file in Settings → Cookies file.")
+    if not os.path.isfile(cookies):
+        return tr("the cookies file was not found: {} — choose it again "
+                  "in Settings.").format(cookies)
+    login = site_login.login_for(cookies, url)
+    if login and not login.found:
+        return tr("the cookies file has no sign-in for {0}: sign in to {0} "
+                  "in the browser and export the cookies again."
+                  ).format(login.site)
+    if login and login.expired():
+        return tr("the sign-in to {0} in the cookies file expired on {1}. "
+                  "The browser renews a sign-in by itself, an exported "
+                  "file does not: open {0} in the browser, check that you "
+                  "are signed in and export the cookies again — over the "
+                  "same file, or choose the new one in Settings.").format(
+                      login.site, long_date(login.expires))
+    return tr("the site did not accept the sign-in from the cookies file: "
+              "export the cookies again from the browser where you are "
+              "signed in. If it still fails, check that your account has "
+              "access to this video.")
+
+
+def humanize_download_error(text: str, url=None, cookies=None) -> str:
     """Attach a fix to the errors users can actually act on. A bare
     «HTTP Error 403: Forbidden» made a real user conclude YouTube
-    downloads were dead — the actual cure was updating yt-dlp."""
+    downloads were dead — the actual cure was updating yt-dlp.
+    url/cookies: the link and the cookies file in use, to tell an
+    expired sign-in from a missing one."""
     # yt-dlp's own prefixes add nothing on a card: «ERROR: \r[download]
     # Got error: …»
     text = re.sub(r"^(ERROR:\s*)+", "", text.strip())
     text = re.sub(r"^\s*\[download\]\s*Got error:\s*", "", text).strip()
+    if "--cookies" in text:
+        text = _CLI_LOGIN_ADVICE.sub("", text).strip().rstrip(".")
+        return text + " — " + _sign_in_hint(url, cookies)
     if "403" in text and "forbidden" in text.lower():
         return (text + " — " +
                 tr("this usually means yt-dlp needs updating: Models "
@@ -327,7 +370,8 @@ class ProcessWorker(QThread):
                                       stages=self._finish_timing(i, item_t0))
                     self._finish(i, False, "cancelled")
                 except Exception as exc:
-                    message = humanize_download_error(str(exc))
+                    message = humanize_download_error(
+                        str(exc), url=item.url, cookies=self._cookies)
                     self._log_history(item, "error", message, source=path,
                                       dl_bytes=dl_bytes,
                                       stages=self._finish_timing(i, item_t0))

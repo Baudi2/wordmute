@@ -186,6 +186,39 @@ RU = {
     "from your browser.":
         "Нужен для загрузок по подписке (например, Boosty) — "
         "экспортируется из браузера.",
+    # sign-in state of the cookies file (core/site_login.py)
+    "File not found.": "Файл не найден.",
+    "The sign-in to {} in this file expired on {} — export the cookies "
+    "again.":
+        "Вход на {} в этом файле истёк {} — экспортируйте cookies заново.",
+    "The sign-in to {} in this file works until {}.":
+        "Вход на {} в этом файле действует до {}.",
+    "this needs a sign-in: export cookies from the browser where you are "
+    "signed in (a «cookies.txt» extension) and choose the file in "
+    "Settings → Cookies file.":
+        "нужен вход на сайт: экспортируйте cookies из браузера, в котором "
+        "вы вошли (расширение «cookies.txt»), и выберите файл в "
+        "Настройках → «Файл cookies».",
+    "the cookies file was not found: {} — choose it again in Settings.":
+        "файл cookies не найден: {} — выберите его заново в Настройках.",
+    "the cookies file has no sign-in for {0}: sign in to {0} in the "
+    "browser and export the cookies again.":
+        "в файле cookies нет входа на {0}: войдите на {0} в браузере и "
+        "экспортируйте cookies заново.",
+    "the sign-in to {0} in the cookies file expired on {1}. The browser "
+    "renews a sign-in by itself, an exported file does not: open {0} in "
+    "the browser, check that you are signed in and export the cookies "
+    "again — over the same file, or choose the new one in Settings.":
+        "вход на {0} в файле cookies истёк {1}. Браузер продлевает вход "
+        "сам, а экспортированный файл — нет: откройте {0} в браузере, "
+        "проверьте, что вы вошли, и экспортируйте cookies заново — поверх "
+        "того же файла или выберите новый в Настройках.",
+    "the site did not accept the sign-in from the cookies file: export "
+    "the cookies again from the browser where you are signed in. If it "
+    "still fails, check that your account has access to this video.":
+        "сайт не принял вход из файла cookies: экспортируйте cookies "
+        "заново из браузера, в котором вы вошли. Если не поможет — "
+        "проверьте, что у вашей учётной записи есть доступ к этому видео.",
     # queue chrome
     "Change…": "Изменить…",
     "Hide": "Скрыть",

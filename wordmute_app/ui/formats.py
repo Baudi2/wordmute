@@ -65,6 +65,12 @@ def human_datetime(iso: str) -> str:
     return locale.toString(stamp, "d MMM yyyy, HH:mm")
 
 
+def long_date(timestamp: float) -> str:
+    """«30 августа 2026» — for dates a user acts on, not log stamps."""
+    stamp = QDateTime.fromSecsSinceEpoch(int(timestamp))
+    return ui_locale().toString(stamp, "d MMMM yyyy")
+
+
 def full_datetime(iso: str) -> str:
     """The unabbreviated stamp for tooltips."""
     stamp = QDateTime.fromString(iso, Qt.ISODate)

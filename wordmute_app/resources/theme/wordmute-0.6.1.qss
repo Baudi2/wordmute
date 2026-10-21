@@ -207,6 +207,9 @@ QWidget#url_options_row { background: transparent; }
 QLabel#url_quality_label { font-size: 12px; color: #9397ab; }
 QComboBox#url_quality { min-width: 168px; }
 QLabel#url_cookies_hint { font-size: 11px; color: #9397ab; }
+/* Settings: «вход на boosty.to действует до …» / «…истёк …» */
+QLabel#cookies_status { color: #9397ab; }
+QLabel#cookies_status[state="warn"] { color: #e6d5ae; }
 QToolButton#url_cookies_link {                                     /* inline "указать в настройках" */
   background: transparent; border: none; color: #d2cefd; font-size: 11px; padding: 0;
   text-decoration: underline;

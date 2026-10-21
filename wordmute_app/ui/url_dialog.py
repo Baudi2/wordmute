@@ -32,6 +32,7 @@ from .flow_layout import FlowLayout, make_chip
 from .hover_table import HoverRowTable
 from .i18n import tr, tr_plural
 from .threads import detach_thread, start_thread
+from .worker import humanize_download_error
 
 # keep fetch threads alive if their dialog closes early; Qt drops the
 # signal connections with the dialog, so late emits are harmless
@@ -580,8 +581,8 @@ class AddUrlDialog(QDialog):
             self._on_formats_ready(info)
             if g == self._fetch_generation else None)
         worker.error.connect(
-            lambda message, g=generation:
-            self._on_fetch_error(message)
+            lambda message, g=generation, u=url:
+            self._on_fetch_error(message, u)
             if g == self._fetch_generation else None)
         self._fetchers.append(worker)
         worker.finished.connect(
@@ -648,10 +649,13 @@ class AddUrlDialog(QDialog):
             item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
 
-    def _on_fetch_error(self, message: str):
+    def _on_fetch_error(self, message: str, url: str = ""):
         self.loading_bar.setVisible(False)
-        self.status.setText(
-            tr("Could not fetch formats: {}").format(message))
+        # an expired sign-in in the cookies file read as «This post
+        # requires a subscription» plus yt-dlp's command-line advice
+        self.status.setText(tr("Could not fetch formats: {}").format(
+            humanize_download_error(message, url=url,
+                                    cookies=self._cookies)))
 
     def _update_ok(self):
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(

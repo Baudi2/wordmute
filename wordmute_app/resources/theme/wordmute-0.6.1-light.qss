@@ -119,6 +119,8 @@ QWidget#url_options_row { background: transparent; }
 QLabel#url_quality_label { font-size: 12px; color: #595d6c; }
 QComboBox#url_quality { min-width: 168px; }
 QLabel#url_cookies_hint { font-size: 11px; color: #595d6c; }
+QLabel#cookies_status { color: #595d6c; }
+QLabel#cookies_status[state="warn"] { color: #7a5f2b; }
 QToolButton#url_cookies_link {
   background: transparent; border: none; color: #5d5294; font-size: 11px; padding: 0;
   text-decoration: underline;
