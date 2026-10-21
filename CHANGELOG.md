@@ -24,13 +24,17 @@ Mutes land on the word again:
   («Unrecognized option 'filter_script:a'»);
 - beep mode: the beep came late by the same offset, and an episode
   with more than 99 muted spots could not be rendered with beeps;
-- an expired sign-in in the cookies file is named as such: Boosty
-  answered «This post requires a subscription» to a paying user,
-  because the token inside an exported file lasts about 30 days (the
-  browser renews it, the file does not). The error now says when the
-  sign-in expired and what to do, without yt-dlp's command-line
-  advice, and Settings shows under «Файл cookies» until when the
-  sign-in in the chosen file works;
+- the cookies file reaches the downloader again: since 0.7.0 it was
+  handed over in a way yt-dlp silently ignores, so no site ever got
+  the user's sign-in — Boosty answered «This post requires a
+  subscription» to a paying user with a fresh export. Your cookies
+  file is still never rewritten;
+- an expired sign-in in the cookies file is named as such: the token
+  inside an exported Boosty file lasts about 30 days (the browser
+  renews it, the file does not). The error now says when the sign-in
+  expired and what to do, without yt-dlp's command-line advice, and
+  Settings shows under «Файл cookies» until when the sign-in in the
+  chosen file works;
 - the Review window lists each muted spot once — several passes that
   caught the same word no longer add 2–3 rows, and unchecking a word
   really un-mutes it (a copy from another pass used to keep it muted).

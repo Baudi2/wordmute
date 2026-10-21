@@ -4,6 +4,7 @@ Uses yt-dlp's Python API rather than shelling out, so format data and
 download progress arrive as callbacks. yt_dlp is imported lazily to
 keep app startup fast."""
 
+import io
 from pathlib import Path
 
 BEST_SPEC = "bv*+ba/b"
@@ -121,19 +122,30 @@ def _with_cookies(opts: dict, cookies) -> dict:
     """cookies: path to a Netscape-format cookie file (as exported by
     yt-dlp or browser extensions) for sites that need a login.
 
-    The file is loaded into a jar rather than handed over as
-    `cookiefile`: yt-dlp rewrites a cookiefile on every session close,
-    and the probe, the format fetch and the download pump run
-    concurrently — one session's save truncated the jar another had
-    just loaded, and the user's export got corrupted."""
+    Each yt-dlp session gets the file's TEXT as an in-memory stream,
+    never the path: yt-dlp rewrites a path-type `cookiefile` on every
+    session close, and the probe, the format fetch and the download
+    pump run concurrently — one session's save truncated the file
+    another had just loaded, and the user's export got corrupted. A
+    stream is a documented `cookiefile` value (read on open, saved
+    back into the stream on close).
+
+    0.7.0-0.7.1 handed over a loaded jar as opts["cookiejar"] — yt-dlp
+    has no such option and ignored it, so NO cookies reached any site:
+    Boosty answered «This post requires a subscription» to a paying
+    user with a valid export. tests/test_downloader.py now checks what
+    a real YoutubeDL sees.
+
+    An unreadable or missing file sends no cookies (and never makes
+    yt-dlp create one at that path); the site's sign-in error then
+    reaches the card, where humanize_download_error names the file."""
     if cookies:
         try:
-            from yt_dlp.cookies import YoutubeDLCookieJar
-            jar = YoutubeDLCookieJar(str(cookies))
-            jar.load()
-            opts["cookiejar"] = jar
-        except Exception:
-            opts["cookiefile"] = str(cookies)   # let yt-dlp report it
+            # utf-8-sig: a BOM turned the header line into a bogus entry
+            text = Path(cookies).read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeError):
+            return opts
+        opts["cookiefile"] = io.StringIO(text)
     return opts
 
 

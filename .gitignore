@@ -8,3 +8,6 @@ dist/
 packaging/Output/
 *.egg-info/
 .claude/
+
+# exported browser cookies hold live sign-in tokens — never commit them
+*cookies*.txt

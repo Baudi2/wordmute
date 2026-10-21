@@ -1,6 +1,7 @@
 """yt-dlp wrapper: format filtering/sorting/specs and download flow,
 all against a fake YoutubeDL (no network)."""
 
+import http.cookiejar
 from pathlib import Path
 
 import pytest
@@ -149,19 +150,87 @@ def test_download_cancellation(fake_ydl, tmp_path):
                             cancelled=lambda: True)
 
 
-def test_cookies_loaded_into_a_jar_not_handed_as_a_file(fake_ydl, tmp_path):
-    """Audit fix: as `cookiefile` the user's export was rewritten by
-    every yt-dlp session close — three ran concurrently and one
-    truncated the jar another had just loaded."""
-    cookies = tmp_path / "cookies.txt"
-    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
-    downloader.list_formats("https://example.com/v", cookies=cookies)
-    assert "cookiefile" not in FakeYDL.captured_opts
-    assert FakeYDL.captured_opts["cookiejar"].filename == str(cookies)
+BOOSTY_AUTH = "%7B%22accessToken%22%3A%22token%22%2C%22expiresAt%22%3A1%7D"
+COOKIES = "".join("\t".join(row) + "\n" for row in (
+    ("# Netscape HTTP Cookie File",),
+    ("#HttpOnly_.boosty.to", "TRUE", "/", "FALSE", "4102444800", "auth",
+     BOOSTY_AUTH),
+    (".youtube.com", "TRUE", "/", "TRUE", "0", "SID", "session"),
+))
 
+
+def test_cookies_reach_a_real_youtubedl(tmp_path):
+    """0.7.0-0.7.1 handed a jar over as opts["cookiejar"]: yt-dlp has no
+    such option, so no site ever saw the cookies — Boosty told a paying
+    user with a valid export «This post requires a subscription». The
+    old test only inspected a FakeYDL's opts; this one asks the REAL
+    YoutubeDL (offline), down to the Boosty extractor's own lookup."""
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text(COOKIES, encoding="utf-8")
+    opts = downloader._with_cookies(downloader._base_opts(), cookies)
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        header = ydl.cookiejar.get_cookie_header("https://boosty.to/x")
+        assert f"auth={BOOSTY_AUTH}" in header
+        boosty = ydl.get_info_extractor("Boosty")
+        assert (boosty._get_cookies("https://boosty.to/")["auth"].value
+                == BOOSTY_AUTH)
+        assert "SID=session" in ydl.cookiejar.get_cookie_header(
+            "https://www.youtube.com/watch?v=1")
+
+
+def test_the_users_cookie_file_is_never_rewritten(tmp_path):
+    """yt-dlp saves a path-type cookiefile on every close; the probe,
+    the format fetch and the download pump overlap, and one session's
+    save corrupted the export another had just loaded (audit, 0.7.0).
+    Two real sessions open at once, both close: the file is untouched."""
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text(COOKIES, encoding="utf-8")
+    before = cookies.read_bytes()
+    first = yt_dlp.YoutubeDL(
+        downloader._with_cookies(downloader._base_opts(), cookies))
+    second = yt_dlp.YoutubeDL(
+        downloader._with_cookies(downloader._base_opts(), cookies))
+    with first, second:
+        # a site setting a cookie mid-session must not reach the file
+        first.cookiejar.set_cookie(http.cookiejar.Cookie(
+            0, "new", "1", None, False, ".boosty.to", True, True, "/", True,
+            False, 4102444800, False, None, None, {}))
+        assert "auth=" in second.cookiejar.get_cookie_header(
+            "https://boosty.to/")
+    assert cookies.read_bytes() == before
+
+
+def test_cookie_file_with_a_bom_still_signs_in(tmp_path):
+    cookies = tmp_path / "bom.txt"
+    cookies.write_text(COOKIES, encoding="utf-8-sig")
+    with yt_dlp.YoutubeDL(downloader._with_cookies(
+            downloader._base_opts(), cookies)) as ydl:
+        assert "auth=" in ydl.cookiejar.get_cookie_header(
+            "https://boosty.to/")
+
+
+def test_missing_cookie_file_sends_none_and_creates_nothing(tmp_path):
+    missing = tmp_path / "gone" / "cookies.txt"
+    opts = downloader._with_cookies(downloader._base_opts(), missing)
+    assert "cookiefile" not in opts
+    with yt_dlp.YoutubeDL(opts):
+        pass
+    assert not missing.exists() and not missing.parent.exists()
+
+
+def test_every_session_gets_its_own_stream(fake_ydl, tmp_path):
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text(COOKIES, encoding="utf-8")
+    downloader.list_formats("https://example.com/v", cookies=cookies)
+    fetch = FakeYDL.captured_opts["cookiefile"]
     downloader.download("https://example.com/v", "", tmp_path / "dl",
                         cookies=cookies)
-    assert FakeYDL.captured_opts["cookiejar"].filename == str(cookies)
+    download = FakeYDL.captured_opts["cookiefile"]
+    for stream in (fetch, download):
+        assert not isinstance(stream, (str, Path))     # never the path
+        assert stream.getvalue() == COOKIES
+    assert fetch is not download
+    assert "cookiejar" not in FakeYDL.captured_opts
 
 
 def test_no_cookies_key_when_unset(fake_ydl):
