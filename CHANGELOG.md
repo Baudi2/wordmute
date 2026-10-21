@@ -6,9 +6,9 @@ the in-app check («Модели → Проверить обновления») 
 The first heading below must match `wordmute_app.__version__`
 (tests/test_version.py enforces it).
 
-## 0.7.2 — 2026-09-15
+## 0.7.2 — 2026-10-21
 
-Mutes land on the word again:
+Mutes land on the word again, and Boosty downloads work and are fast:
 
 - on files whose audio track starts after the video (rutube downloads:
   0.556 s) every mute came just BEFORE the word — speech recognition
@@ -31,8 +31,8 @@ Mutes land on the word again:
   file is still never rewritten;
 - Boosty (and VK / OK, same CDN) downloads are no longer stuck at
   ~1 MB/s: the CDN caps every connection, so a single file now comes
-  in 4 MB parts over 4 connections — 10–15 MB/s measured instead of
-  1.06, with the same format and the same bytes;
+  in 4 MB parts over 4 connections — up to ~30 MB/s instead of 1.1,
+  with the same format and the same bytes;
 - an expired sign-in in the cookies file is named as such: the token
   inside an exported Boosty file lasts about 30 days (the browser
   renews it, the file does not). The error now says when the sign-in
