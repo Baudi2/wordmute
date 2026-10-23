@@ -1042,6 +1042,21 @@ RU = {
     "Discard": "Не сохранять",
     "They can be restored from the Recycle Bin.":
         "Их можно вернуть из Корзины.",
+    "The review file goes too: after this the video can't be reviewed "
+    "or rebuilt — bringing a word back needs the original. Review it "
+    "first.":
+        "Файл проверки удалится тоже: после этого видео нельзя будет "
+        "проверить и пересобрать — чтобы вернуть звук слову, нужен "
+        "исходник. Сначала проверьте видео.",
+    "The review file is gone": "Файла проверки больше нет",
+    "It is deleted together with the source («Delete source and "
+    "JSONs»): without the original video the result can't be reviewed "
+    "or rebuilt. To review it, restore the original video and this file "
+    "from the Recycle Bin — Review comes back by itself.":
+        "Он удаляется вместе с исходником («Удалить исходник и JSON»): "
+        "без исходного видео результат нельзя проверить и пересобрать. "
+        "Чтобы проверить, восстановите из Корзины исходное видео и этот "
+        "файл — кнопка «Проверка» вернётся сама.",
     "To Recycle Bin": "В Корзину",
     "Delete failed": "Не удалось удалить",
     "Nothing to review yet": "Проверять пока нечего",

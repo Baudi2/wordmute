@@ -120,11 +120,7 @@ class ConfirmDialog(QDialog):
             listing.setToolTip("\n".join(str(f) for f in files))
             self._files_widget = listing
             self._file_names = [str(f) for f in files]
-            metrics = QFontMetrics(listing.font())
-            rows = min(len(files), 6)
-            # frame + padding (9px top/bottom from the sheet) + rows
-            listing.setFixedHeight(2 * (9 + listing.frameWidth())
-                                   + rows * metrics.lineSpacing())
+            self._file_rows = min(len(files), 6)   # sized in _fit_height
             if len(files) <= 6:
                 listing.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             column.addWidget(listing)
@@ -160,6 +156,31 @@ class ConfirmDialog(QDialog):
         # destructive dialogs default to Cancel; informational ones to OK
         (cancel if severity == "danger" else ok).setDefault(True)
         self.ok_button, self.cancel_button = ok, cancel
+        self._fit_height()
+
+    def _fit_height(self) -> None:
+        """Height from content at the real width. A word-wrapped label
+        reports its height for a guessed width, measured before the
+        sheet's 12px font applies — a four-line body was cut at the top
+        and bottom, and the file box lost its lower border."""
+        self.ensurePolished()           # the sheet's fonts, children too
+        listing = getattr(self, "_files_widget", None)
+        if listing is not None:
+            # rows in the sheet's mono font + the document's margins +
+            # the border and padding the sheet put around the viewport
+            # (read back, not assumed). The old sum used the pre-sheet
+            # font and no document margins: one row lost its descenders.
+            margin = int(listing.document().documentMargin())
+            chrome = listing.height() - listing.contentsRect().height()
+            listing.setFixedHeight(
+                self._file_rows * QFontMetrics(listing.font()).lineSpacing()
+                + 2 * margin + chrome + 2)
+        layout = self.layout()
+        layout.activate()
+        height = (layout.heightForWidth(self.width())
+                  if layout.hasHeightForWidth()
+                  else layout.sizeHint().height())
+        self.setFixedHeight(max(height, layout.minimumSize().height()))
 
     def _elide_files(self) -> None:
         listing = getattr(self, "_files_widget", None)

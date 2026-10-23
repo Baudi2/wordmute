@@ -5,7 +5,7 @@ import os
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QEvent, Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -519,7 +519,7 @@ class MainWindow(QMainWindow):
         self.queue_splitter.setStretchFactor(1, 1)
         self.queue_splitter.setCollapsible(0, False)
         page_layout.addWidget(self.queue_splitter)
-        queue_tab = queue_page
+        queue_tab = self._queue_page = queue_page
 
         # --- assemble navigation
         from .theme import nav_icon
@@ -595,6 +595,36 @@ class MainWindow(QMainWindow):
             self.history_tab.refresh()
         elif widget is self.models_tab:
             self.models_tab.refresh()
+        elif widget is self._queue_page:
+            self._sync_card_files()   # History may have deleted some
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        # back from Explorer or the Recycle Bin: files may have changed
+        if (event.type() == QEvent.ActivationChange
+                and self.isActiveWindow() and hasattr(self, "queue")):
+            self._sync_card_files()
+
+    def _sync_card_files(self, row=None):
+        """Review/Open follow the files on disk. «Удалить исходник и
+        JSON» takes the review sidecar with it (in the queue or in
+        History), and Explorer or a restore from the Recycle Bin can
+        change things at any time — a Review button left behind for a
+        deleted sidecar did nothing at all when pressed. Not during a
+        run: buttons of the item being processed are the run's to set."""
+        if self._worker is not None:
+            return
+        rows = range(self.queue.count()) if row is None else (row,)
+        for r in rows:
+            item, card = self.queue.item(r), self._card(r)
+            if item is None or card is None:
+                continue
+            review = item.data(REVIEW_ROLE)
+            if review:
+                card.review_button.setVisible(Path(review).exists())
+            out = item.data(OUTPUT_ROLE)
+            if out:
+                card.open_button.setVisible(Path(out).exists())
 
     # ---------------------------------------------------------- watch folder
     def _toggle_watch(self):
@@ -1048,6 +1078,18 @@ class MainWindow(QMainWindow):
         path = self._review_path_for_row(row)
         if path and Path(path).exists():
             self._open_review(path)
+        elif path:
+            self._explain_missing_review(path)
+            self._sync_card_files(row)
+
+    def _explain_missing_review(self, path):
+        inform(self, title=tr("The review file is gone"),
+               body=tr("It is deleted together with the source («Delete "
+                       "source and JSONs»): without the original video the "
+                       "result can't be reviewed or rebuilt. To review it, "
+                       "restore the original video and this file from the "
+                       "Recycle Bin — Review comes back by itself."),
+               files=[Path(path).name])
 
     def _card_open(self, row: int):
         out = self._output_path_for_row(row)
@@ -1174,6 +1216,8 @@ class MainWindow(QMainWindow):
                     if card:
                         card.set_actions()
                     self._apply_status(row, tr("files deleted"))
+            else:     # the sidecar went with the source
+                self._sync_card_files(row)
 
     def _open_review(self, path):
         # one dialog per file: a second one (double-click + the Review
@@ -1201,6 +1245,8 @@ class MainWindow(QMainWindow):
         path = self._review_path_for_row(self.queue.row(item))
         if path and Path(path).exists():
             self._open_review(path)
+        elif path:
+            self._explain_missing_review(path)
         else:
             inform(self, title=tr("Nothing to review yet"),
                    body=tr("Review data appears after the file has been "
