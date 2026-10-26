@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WordMute — заглушение нежелательных слов в видео</title>
 <meta name="description" content="WordMute находит нежелательные слова в аудиодорожке видео с помощью распознавания речи и заглушает их. Локально, на вашем компьютере.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="WordMute — нежелательные слова в видео под заглушкой">
+<meta property="og:description" content="Распознаёт речь на вашем компьютере, находит слова из вашего списка и глушит только их. Бесплатно для Windows.">
+<meta property="og:image" content="https://baudi2.github.io/wordmute/assets/brag.jpg">
+<meta property="og:url" content="https://baudi2.github.io/wordmute/">
+<meta name="twitter:card" content="summary_large_image">
 
 <!-- ============================================================
      НАСТРОЙКА: замените USERNAME и REPO на свои значения.
@@ -134,26 +140,21 @@
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 16px; gap: 12px; flex-wrap: wrap;
   }
-  .wave-legend { display: flex; gap: 18px; }
-  .legend-item { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--dim); font-family: "JetBrains Mono", monospace; }
-  .legend-dot { width: 9px; height: 9px; border-radius: 2px; }
-  .legend-dot.ok { background: var(--amber); }
-  .legend-dot.muted { background: var(--mute); }
 
-  #wave { display: flex; align-items: center; gap: 3px; height: 96px; overflow: hidden; }
-  .bar {
-    flex: 1; border-radius: 2px; background: var(--amber);
-    opacity: 0.85; min-width: 0;
-    transition: height 0.5s ease, background 0.5s ease, opacity 0.5s ease;
+  /* the 20-second video (docs/assets/brag.mp4, made with /brag-slim) */
+  .video-card { padding: 16px 16px 14px; }
+  .video-card .wave-head { margin-bottom: 12px; }
+  .video-card video {
+    display: block; width: 100%; aspect-ratio: 16 / 9;
+    border-radius: 10px; background: #0f1115; border: 1px solid var(--line);
   }
-  .bar.muted { background: var(--mute); height: 4px !important; opacity: 0.7; }
-
-  .wave-caption {
-    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
-    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  .sound-btn {
+    background: transparent; border: 1px solid var(--line); color: var(--dim);
+    border-radius: 999px; padding: 6px 14px; cursor: pointer; font: inherit;
+    display: inline-flex; align-items: center; gap: 8px;
   }
-  .wave-caption .mono { text-transform: none; letter-spacing: 0.02em; }
-  .wave-caption .cut { color: var(--mute); text-decoration: line-through; }
+  .sound-btn:hover { border-color: var(--dim); color: var(--text); }
+  .sound-btn[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); }
 
   /* ---------- Секции ---------- */
   section { padding: 72px 0; border-top: 1px solid var(--line); }
@@ -271,7 +272,6 @@
     section { padding: 52px 0; }
     .cta-row { flex-direction: column; align-items: stretch; }
     .cta-row .btn { justify-content: center; }
-    #wave { gap: 2px; }
   }
 </style>
 </head>
@@ -322,20 +322,22 @@
       <span class="mono" data-version>Загрузка версии…</span>
     </div>
 
-    <!-- Сигнатурный элемент: волна с заглушенными сегментами -->
-    <div class="wave-card" aria-hidden="true">
+    <!-- Видео: 20 секунд о программе (assets/brag.mp4, постер assets/brag.jpg).
+         Автовоспроизведение без звука, по кнопке — со звуком. -->
+    <div class="wave-card video-card">
       <div class="wave-head">
-        <span class="mono">аудиодорожка &middot; предпросмотр обработки</span>
-        <div class="wave-legend">
-          <span class="legend-item"><span class="legend-dot ok"></span>речь</span>
-          <span class="legend-item"><span class="legend-dot muted"></span>заглушено</span>
-        </div>
+        <span class="mono">20 секунд о WordMute</span>
+        <button class="sound-btn mono" type="button" id="brag-sound" aria-pressed="false">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M2 5h2.5L8 2v10L4.5 9H2V5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+            <path d="M10 5.5a2 2 0 0 1 0 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <span>включить звук</span>
+        </button>
       </div>
-      <div id="wave"></div>
-      <div class="wave-caption">
-        <span class="mono">…дальше по сюжету появляется <span class="cut">[слово]</span>, и герой уходит…</span>
-        <span class="mono">−2 сегмента / 1.3 сек</span>
-      </div>
+      <video id="brag" src="assets/brag.mp4" poster="assets/brag.jpg"
+             autoplay muted loop playsinline preload="metadata"
+             aria-label="Короткое видео о WordMute: слово в аудиодорожке заглушается, очередь обработки, экран проверки, загрузка по ссылке"></video>
     </div>
   </div>
 
@@ -586,6 +588,7 @@
 <footer>
   <div class="wrap footer-inner">
     <span>WordMute — локальный инструмент заглушения слов в видео</span>
+    <span>Музыка в видео: Sascha Ende, <a href="https://ende.app/en" target="_blank" rel="noopener">ende.app</a> (CC BY 4.0)</span>
     <span><a data-repo href="#">GitHub</a> &middot; <a data-issues href="#">Сообщить о проблеме</a></span>
   </div>
 </footer>
@@ -795,65 +798,26 @@ default is to keep them. Recognition models under
       document.querySelectorAll("[data-version]").forEach(el => el.textContent = "Windows 10/11 · 64-bit");
     });
 
-  // ---------- Волна с заглушенными сегментами ----------
-  // Количество столбиков подстраивается под ширину контейнера, чтобы волна
-  // не переполняла карточку на узких экранах. Заглушенные сегменты заданы
-  // долями длины и пересчитываются под любое количество столбиков.
-  const wave = document.getElementById("wave");
-  const MUTED_FRACTIONS = [[0.30, 0.38], [0.70, 0.77]];
-  let bars = [];
-  let mutedIdx = [];
-  let muteShown = false;
-
-  function applyMute() {
-    muteShown = true;
-    mutedIdx.forEach(i => bars[i] && bars[i].classList.add("muted"));
-  }
-  function clearMute() {
-    muteShown = false;
-    bars.forEach(b => b.classList.remove("muted"));
-  }
-
-  function buildWave() {
-    const count = Math.max(36, Math.min(72, Math.floor((wave.clientWidth || 640) / 9)));
-    wave.innerHTML = "";
-    bars = [];
-    for (let i = 0; i < count; i++) {
-      const bar = document.createElement("div");
-      bar.className = "bar";
-      // псевдослучайная, но детерминированная высота — форма речевой волны
-      const h = 14 + Math.abs(Math.sin(i * 0.9) * 46 + Math.sin(i * 0.23) * 24);
-      bar.style.height = `${Math.round(h)}px`;
-      wave.appendChild(bar);
-      bars.push(bar);
+  // ---------- Видео в хиро ----------
+  // Автовоспроизведение возможно только без звука; кнопка включает его
+  // и запускает ролик с начала. При prefers-reduced-motion — обычный плеер.
+  const brag = document.getElementById("brag");
+  const soundBtn = document.getElementById("brag-sound");
+  if (brag && soundBtn) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      brag.removeAttribute("autoplay");
+      brag.pause();
+      brag.controls = true;
     }
-    mutedIdx = [];
-    MUTED_FRACTIONS.forEach(([a, b]) => {
-      const from = Math.round(a * (count - 1));
-      const to = Math.round(b * (count - 1));
-      for (let i = from; i <= to; i++) mutedIdx.push(i);
+    soundBtn.addEventListener("click", () => {
+      brag.muted = !brag.muted;
+      if (!brag.muted) {
+        brag.currentTime = 0;
+        brag.play();
+      }
+      soundBtn.setAttribute("aria-pressed", String(!brag.muted));
+      soundBtn.querySelector("span").textContent = brag.muted ? "включить звук" : "выключить звук";
     });
-    if (muteShown) applyMute();
-  }
-
-  buildWave();
-  let waveResizeTimer;
-  window.addEventListener("resize", () => {
-    clearTimeout(waveResizeTimer);
-    waveResizeTimer = setTimeout(buildWave, 200);
-  });
-
-  // Анимация: волна "проигрывается", и сегменты заглушаются по очереди
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduceMotion) {
-    applyMute();
-  } else {
-    setTimeout(applyMute, 900);
-    // периодически "переобрабатываем" волну для живости
-    setInterval(() => {
-      clearMute();
-      setTimeout(applyMute, 700);
-    }, 6000);
   }
 
   // ---------- Инструкция для ИИ-ассистента ----------

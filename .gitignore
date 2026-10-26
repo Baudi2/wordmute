@@ -11,3 +11,6 @@ packaging/Output/
 
 # exported browser cookies hold live sign-in tokens — never commit them
 *cookies*.txt
+
+# /brag-slim working folder (the finished video lives in docs/assets)
+brag-output/
