@@ -238,6 +238,18 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
     title is `alt_title`.
   - Task chips: the default audio track for ASR, and an absolute
     ffmpeg path.
+- 2026-10-26: the site's hero carries a 20-second video
+  (docs/assets/brag.mp4 + brag.jpg; autoplay muted, a sound button,
+  og:image). Built with the /brag-slim skill, reproducible via
+  scripts/brag_video (README there; plan, QPainter renderer, ffmpeg
+  mix). The music is CC BY 4.0 (Sascha Ende, ende.app) — the footer
+  credit must stay. The /brag + /brag-slim skills are installed by
+  COPY into ~/.claude/skills (the npm claude-code package has no
+  Windows binary, so `claude plugin install` is not available here).
+  Two things after the 0.7.2 user session: «Удалить исходник и JSON»
+  now warns that the review goes too, a dead Review button explains
+  itself (commit b7047aa, unreleased); Boosty's post title is still
+  «Video» (alt_title holds the real one).
 - User-facing release notes live in CHANGELOG.md (top entry must match
   __version__ — tests/test_version.py).
 - Other open items: LICENSE file decision (repo is public with no
