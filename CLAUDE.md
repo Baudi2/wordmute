@@ -246,10 +246,21 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   credit must stay. The /brag + /brag-slim skills are installed by
   COPY into ~/.claude/skills (the npm claude-code package has no
   Windows binary, so `claude plugin install` is not available here).
-  Two things after the 0.7.2 user session: «Удалить исходник и JSON»
-  now warns that the review goes too, a dead Review button explains
-  itself (commit b7047aa, unreleased); Boosty's post title is still
-  «Video» (alt_title holds the real one).
+- v0.7.3 SHIPPED 2026-10-27 (release v0.7.3, installer 160.1 MB,
+  frozen report all green, smoke ok, a simulated 0.7.2 is offered
+  0.7.3). Contents, each from a real incident on the user's laptop:
+  - core/power.full_speed: a run opts the process and every child
+    (Popen patch) out of Windows power throttling — in the background
+    the app crawled and leapt ahead on focus.
+  - downloader.download retries transient network errors (5/15/30 s,
+    fresh options per attempt so the cookies stream is re-read); the
+    pump emits download_failed so a dead prefetch is red at once.
+  - «Удалить исходник и JSON» warns that the review file goes too;
+    cards follow the files on disk; ConfirmDialog sizes itself after
+    the sheet polishes (long bodies were clipped).
+  Still open: Boosty's post title arrives as «Video» (alt_title holds
+  the real one); ivi.ru is DRM — never a target; its free videos would
+  need pycryptodomex in the runtime.
 - User-facing release notes live in CHANGELOG.md (top entry must match
   __version__ — tests/test_version.py).
 - Other open items: LICENSE file decision (repo is public with no
