@@ -6,6 +6,28 @@ the in-app check («Модели → Проверить обновления») 
 The first heading below must match `wordmute_app.__version__`
 (tests/test_version.py enforces it).
 
+## 0.7.3 — 2026-10-27
+
+Three things a week of real use turned up:
+
+- on a laptop, processing and downloads crawled while WordMute sat
+  behind another window and leapt ahead by minutes when it was
+  clicked — Windows power throttling parks background processes on the
+  slow cores. A run now opts the app and the ffmpeg it starts out of
+  throttling, and hands them back when it ends;
+- a download that hit a network hiccup (a rutube API timeout, a reset
+  connection, a 5xx) failed on the spot and its card kept saying
+  «загрузка…» with no progress until its turn came — it looked like a
+  skipped download. Such errors are now retried three more times
+  (5 / 15 / 30 s apart, the card says so), and a download the queue
+  gives up on turns the card red at once;
+- «Удалить исходник и JSON» also deletes the review file, after which
+  the result can no longer be reviewed or rebuilt. The confirmation
+  now says so; a card whose review file is gone hides «Проверка»
+  instead of showing a button that does nothing, and explains how to
+  restore the files from the Recycle Bin. Long confirmation texts no
+  longer get clipped.
+
 ## 0.7.2 — 2026-10-21
 
 Mutes land on the word again, and Boosty downloads work and are fast:
