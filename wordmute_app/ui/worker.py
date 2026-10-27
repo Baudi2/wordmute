@@ -121,6 +121,17 @@ class _DownloadPump(threading.Thread):
                     self._results[index] = (path, None)
                 except BaseException as exc:
                     self._results[index] = (None, exc)
+                    if not isinstance(exc, (JobCancelled,
+                                            downloader.DownloadCancelled)):
+                        # say so on the card NOW: the main loop reaches
+                        # this item only after the ones before it are
+                        # processed, and «загрузка…» with no progress
+                        # for an hour read as a skipped download
+                        self._worker.engine_event.emit("download_failed", {
+                            "row": index,
+                            "message": humanize_download_error(
+                                str(exc), url=item.url,
+                                cookies=self._worker._cookies)})
             self._done[index].set()
 
 
@@ -237,6 +248,9 @@ class ProcessWorker(QThread):
                 "row": index,
             }),
             cancelled=lambda: self._cancelled,
+            retry=lambda attempt, attempts, wait, exc: self.engine_event.emit(
+                "download_retry", {"row": index, "attempt": attempt,
+                                   "attempts": attempts, "wait": wait}),
         )
         self.engine_event.emit("download_done",
                                {"path": str(path), "row": index})

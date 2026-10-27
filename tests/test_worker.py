@@ -172,7 +172,7 @@ def test_url_item_downloads_then_processes(qapp, tmp_path, monkeypatch):
     from wordmute_app.core import downloader
 
     def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
-                      cookies=None):
+                      cookies=None, retry=None):
         assert url == "https://example.com/v"
         assert spec == "bv*+ba/b"
         progress({"status": "downloading", "downloaded_bytes": 10,
@@ -209,7 +209,7 @@ def test_second_url_downloads_while_first_processes(qapp, tmp_path,
     second_started = threading.Event()
 
     def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
-                      cookies=None):
+                      cookies=None, retry=None):
         downloads.append(url)
         if url == "u2":
             second_started.set()
@@ -259,7 +259,7 @@ def test_batch_url_gets_title_from_downloaded_file(qapp, tmp_path,
     from wordmute_app.core import downloader, history
 
     def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
-                      cookies=None):
+                      cookies=None, retry=None):
         dest = Path(dest_dir)
         dest.mkdir(parents=True, exist_ok=True)
         p = dest / "Building a Cheap Car [Jr9EwUBFmQU].webm"
@@ -335,7 +335,7 @@ def test_downloads_roll_continuously(qapp, tmp_path, monkeypatch):
     all_three = threading.Event()
 
     def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
-                      cookies=None):
+                      cookies=None, retry=None):
         dest = Path(dest_dir)
         dest.mkdir(parents=True, exist_ok=True)
         p = dest / f"{url}.mp4"

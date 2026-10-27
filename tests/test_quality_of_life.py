@@ -205,7 +205,7 @@ def test_worker_records_download_bytes(qapp, tmp_path, monkeypatch):
     from test_worker import make_worker
 
     def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
-                      cookies=None):
+                      cookies=None, retry=None):
         dest = Path(dest_dir)
         dest.mkdir(parents=True, exist_ok=True)
         p = dest / "video.mp4"
@@ -934,7 +934,7 @@ def test_worker_records_stage_timings(qapp, tmp_path, monkeypatch):
     from test_worker import make_worker
 
     def fake_download(url, spec, dest_dir, progress=None, cancelled=None,
-                      cookies=None):
+                      cookies=None, retry=None):
         dest = Path(dest_dir)
         dest.mkdir(parents=True, exist_ok=True)
         p = dest / "video.mp4"

@@ -7,6 +7,7 @@ keep app startup fast."""
 import copy
 import io
 import math
+import time
 import urllib.parse
 from pathlib import Path
 
@@ -326,12 +327,45 @@ def _split_into_ranges(ydl, probe):
     return "+".join(ids) if split else None
 
 
+# Transient network failures. One rutube API timeout («Unable to
+# download options JSON: Read timed out (read timeout=20.0)») failed a
+# queued episode on the spot while the next one downloaded at 26 MB/s:
+# yt-dlp's `retries` covers the media transfer only; the extractor's
+# own requests get one shot. Errors that mean «not now» (not «never»)
+# earn a few more attempts, with the card saying so.
+TRANSIENT_MARKERS = (
+    "timed out", "timeout", "connection reset", "connection aborted",
+    "remote end closed", "incompleteread", "temporary failure",
+    "getaddrinfo failed", "name or service not known",
+    "network is unreachable", "eof occurred", "http error 5",
+    "server error", "service unavailable", "bad gateway",
+)
+RETRY_WAITS = (5, 15, 30)      # seconds before attempts 2, 3 and 4
+
+
+def is_transient_error(exc) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in TRANSIENT_MARKERS)
+
+
+def _wait(seconds: float, cancelled=None) -> None:
+    """Sleep in small steps so Cancel is honoured within 0.25 s."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if cancelled and cancelled():
+            raise DownloadCancelled()
+        time.sleep(min(0.25, max(0.0, deadline - time.monotonic())))
+
+
 def download(url: str, format_spec: str, dest_dir,
-             progress=None, cancelled=None, cookies=None) -> Path:
+             progress=None, cancelled=None, cookies=None,
+             retry=None) -> Path:
     """Download url at the given format spec into dest_dir. progress
     receives yt-dlp progress-hook dicts; cancelled is polled between
-    chunks and aborts with DownloadCancelled. Returns the final file
-    path (after any ffmpeg merge)."""
+    chunks and aborts with DownloadCancelled; retry(attempt, attempts,
+    wait_seconds, error) is told before each repeat after a transient
+    network error. Returns the final file path (after any ffmpeg
+    merge)."""
     import yt_dlp
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
@@ -342,40 +376,53 @@ def download(url: str, format_spec: str, dest_dir,
         if progress and d.get("status") in ("downloading", "finished"):
             progress(d)
 
-    opts = _with_cookies(_base_opts() | {
-        "format": format_spec or BEST_SPEC,
-        "outtmpl": str(dest / "%(title).120B [%(id)s].%(ext)s"),
-        "windowsfilenames": True,
-        "overwrites": True,
-        "progress_hooks": [hook],
-        # the CLI's retry defaults (10) live in its option parser, NOT
-        # in the library: embedded like this, yt-dlp retried NOTHING —
-        # one dropped connection mid-file («9977792 bytes read, 191073
-        # more expected») failed the whole item on the spot
-        "retries": 10,
-        "fragment_retries": 10,
-        "file_access_retries": 3,
-        "extractor_retries": 3,
-        # HLS/DASH (rutube/VK/Boosty): per-fragment latency serializes
-        # the download, worse behind VPNs — 4 parallel fragments is a
-        # 2-4x win; do NOT raise it (high values can skip the m3u8
-        # fixup and produce broken MP4s, yt-dlp #14302)
-        "concurrent_fragment_downloads": 4,
-    }, cookies)
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            # extract first, process (= download) second: a bare
-            # playlist/channel URL is refused before a byte is fetched
-            probe = ydl.extract_info(url, download=False, process=False)
-            if _is_playlist(probe):
-                raise ValueError(PLAYLIST_MESSAGE)
-            if _parallel_site(url):
-                exact = _split_into_ranges(ydl, probe)
-                if exact:   # the same choice, now downloaded in parts
-                    ydl.format_selector = ydl.build_format_selector(exact)
-            info = ydl.process_ie_result(probe, download=True)
-    except yt_dlp.utils.DownloadCancelled:
-        raise DownloadCancelled() from None
+    def session_opts():
+        return _with_cookies(_base_opts() | {
+            "format": format_spec or BEST_SPEC,
+            "outtmpl": str(dest / "%(title).120B [%(id)s].%(ext)s"),
+            "windowsfilenames": True,
+            "overwrites": True,
+            "progress_hooks": [hook],
+            # the CLI's retry defaults (10) live in its option parser, NOT
+            # in the library: embedded like this, yt-dlp retried NOTHING —
+            # one dropped connection mid-file («9977792 bytes read, 191073
+            # more expected») failed the whole item on the spot
+            "retries": 10,
+            "fragment_retries": 10,
+            "file_access_retries": 3,
+            "extractor_retries": 3,
+            # HLS/DASH (rutube/VK/Boosty): per-fragment latency serializes
+            # the download, worse behind VPNs — 4 parallel fragments is a
+            # 2-4x win; do NOT raise it (high values can skip the m3u8
+            # fixup and produce broken MP4s, yt-dlp #14302)
+            "concurrent_fragment_downloads": 4,
+        }, cookies)
+
+    attempts = len(RETRY_WAITS) + 1
+    for attempt in range(1, attempts + 1):
+        try:
+            with yt_dlp.YoutubeDL(session_opts()) as ydl:
+                # extract first, process (= download) second: a bare
+                # playlist/channel URL is refused before a byte is fetched
+                probe = ydl.extract_info(url, download=False, process=False)
+                if _is_playlist(probe):
+                    raise ValueError(PLAYLIST_MESSAGE)
+                if _parallel_site(url):
+                    exact = _split_into_ranges(ydl, probe)
+                    if exact:   # the same choice, now downloaded in parts
+                        ydl.format_selector = ydl.build_format_selector(exact)
+                info = ydl.process_ie_result(probe, download=True)
+        except yt_dlp.utils.DownloadCancelled:
+            raise DownloadCancelled() from None
+        except Exception as exc:
+            if attempt == attempts or not is_transient_error(exc):
+                raise
+            wait = RETRY_WAITS[attempt - 1]
+            if retry:
+                retry(attempt + 1, attempts, wait, exc)
+            _wait(wait, cancelled)
+        else:
+            break
 
     requested = (info.get("requested_downloads") or [{}])[0]
     path = requested.get("filepath")

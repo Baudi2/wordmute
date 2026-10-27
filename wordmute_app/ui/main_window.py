@@ -1533,6 +1533,17 @@ class MainWindow(QMainWindow):
         elif event == "download_done":
             self._on_download_done(data["path"],
                                    self._map_row(data.get("row", 0)))
+        elif event == "download_retry":
+            self._apply_status(
+                self._map_row(data.get("row", 0)),
+                tr("network error — attempt {}/{} in {} s").format(
+                    data["attempt"], data["attempts"], data["wait"]))
+        elif event == "download_failed":
+            # the item itself fails when its turn comes (Retry appears
+            # then); until that the card must not look like it waits
+            self._apply_status(self._map_row(data.get("row", 0)),
+                               tr("download failed: {}").format(
+                                   data["message"]), state="err")
         elif event == "review_saved":
             if self._current_row is not None:
                 self.queue.item(self._current_row).setData(

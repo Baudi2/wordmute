@@ -504,6 +504,9 @@ RU = {
     "transcribing": "транскрибация",
     "downloading": "загрузка",
     "downloading…": "загрузка…",
+    "network error — attempt {}/{} in {} s":
+        "ошибка сети — попытка {}/{} через {} с",
+    "download failed: {}": "загрузка не удалась: {}",
     "Transcribing… {} of audio processed":
         "Транскрибация… обработано {} аудио",
     "Downloading {}…": "Загрузка {}…",
