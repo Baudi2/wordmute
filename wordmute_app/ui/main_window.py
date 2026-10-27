@@ -1456,9 +1456,12 @@ class MainWindow(QMainWindow):
             self.cancel_button.setEnabled(False)
 
     def _set_running(self, running: bool):
-        # long batches must survive the Windows sleep timer
+        # long batches must survive the Windows sleep timer, and run at
+        # full speed while the window sits behind another one (laptops
+        # throttle background processes)
         from ..core import power
         power.keep_awake(running)
+        power.full_speed(running)
         self.start_button.setEnabled(not running)
         self.cancel_button.setEnabled(running)
         self.add_button.setEnabled(not running)

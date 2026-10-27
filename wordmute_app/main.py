@@ -165,6 +165,8 @@ def main():
     # without this each one flashes a console window under pythonw
     from .core.proc import install_global_no_window
     install_global_no_window()
+    from .core.power import install_child_full_speed
+    install_child_full_speed()
 
     from PySide6.QtWidgets import QApplication
 
