@@ -398,6 +398,18 @@ RU = {
     "stopped; if it keeps happening, pick a lower quality.":
         "соединение оборвалось посреди загрузки. «Повторить» продолжит с "
         "места обрыва; если повторяется — выберите качество ниже.",
+    "the channel has blocked this video for your country. Only a VPN "
+    "set to another country can download it.":
+        "канал закрыл это видео для вашей страны. Скачать его можно "
+        "только через VPN с другой страной.",
+    "YouTube says this when a video is deleted, private, or blocked for "
+    "your country by the channel (common for TV-channel uploads). Open "
+    "the link in the browser to see which; a region block needs a VPN "
+    "set to another country.":
+        "так YouTube отвечает, когда видео удалено, скрыто или закрыто "
+        "каналом для вашей страны (частый случай у телеканалов). Откройте "
+        "ссылку в браузере — он скажет точнее; при региональной блокировке "
+        "поможет VPN с другой страной.",
     "Some files were skipped": "Часть файлов пропущена",
     "Timings saved by an older version sat {} ms before the sound; they "
     "are corrected. Re-render to fix the muted file.":

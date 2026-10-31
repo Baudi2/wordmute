@@ -89,6 +89,20 @@ def humanize_download_error(text: str, url=None, cookies=None) -> str:
                 tr("the connection dropped mid-download. Retry resumes "
                    "from where it stopped; if it keeps happening, pick a "
                    "lower quality."))
+    # a TV channel's YouTube upload blocked for Russia: the web client
+    # yt-dlp asks first only says «Video unavailable», and the video
+    # opens fine in oEmbed, so the user took it for a bug
+    if "not made this video available in your country" in lowered:
+        return (text + " — " +
+                tr("the channel has blocked this video for your country. "
+                   "Only a VPN set to another country can download it."))
+    if "video unavailable" in lowered:
+        return (text + " — " +
+                tr("YouTube says this when a video is deleted, private, "
+                   "or blocked for your country by the channel (common "
+                   "for TV-channel uploads). Open the link in the "
+                   "browser to see which; a region block needs a VPN set "
+                   "to another country."))
     return text
 
 class _DownloadPump(threading.Thread):
