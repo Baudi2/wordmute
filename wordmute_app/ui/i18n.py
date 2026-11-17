@@ -1044,6 +1044,14 @@ RU = {
     "Whisper: slower, handles English/mixed speech.":
         "GigaAM: быстрее, лучше для чисто русской речи.\n"
         "Whisper: медленнее, понимает английскую и смешанную речь.",
+    "English videos:": "Английские видео:",
+    "same as the plan: Whisper ×{}": "как в плане: Whisper ×{}",
+    "Videos set to «Processing language → English» in the card's ⋮ menu "
+    "run through Whisper only — GigaAM does not understand English. "
+    "Choose how many passes they get.":
+        "Видео, которым в меню ⋮ на карточке задан «Язык обработки → "
+        "Английский», идут только через Whisper: GigaAM не понимает "
+        "английскую речь. Здесь выбирается число проходов для них.",
     "Passes run top to bottom; each pass re-checks the previous "
     "pass's output and stops early once nothing new is found. "
     "Different engines catch words the other missed.":

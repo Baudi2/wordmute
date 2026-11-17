@@ -5,6 +5,7 @@ sits full-width below."""
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QFrame,
     QGroupBox,
     QHBoxLayout,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..core.jobs import ENGLISH_PASSES_MAX
 from .i18n import tr
 
 ENGINE_LABELS = {"whisper": "Whisper", "gigaam": "GigaAM"}
@@ -118,7 +120,30 @@ class PassPlanWidget(QGroupBox):
         note.setWordWrap(True)
         note.setProperty("muted", True)
         layout.addWidget(note)
-        self._update_height()
+
+        # videos forced to English (card ⋮ → «Язык обработки») can only
+        # go through Whisper, so their plan is just a pass count
+        english_row = QHBoxLayout()
+        english_row.setSpacing(8)
+        english_label = QLabel(tr("English videos:"))
+        self.english_combo = QComboBox()
+        self.english_combo.setObjectName("english_passes")
+        self.english_combo.addItem("", 0)       # text set in _rebuild
+        for n in range(1, ENGLISH_PASSES_MAX + 1):
+            self.english_combo.addItem(f"Whisper ×{n}", n)
+        tip = tr("Videos set to «Processing language → English» in the "
+                 "card's ⋮ menu run through Whisper only — GigaAM does "
+                 "not understand English. Choose how many passes they "
+                 "get.")
+        english_label.setToolTip(tip)
+        self.english_combo.setToolTip(tip)
+        self.english_combo.currentIndexChanged.connect(
+            lambda _=0: self.changed.emit())
+        english_row.addWidget(english_label)
+        english_row.addWidget(self.english_combo)
+        english_row.addStretch()
+        layout.addLayout(english_row)
+        self._rebuild()
 
     # ---------------------------------------------------------- model
     def engines(self) -> list:
@@ -132,6 +157,18 @@ class PassPlanWidget(QGroupBox):
                 self._append(name)
         self._rebuild()
         self.changed.emit()
+
+    def english_passes(self) -> int:
+        """Whisper passes for English videos; 0 = as many as the plan."""
+        return int(self.english_combo.currentData() or 0)
+
+    def set_english_passes(self, count) -> None:
+        try:
+            count = max(0, min(int(count or 0), ENGLISH_PASSES_MAX))
+        except (TypeError, ValueError):
+            count = 0
+        self.english_combo.setCurrentIndex(
+            max(self.english_combo.findData(count), 0))
 
     def add_pass(self, engine: str) -> None:
         self._append(engine)
@@ -170,6 +207,10 @@ class PassPlanWidget(QGroupBox):
             # stays compact and left-aligned within the full-width row
             item.setSizeHint(QSize(24, chip.height() + 6))
             self.chips.setItemWidget(item, chip)
+        # the «follow the plan» choice names what it amounts to now
+        self.english_combo.setItemText(
+            0, tr("same as the plan: Whisper ×{}").format(
+                self.chips.count()))
         self._update_height()
 
     def _update_height(self):

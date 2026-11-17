@@ -27,8 +27,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config, gpu, thumbs
-from ..core.jobs import (JobOptions, QueueItem, build_plan, expand_inputs,
-                         scan_watch_dir)
+from ..core.jobs import (JobOptions, QueueItem, build_plan, english_plan,
+                         expand_inputs, scan_watch_dir)
 from ..core.probe import media_duration
 from ..core.wordlists import merge_wordlists
 from .dialogs import (confirm, inform, mark_danger, repolish,
@@ -451,6 +451,7 @@ class MainWindow(QMainWindow):
 
         self.plan = PassPlanWidget()
         self.plan.set_engines(self._settings["plan"])
+        self.plan.set_english_passes(self._settings.get("english_passes", 0))
         self.plan.changed.connect(self._refresh_warnings)
         self.plan.changed.connect(self._update_setup_summary)
         options_row.addWidget(self.plan, stretch=2)
@@ -567,6 +568,11 @@ class MainWindow(QMainWindow):
             name = "GigaAM" if engine == "gigaam" else "Whisper"
             parts.append(name if count == 1 else f"{name} ×{count}")
         plan_text = " → ".join(parts) or tr("empty")
+        english = self.plan.english_passes()
+        if english:     # English videos have a pass count of their own
+            # short, like the «EN» tag on the cards: the line must
+            # still show where the result lands at the default width
+            plan_text += f" (EN ×{english})"
         # where the result lands — «why is the clean file in my
         # Downloads?» is answered here, not in the Settings tab
         out_dir = (self._settings.get("output_dir") or "").strip()
@@ -1336,6 +1342,7 @@ class MainWindow(QMainWindow):
         self._current_row = None
         self._pass_n = 1
         self._pass_total = 1
+        self._pass_totals = {}      # language profile -> pass count
         self._pass_engine = ""
         self._pass_pct = 0.0
         self._asr_wall_start = None
@@ -1413,12 +1420,14 @@ class MainWindow(QMainWindow):
         # per-item RU/EN profiles: both lists load regardless of the
         # global checkboxes, so one queue can mix languages (card ⋮
         # menu → «Язык обработки»). GigaAM can't do English, so the
-        # EN plan converts its passes to whisper, keeping the count.
+        # EN plan is Whisper only — as many passes as the main plan,
+        # or the count chosen next to it («Английские видео»).
+        en_plan = english_plan(plan, self.plan.english_passes(), s["model"])
         profiles = {
             "ru": (merge_wordlists([self._wordlist_paths["russian"]]),
                    plan, "ru"),
             "en": (merge_wordlists([self._wordlist_paths["english"]]),
-                   [("whisper", s["model"]) for _ in plan], "en"),
+                   en_plan, "en"),
         }
         output_dir = (Path(s["output_dir"])
                       if s["output_mode"] == "folder" and s["output_dir"]
@@ -1433,6 +1442,9 @@ class MainWindow(QMainWindow):
         self._active_rows = pending
         self._reset_run_state(total=len(items))
         self._pass_total = len(plan)
+        # «проход 1/2» on an English card while the plan has three
+        self._pass_totals = {"auto": len(plan), "ru": len(plan),
+                             "en": len(en_plan)}
         self._worker = ProcessWorker(items, wordlist, plan, options,
                                      output_dir=output_dir,
                                      download_dir=config.download_dir(s),
@@ -1445,6 +1457,10 @@ class MainWindow(QMainWindow):
         self._set_running(True)
         n = sum(len(part) for part in wordlist)
         plan_text = " -> ".join(f"{e}({m})" for e, m in plan)
+        if any(getattr(item, "lang_profile", "auto") == "en"
+               for item in items):
+            plan_text += (". English videos: " + " -> ".join(
+                f"{e}({m})" for e, m in en_plan))
         self._append_log(f"Word list: {n} entries. Plan: {plan_text}."
                          + (f" Output: {output_dir}" if output_dir else ""))
         start_thread(self, self._worker)
@@ -1684,6 +1700,11 @@ class MainWindow(QMainWindow):
         self._pass_n = 1
         self._pass_pct = 0.0
         self._asr_wall_start = None
+        # the pass count follows the item's language profile
+        list_item = self.queue.item(row)
+        queue_item = list_item.data(ITEM_ROLE) if list_item else None
+        profile = getattr(queue_item, "lang_profile", "auto") or "auto"
+        self._pass_total = self._pass_totals.get(profile, self._pass_total)
         self._set_row_status(tr("processing…"))
         self.status_label.setText(tr("Processing {}…").format(name))
         self._append_log(f"\n=== {name} ===")
@@ -1846,6 +1867,7 @@ class MainWindow(QMainWindow):
             "use_russian": self.russian_check.isChecked(),
             "use_english": self.english_check.isChecked(),
             "plan": self.plan.engines(),
+            "english_passes": self.plan.english_passes(),
             "force_passes": self.force_passes_check.isChecked(),
         })
         config.save_settings(self._settings)

@@ -36,6 +36,9 @@ DEFAULT_SETTINGS = {
     "use_russian": True,
     "use_english": False,
     "plan": ["whisper", "whisper"],
+    # Whisper passes for items forced to English; 0 = as many as the
+    # main plan has (see jobs.english_plan)
+    "english_passes": 0,
     "force_passes": False,
     "output_mode": "beside",   # "beside" = next to input, or "folder"
     "output_dir": "",

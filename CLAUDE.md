@@ -261,6 +261,12 @@ ffmpeg mutes intervals, video copied untouched. Fully offline. The user
   Still open: Boosty's post title arrives as «Video» (alt_title holds
   the real one); ivi.ru is DRM — never a target; its free videos would
   need pycryptodomex in the runtime.
+- Unreleased since 0.7.3 (put both in the next CHANGELOG entry):
+  «Video unavailable» is explained as a likely country block
+  (2a1d055); English videos get their own pass count — setting
+  `english_passes` (0 = as many as the main plan), the «Английские
+  видео» combo in the pass-plan box, jobs.english_plan; the card's
+  «проход N/M» follows the item's language profile.
 - User-facing release notes live in CHANGELOG.md (top entry must match
   __version__ — tests/test_version.py).
 - Other open items: LICENSE file decision (repo is public with no

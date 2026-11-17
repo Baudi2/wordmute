@@ -113,3 +113,21 @@ def build_plan(engine_names, whisper_model: str, gigaam_model: str) -> list:
     format: [(engine, model), ...]."""
     model_for = {"whisper": whisper_model, "gigaam": gigaam_model}
     return [(e, model_for[e]) for e in engine_names]
+
+
+ENGLISH_PASSES_MAX = 4
+
+
+def english_plan(main_plan, english_passes, whisper_model: str) -> list:
+    """The plan for items forced to English (card ⋮ → «Язык
+    обработки»). GigaAM can't do English, so every pass is Whisper and
+    the plan is just a count: `english_passes`, or — when it is 0 —
+    as many passes as the main plan has. A user whose main plan was
+    GigaAM ×2 → Whisper got Whisper ×3 on every English video, with no
+    way to ask for two."""
+    try:
+        count = int(english_passes or 0)
+    except (TypeError, ValueError):
+        count = 0
+    count = min(count, ENGLISH_PASSES_MAX) if count > 0 else len(main_plan)
+    return [("whisper", whisper_model)] * count
