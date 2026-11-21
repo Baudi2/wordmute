@@ -614,16 +614,17 @@ class AddUrlDialog(QDialog):
             extra = ""
         self.status.setText(f"{info['title']}{extra}")
         self.table.setRowCount(0)
-        self._add_row([tr("Best video+audio\n(recommended)"),
-                       "", "", "", "", ""], None)
-        self.table.setRowHeight(0, 56)
-        for f in info["formats"]:
-            d = downloader.describe_format(f, duration=duration)
-            self._add_row(
-                [d["resolution"] or d["id"], d["size"], d["note"],
-                 d["ext"], str(int(d["fps"])) if d["fps"] else "",
-                 tr(d["kind"])],
-                f)
+        with self.table.filling():
+            self._add_row([tr("Best video+audio\n(recommended)"),
+                           "", "", "", "", ""], None)
+            self.table.setRowHeight(0, 56)
+            for f in info["formats"]:
+                d = downloader.describe_format(f, duration=duration)
+                self._add_row(
+                    [d["resolution"] or d["id"], d["size"], d["note"],
+                     d["ext"], str(int(d["fps"])) if d["fps"] else "",
+                     tr(d["kind"])],
+                    f)
         # number only the real formats: with the «best» row counted,
         # the last row read 25 against the tail's «— 24»
         self.table.setVerticalHeaderLabels(

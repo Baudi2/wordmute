@@ -199,24 +199,25 @@ class ReviewDialog(QDialog):
         self._filling = True
         intervals = self._data["intervals"]
         self.table.setRowCount(len(intervals))
-        for row, iv in enumerate(intervals):
-            mute_item = QTableWidgetItem()
-            mute_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled
-                               | Qt.ItemIsSelectable)
-            mute_item.setCheckState(
-                Qt.Checked if iv.get("muted", True) else Qt.Unchecked)
-            self.table.setItem(row, COL_MUTE, mute_item)
-            self.table.setItem(row, COL_START,
-                               QTableWidgetItem(fmt_ts(iv["s"])))
-            self.table.setItem(row, COL_END, QTableWidgetItem(fmt_ts(iv["e"])))
-            # one row per muted spot: every pass/engine that caught it
-            passes = iv.get("passes") or [iv.get("pass", 1)]
-            engines = iv.get("engines") or [iv.get("engine", "")]
-            self.table.setItem(row, COL_PASS, QTableWidgetItem(
-                ", ".join(str(p) for p in passes)))
-            self.table.setItem(row, COL_ENGINE, QTableWidgetItem(
-                ", ".join(e for e in engines if e)))
-            self.table.setItem(row, COL_TEXT, QTableWidgetItem(iv["text"]))
+        with self.table.filling():
+            for row, iv in enumerate(intervals):
+                mute_item = QTableWidgetItem()
+                mute_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled
+                                   | Qt.ItemIsSelectable)
+                mute_item.setCheckState(
+                    Qt.Checked if iv.get("muted", True) else Qt.Unchecked)
+                self.table.setItem(row, COL_MUTE, mute_item)
+                self.table.setItem(row, COL_START,
+                                   QTableWidgetItem(fmt_ts(iv["s"])))
+                self.table.setItem(row, COL_END, QTableWidgetItem(fmt_ts(iv["e"])))
+                # one row per muted spot: every pass/engine that caught it
+                passes = iv.get("passes") or [iv.get("pass", 1)]
+                engines = iv.get("engines") or [iv.get("engine", "")]
+                self.table.setItem(row, COL_PASS, QTableWidgetItem(
+                    ", ".join(str(p) for p in passes)))
+                self.table.setItem(row, COL_ENGINE, QTableWidgetItem(
+                    ", ".join(e for e in engines if e)))
+                self.table.setItem(row, COL_TEXT, QTableWidgetItem(iv["text"]))
         self._filling = False
 
     def _muted_snapshot(self) -> list:

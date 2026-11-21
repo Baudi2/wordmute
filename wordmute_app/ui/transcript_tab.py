@@ -164,13 +164,14 @@ class TranscriptTab(QWidget):
         mono = QFont("Cascadia Mono")
         mono.setStyleHint(QFont.Monospace)
         self.table.setRowCount(len(self._blocks))
-        for row, block in enumerate(self._blocks):
-            time_item = QTableWidgetItem(fmt_ts(block[0]["s"]))
-            time_item.setFont(mono)
-            self.table.setItem(row, 0, time_item)
-            self.table.setItem(
-                row, 1,
-                QTableWidgetItem(" ".join(w["w"] for w in block)))
+        with self.table.filling():
+            for row, block in enumerate(self._blocks):
+                time_item = QTableWidgetItem(fmt_ts(block[0]["s"]))
+                time_item.setFont(mono)
+                self.table.setItem(row, 0, time_item)
+                self.table.setItem(
+                    row, 1,
+                    QTableWidgetItem(" ".join(w["w"] for w in block)))
         self.table.resizeRowsToContents()
 
     def _filter(self, needle: str):

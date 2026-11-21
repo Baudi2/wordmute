@@ -149,47 +149,48 @@ class HistoryTab(QWidget):
     def refresh(self):
         self._records = history.load_history()
         self.table.setRowCount(len(self._records))
-        for row, r in enumerate(self._records):
-            status = r.get("status", "")
-            error = r.get("error", "")
-            if status == "ok":
-                muted_item = QTableWidgetItem(str(r.get("muted", "")))
-            else:
-                muted_item = QTableWidgetItem(tr("failed"))
-                muted_item.setForeground(ERR_COLOR)
-                muted_item.setToolTip(error or tr("Error"))
-            stamp = r.get("time", "")
-            time_item = QTableWidgetItem(human_datetime(stamp))
-            time_item.setData(TIME_ROLE, stamp)
-            time_item.setToolTip(full_datetime(stamp))
-            output = r.get("output", "")
-            name = r.get("name", "")
-            if name.startswith(("http://", "https://")):
-                # older records of batch-added links stored the URL;
-                # the recorded local file name is the real title
-                src = r.get("source", "")
-                if src and Path(src).is_absolute():
-                    name = Path(src).stem
-            file_item = QTableWidgetItem(name)
-            tip_lines = [output] if output else []
-            stage_text = _fmt_stages(r.get("stage_seconds") or {})
-            if stage_text:
-                tip_lines.append(stage_text)
-            if tip_lines:
-                file_item.setToolTip("\n".join(tip_lines))
-            plan_item = QTableWidgetItem(_compact_plan(r.get("plan", "")))
-            plan_item.setToolTip(r.get("plan", ""))
-            glyph, tip = _files_glyph(r)
-            files_item = QTableWidgetItem(glyph)
-            files_item.setTextAlignment(Qt.AlignCenter)
-            files_item.setForeground(OK_COLOR if glyph == "●"
-                                     else DIM_COLOR)
-            if tip:
-                files_item.setToolTip(tr(tip))
-            values = [time_item, file_item, muted_item, plan_item,
-                      files_item]
-            for col, item in enumerate(values):
-                self.table.setItem(row, col, item)
+        with self.table.filling():
+            for row, r in enumerate(self._records):
+                status = r.get("status", "")
+                error = r.get("error", "")
+                if status == "ok":
+                    muted_item = QTableWidgetItem(str(r.get("muted", "")))
+                else:
+                    muted_item = QTableWidgetItem(tr("failed"))
+                    muted_item.setForeground(ERR_COLOR)
+                    muted_item.setToolTip(error or tr("Error"))
+                stamp = r.get("time", "")
+                time_item = QTableWidgetItem(human_datetime(stamp))
+                time_item.setData(TIME_ROLE, stamp)
+                time_item.setToolTip(full_datetime(stamp))
+                output = r.get("output", "")
+                name = r.get("name", "")
+                if name.startswith(("http://", "https://")):
+                    # older records of batch-added links stored the URL;
+                    # the recorded local file name is the real title
+                    src = r.get("source", "")
+                    if src and Path(src).is_absolute():
+                        name = Path(src).stem
+                file_item = QTableWidgetItem(name)
+                tip_lines = [output] if output else []
+                stage_text = _fmt_stages(r.get("stage_seconds") or {})
+                if stage_text:
+                    tip_lines.append(stage_text)
+                if tip_lines:
+                    file_item.setToolTip("\n".join(tip_lines))
+                plan_item = QTableWidgetItem(_compact_plan(r.get("plan", "")))
+                plan_item.setToolTip(r.get("plan", ""))
+                glyph, tip = _files_glyph(r)
+                files_item = QTableWidgetItem(glyph)
+                files_item.setTextAlignment(Qt.AlignCenter)
+                files_item.setForeground(OK_COLOR if glyph == "●"
+                                         else DIM_COLOR)
+                if tip:
+                    files_item.setToolTip(tr(tip))
+                values = [time_item, file_item, muted_item, plan_item,
+                          files_item]
+                for col, item in enumerate(values):
+                    self.table.setItem(row, col, item)
         self.count_label.setText(
             tr("{} record(s)").format(len(self._records)) if self._records
             else tr("Processed files will appear here."))
